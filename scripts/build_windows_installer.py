@@ -399,7 +399,7 @@ def main():
     parser.add_argument(
         "--edition",
         choices=["lite", "full", "all"],
-        default="lite",
+        default="all",
         help="빌드할 에디션 선택 (lite: 라이트 버전, full: 풀 버전, all: 둘 다 빌드, 기본값: lite)"
     )
     args = parser.parse_args()
