@@ -1,0 +1,37 @@
+# Personal configuration and credentials (ship config.example.json instead)
+/config.json
+/.env
+/.env.*
+!/.env.example
+
+# Generated runtime data and user transcripts
+__pycache__/
+*.py[cod]
+/.venv/
+/venv/
+/.pytest_cache/
+/crash.log
+/*.log
+/subtitles_*.srt
+/transcript_*.txt
+/output/logs/
+/test_speech.wav
+/test_synth.mp3
+
+# Personal settings dumps, debugging scratch and review output (contain local paths)
+/gemini_settings_dump.txt
+/scratch/
+/output/
+
+# Downloaded model weights and local captures
+*.gguf
+*.onnx
+/models/
+/vendor/
+/dist/
+/build/
+/installer_output/
+
+
+# Unused local backup asset
+/assets/splash_backup.png

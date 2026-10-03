@@ -1,0 +1,22 @@
+{
+    "device": "cpu",
+    "compute_type": "int8",
+    "model_size": "distil-small.en",
+    "stt_provider": "local",
+    "translation_engine": "google",
+    "google_api_key": "",
+    "deepl_api_key": "",
+    "gemini_api_key": "",
+    "groq_api_key": "",
+    "auto_start_audio": false,
+    "auto_start_screen": false,
+    "screen_translate_enabled": false,
+    "screen_rois": [],
+    "screen_roi": null,
+    "audio_capture_device": "default",
+    "dubbing_output_device": "default",
+    "dubbing_enabled": false,
+    "speaker_aliases": {},
+    "speaker_alias_sources": {},
+    "speaker_mutes": {}
+}
