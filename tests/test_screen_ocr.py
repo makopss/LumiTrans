@@ -463,7 +463,8 @@ def test_subtitle_retention_and_hover_logic():
     overlay.btn_pin.click()
     assert overlay.is_pinned is True
     assert not overlay.clear_timer.isActive(), "고정 핀 활성화 시 타이머가 정지되어 영구 고정되어야 합니다."
-    assert "고정" in overlay.btn_pin.text()
+    assert "ON" in overlay.btn_pin.text()
+    assert "고정" in overlay.btn_pin.toolTip()
 
     # 고정 해제
     overlay.btn_pin.click()
@@ -553,7 +554,7 @@ def test_multi_roi_independent_movement_and_persistence():
     print("[16] 다중 영역 오버레이 개별 위치 독립 이동 및 텔레포트 차단 테스트...")
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtGui import QMouseEvent
-    from PyQt6.QtCore import QEvent, QPointF, Qt
+    from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt
     from src.config import DEFAULT_CONFIG
     from src.screen_overlay_manager import ScreenOverlayManager
 
@@ -583,7 +584,8 @@ def test_multi_roi_independent_movement_and_persistence():
     geo1_init = ov1.geometry()
     assert not geo0_init.intersects(geo1_init), "두 오버레이가 생성 시 서로 겹쳐서 가려지지 않아야 합니다."
 
-    # 2. 오버레이 1번(ov1)을 사용자가 마우스로 (500, 600) 위치로 직접 이동
+    # 2. 오버레이 1번(ov1)을 사용자가 마우스로 (500, 600) 위치로 드래그 이동
+    ov1.is_moving = True  # 드래그 중 상태 (릴리즈 시에만 위치가 저장됨)
     ov1.move(500, 600)
     release_ev = QMouseEvent(QEvent.Type.MouseButtonRelease, QPointF(10, 10), Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
     ov1.mouseReleaseEvent(release_ev)
@@ -602,7 +604,7 @@ def test_multi_roi_independent_movement_and_persistence():
     ov1._increase_font()
     assert cfg["font_size"] == 24
     assert ov0.label_translated.font().pointSize() == 24 or ov0.config["font_size"] == 24
-    assert ov0.geometry() == geo0_init, "폰트 변경 시에도 ov0의 위치는 절대 변하지 않아야 합니다."
+    assert ov0.pos() == geo0_init.topLeft(), "폰트 변경 시에도 ov0의 위치는 절대 변하지 않아야 합니다. (높이는 두 줄 여유에 맞춰 커질 수 있음)"
     assert ov1.x() == 500 and ov1.y() == 600, "폰트 변경 시에도 ov1의 위치는 (500, 600)에 머물러야 합니다."
 
     # 6. 새 매니저 인스턴스 생성 시 개별 저장된 좌표로 완벽 복원되는지 검증
@@ -614,7 +616,7 @@ def test_multi_roi_independent_movement_and_persistence():
         assert ov1_restored.x() == 500 and ov1_restored.y() == 600, "화면 안의 수동 위치는 복원되어야 합니다."
     else:
         assert app.primaryScreen().geometry().contains(ov1_restored.geometry().center()), "화면 밖 좌표는 ROI 모니터로 복구되어야 합니다."
-    assert ov0_restored.geometry() == geo0_init, "ov0 또한 기존 좌표를 유지해야 합니다."
+    assert ov0_restored.pos() == geo0_init.topLeft(), "ov0 또한 기존 위치를 유지해야 합니다."
 
     print("  -> 다중 영역 오버레이 개별 위치 독립 이동 및 텔레포트 차단 테스트 통과!")
 
@@ -670,51 +672,56 @@ def test_overlay_size_preservation_on_subtitles():
     screen_ov = ScreenSubtitleOverlay(cfg)
     screen_ov.show()
 
-    # 사용자가 창 크기를 600x75로 축소 조절
-    screen_ov.resize(600, 75)
-    ev = QResizeEvent(QSize(600, 75), QSize(900, 130))
+    # 사용자가 창 크기를 최소 크기까지 축소 조절 (툴바 때문에 최소 크기가 강제됨)
+    w1 = max(600, screen_ov.minimumWidth())
+    h1 = max(75, screen_ov.minimumHeight())
+    screen_ov.resize(w1, h1)
+    ev = QResizeEvent(QSize(w1, h1), QSize(w1 + 300, h1 + 55))
     screen_ov.resizeEvent(ev)
 
-    assert screen_ov.height() == 75, f"사용자 축소 후 높이는 75여야 함 (실제: {screen_ov.height()})"
-    assert screen_ov.width() == 600, f"사용자 축소 후 너비는 600이어야 함 (실제: {screen_ov.width()})"
-    assert screen_ov.base_geometry[3] == 75, f"base_geometry[3]도 75여야 함 (실제: {screen_ov.base_geometry[3]})"
+    assert screen_ov.height() == h1, f"사용자 축소 후 높이는 {h1}여야 함 (실제: {screen_ov.height()})"
+    assert screen_ov.width() == w1, f"사용자 축소 후 너비는 {w1}이어야 함 (실제: {screen_ov.width()})"
+    assert screen_ov.base_geometry[3] == h1, f"base_geometry[3]도 {h1}여야 함 (실제: {screen_ov.base_geometry[3]})"
 
     # 아주 긴 멀티라인 자막 전송
     long_sub = "[영역 1] 알렉스 첸: 회의에 오신 것을 환영합니다. 이번 안건은 지난 몇 달 동안 준비해 온 것이며 참석자 모두가 그 내용을 확인할 수 있을 것입니다. 다음 단계를 진행하기 위해 우리는 모든 준비를 마쳐야 합니다."
     screen_ov.display_subtitle("Original long text...", long_sub, "Google")
 
-    # 자막 생성 후에도 창 크기가 커지지 않고 600x75를 칼같이 유지하는지 검증!
-    assert screen_ov.height() == 75, f"자막 생성 후 높이가 팽창됨! (기대: 75, 실제: {screen_ov.height()})"
-    assert screen_ov.width() == 600, f"자막 생성 후 너비가 팽창됨! (기대: 600, 실제: {screen_ov.width()})"
+    # 자막 생성 후에도 창 크기가 커지지 않고 사용자 크기를 칼같이 유지하는지 검증!
+    assert screen_ov.height() == h1, f"자막 생성 후 높이가 팽창됨! (기대: {h1}, 실제: {screen_ov.height()})"
+    assert screen_ov.width() == w1, f"자막 생성 후 너비가 팽창됨! (기대: {w1}, 실제: {screen_ov.width()})"
 
     # 추가 짧은 자막 수신 시에도 크기 불변 검증
     screen_ov.display_subtitle("Short orig", "짧은 자막입니다.", "Google")
-    assert screen_ov.height() == 75, f"짧은 자막 후에도 높이는 75 유지되어야 함 (실제: {screen_ov.height()})"
+    assert screen_ov.height() == h1, f"짧은 자막 후에도 높이는 {h1} 유지되어야 함 (실제: {screen_ov.height()})"
 
-    # 사용자가 다시 700x120으로 늘렸을 때도 그 크기로 고정 유지되는지 검증
-    screen_ov.resize(700, 120)
-    ev2 = QResizeEvent(QSize(700, 120), QSize(600, 75))
+    # 사용자가 다시 크기를 늘렸을 때도 그 크기로 고정 유지되는지 검증
+    w2, h2 = w1 + 100, h1 + 45
+    screen_ov.resize(w2, h2)
+    ev2 = QResizeEvent(QSize(w2, h2), QSize(w1, h1))
     screen_ov.resizeEvent(ev2)
-    assert screen_ov.height() == 120
-    assert screen_ov.width() == 700
+    assert screen_ov.height() == h2
+    assert screen_ov.width() == w2
 
     screen_ov.display_subtitle("Long again", long_sub, "Google")
-    assert screen_ov.height() == 120, f"긴 자막 후에도 사용자 설정 높이 120 유지되어야 함 (실제: {screen_ov.height()})"
+    assert screen_ov.height() == h2, f"긴 자막 후에도 사용자 설정 높이 {h2} 유지되어야 함 (실제: {screen_ov.height()})"
     screen_ov.close()
 
     # 2. 음성 번역 오버레이(SubtitleOverlay) 크기 유지 검증
     audio_ov = SubtitleOverlay(cfg)
     audio_ov.show()
 
-    audio_ov.resize(650, 80)
-    ev_audio = QResizeEvent(QSize(650, 80), QSize(900, 140))
+    aw = max(650, audio_ov.minimumWidth())
+    ah = max(80, audio_ov.minimumHeight())
+    audio_ov.resize(aw, ah)
+    ev_audio = QResizeEvent(QSize(aw, ah), QSize(aw + 250, ah + 60))
     audio_ov.resizeEvent(ev_audio)
 
-    assert audio_ov.height() == 80
-    assert audio_ov.width() == 650
+    assert audio_ov.height() == ah
+    assert audio_ov.width() == aw
 
     audio_ov.display_subtitle("Very long speech sentence from speaker...", "아주 긴 번역 대화 음성 문장이 도착했습니다. 창 크기가 절대 늘어나지 않아야 합니다.", "Google")
-    assert audio_ov.height() == 80, f"음성 자막 후에도 높이는 80 유지되어야 함 (실제: {audio_ov.height()})"
+    assert audio_ov.height() == ah, f"음성 자막 후에도 높이는 {ah} 유지되어야 함 (실제: {audio_ov.height()})"
     audio_ov.close()
 
     print("  -> 자막창 수동 조절 크기(너비/높이) 고정 유지 및 텍스트 팽창 방지 테스트 통과!")
@@ -976,12 +983,6 @@ def test_save_all_settings_before_exit():
         inplace_manager=None
     )
 
-    # 창 크기 및 위치 임의 변경
-    cp.setGeometry(250, 150, 600, 800)
-    audio_ov.setGeometry(300, 600, 850, 150)
-    if screen_mgr.overlays:
-        screen_mgr.overlays[0].setGeometry(120, 450, 700, 130)
-
     # UI 위젯 값 변경
     cp.cb_auto_start_audio.setChecked(True)
     cp.cb_auto_start_screen.setChecked(True)
@@ -992,6 +993,18 @@ def test_save_all_settings_before_exit():
     cp.slider_duration.setValue(10) # 10s
     cp.cb_clean_box.setChecked(False)
     cp.cb_snap_to_roi.setChecked(True)
+
+    # 창 크기 및 위치 임의 변경 (폰트 변경 후 결정되는 각 창의 최소 크기 이상으로)
+    cp_w = max(600, cp.minimumWidth())
+    cp.setGeometry(250, 150, cp_w, 800)
+    aud_w = max(850, audio_ov.minimumWidth())
+    aud_h = max(150, audio_ov.minimumHeight())
+    audio_ov.setGeometry(300, 600, aud_w, aud_h)
+    scr_w, scr_h = 700, 130
+    if screen_mgr.overlays:
+        scr_w = max(700, screen_mgr.overlays[0].minimumWidth())
+        scr_h = max(130, screen_mgr.overlays[0].minimumHeight())
+        screen_mgr.overlays[0].setGeometry(120, 450, scr_w, scr_h)
 
     # 종료 전 전체 저장 함수 호출
     cp.save_all_settings_before_exit()
@@ -1009,13 +1022,13 @@ def test_save_all_settings_before_exit():
 
     # 창 좌표 검증
     cp_geo = saved_config.get("control_panel_geometry")
-    assert cp_geo == [250, 150, 600, 800], f"컨트롤 패널 좌표 저장 확인 (실제: {cp_geo})"
+    assert cp_geo == [250, 150, cp_w, 800], f"컨트롤 패널 좌표 저장 확인 (실제: {cp_geo})"
 
     win_geo = saved_config.get("window_geometry")
-    assert win_geo == [300, 600, 850, 150], f"오디오 자막창 좌표 저장 확인 (실제: {win_geo})"
+    assert win_geo == [300, 600, aud_w, aud_h], f"오디오 자막창 좌표 저장 확인 (실제: {win_geo})"
 
     screen_geos = saved_config.get("screen_overlay_geometries", {})
-    assert "0" in screen_geos and screen_geos["0"] == [120, 450, 700, 130], f"화면 자막창 좌표 저장 확인 (실제: {screen_geos})"
+    assert "0" in screen_geos and screen_geos["0"] == [120, 450, scr_w, scr_h], f"화면 자막창 좌표 저장 확인 (실제: {screen_geos})"
 
     orig_q = QMessageBox.question
     QMessageBox.question = staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.Yes)

@@ -445,7 +445,13 @@ class IntegrationTests(unittest.TestCase):
     def test_pipeline_trace_rotation_and_no_config_credentials(self):
         from src.pipeline_trace import PipelineTrace
         with tempfile.TemporaryDirectory() as directory:
-            trace = PipelineTrace(directory=directory)
+            # 기본값은 꺼짐: 사용자가 켜기 전에는 파일을 만들지 않는다.
+            disabled = PipelineTrace(directory=directory)
+            disabled.record('segment', id='x:0', session='x', text='Hidden.')
+            disabled.close()
+            self.assertFalse((Path(directory)/'translation.jsonl').exists())
+
+            trace = PipelineTrace(enabled=True, directory=directory)
             trace.record('segment', id='x:1', session='x', text='Hello.')
             trace.close()
             value = json.loads((Path(directory)/'translation.jsonl').read_text(encoding='utf-8'))

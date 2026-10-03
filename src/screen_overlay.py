@@ -607,7 +607,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         roi_specific_cfg = roi_configs.get(idx_key, {}) if isinstance(roi_configs, dict) else {}
 
         font_size = roi_specific_cfg.get("font_size", self.config.get("font_size", 22))
-        orig_size = max(11, font_size - 6)
+        orig_size = max(11, font_size - 5)  # _auto_fit_text·음성 자막창과 동일해야 첫 자막 때 창 높이가 변하지 않음
         letter_spacing = float(self.config.get("letter_spacing", 2.0))
 
         # Qt QSS에서 인라인 폰트 크기 스타일이 setFont()를 덮어쓰지 않도록 동적 QSS 적용
@@ -1021,7 +1021,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.label_translated.setStyleSheet(self._label_sheet(font_size, bold=True))
 
         if show_orig:
-            en_sz = max(10, font_size - 5)
+            en_sz = max(11, font_size - 5)
             orig_font = QFont("Segoe UI", en_sz)
             orig_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, max(0.5, letter_spacing * 0.6))
             self.label_original.setFont(orig_font)
