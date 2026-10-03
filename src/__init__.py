@@ -1,1 +1,1 @@
-# Live Audio Subtitle Translator
+# LumiTrans - AI real-time audio & screen subtitle translator

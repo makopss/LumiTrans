@@ -1,4 +1,6 @@
-# 🎤 실시간 AI 동시통역 자막기 (Live Audio Subtitle Translator)
+# 🎤 루미트랜스 (LumiTrans)
+
+**AI 실시간 음성 & 화면 번역 자막기**
 
 유튜브 영상, 넷플릭스, 해외 강의, 트위치 등 **PC에서 재생되는 모든 영어 소리를 실시간으로 감지하여 한국어 자막으로 번역**해 화면 최상단에 띄워주는 독립형 데스크톱 프로그램입니다.
 
@@ -61,8 +63,8 @@ python run.py
 python scripts/build_windows_installer.py
 ```
 기본으로 Lite와 Full 두 에디션을 모두 빌드합니다(`--edition lite` / `--edition full`로 하나만 빌드 가능). 빌드가 완료되면 **`installer_output/`** 폴더에 다음 설치 프로그램이 생성됩니다:
-- `WiseEinstein_Lite_Setup_v1.0.0.exe`: 모델은 첫 실행 시 다운로드
-- `WiseEinstein_Full_Setup_v1.0.0.exe`: STT 모델 및 CUDA 12 가속 라이브러리 내장
+- `LumiTrans_Lite_Setup_v1.0.0.exe`: 모델은 첫 실행 시 다운로드
+- `LumiTrans_Full_Setup_v1.0.0.exe`: STT 모델 및 CUDA 12 가속 라이브러리 내장
 
 설치 파일 하나로 바로가기, 아이콘, 언인스톨러를 포함한 완전한 데스크톱 애플리케이션 설치가 가능합니다.
 

@@ -509,7 +509,7 @@ class CUDAPackDownloadWorker(threading.Thread):
             LLMModelManager.set_last_cuda_progress(start_pct, status_msg)
             self.progress_signal.emit(start_pct, status_msg)
 
-            resp = requests.get(url, stream=True, timeout=30, headers={"User-Agent": "WiseEinstein"})
+            resp = requests.get(url, stream=True, timeout=30, headers={"User-Agent": "LumiTrans"})
             if resp.status_code != 200:
                 raise RuntimeError(f"다운로드 서버 응답 오류 (HTTP {resp.status_code})")
 

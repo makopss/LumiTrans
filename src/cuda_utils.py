@@ -1,7 +1,7 @@
 """
 CUDA 및 cuBLAS 가속 라이브러리 경로 탐색, 시스템 등록 및 가용성 검증 유틸리티
 ----------------------------------------------------------------------
-Wise-Einstein의 로컬 LLM(llama_cpp) 및 STT(faster-whisper/ctranslate2)에 필요한
+LumiTrans의 로컬 LLM(llama_cpp) 및 STT(faster-whisper/ctranslate2)에 필요한
 NVIDIA CUDA/cuBLAS 런타임 DLL 탐색 및 프로세스 등록을 전담 관리합니다.
 """
 
@@ -55,8 +55,8 @@ def is_nvidia_gpu_present() -> bool:
 
 def get_cuda_target_install_dir() -> str:
     """온디맨드 가속 팩 저장 위치. 설치 폴더(Program Files 등)는 쓰기 권한이 없을 수 있어 항상 사용자 폴더를 쓴다."""
-    local_app = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    target = os.path.join(local_app, "WiseEinstein", "cuda")
+    from src.app_paths import local_data_dir
+    target = os.path.join(local_data_dir(), "cuda")
     os.makedirs(target, exist_ok=True)
     return target
 
@@ -314,16 +314,17 @@ def get_cuda_search_paths() -> List[str]:
     except Exception:
         pass
 
-    # 3. 사용자 LocalAppData / AppData cuda 폴더
+    # 3. 사용자 LocalAppData / AppData cuda 폴더 (업그레이드 설치는 이전 이름 폴더를 그대로 쓸 수 있음)
+    from src.app_paths import APP_NAME, LEGACY_APP_NAMES
     local_app = os.environ.get("LOCALAPPDATA")
-    if local_app:
-        _add(os.path.join(local_app, "WiseEinstein", "cuda"))
-        _add(os.path.join(local_app, "Programs", "WiseEinstein"))
-        _add(os.path.join(local_app, "Programs", "WiseEinstein", "_internal"))
-
     app_data = os.environ.get("APPDATA")
-    if app_data:
-        _add(os.path.join(app_data, "WiseEinstein", "cuda"))
+    for name in (APP_NAME,) + LEGACY_APP_NAMES:
+        if local_app:
+            _add(os.path.join(local_app, name, "cuda"))
+            _add(os.path.join(local_app, "Programs", name))
+            _add(os.path.join(local_app, "Programs", name, "_internal"))
+        if app_data:
+            _add(os.path.join(app_data, name, "cuda"))
 
     # 4. 공용 모델 폴더 하위 cuda 디렉터리
     try:

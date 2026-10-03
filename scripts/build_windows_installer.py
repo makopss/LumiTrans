@@ -1,5 +1,5 @@
 """
-Wise-Einstein Windows Installer Automated Build Script (Full & Lite Editions)
+LumiTrans Windows Installer Automated Build Script (Full & Lite Editions)
 ------------------------------------------------------------------------------
 Automates:
 1. App icon generation (.ico)
@@ -222,7 +222,7 @@ def verify_llama_cpu_isa(folders: list):
 
 def verify_llama_layout(edition: str):
     """번들의 llama_cpp/lib 가 CPU 전용인지, Full 에는 CUDA 라이브러리가 별도 폴더에 있는지 확인한다."""
-    internal = ROOT_DIR / "dist" / "WiseEinstein" / "_internal"
+    internal = ROOT_DIR / "dist" / "LumiTrans" / "_internal"
     cpu_lib = internal / "llama_cpp" / "lib"
     if not (cpu_lib / "llama.dll").exists():
         raise RuntimeError(f"llama_cpp/lib/llama.dll 이 번들에 없습니다: {cpu_lib}")
@@ -244,7 +244,7 @@ def verify_llama_layout(edition: str):
 def run_pyinstaller(edition: str = "full"):
     edition_label = "라이트(Lite) 에디션" if edition == "lite" else "풀(Full) 에디션"
     print_step(f"1단계: PyInstaller를 통한 [{edition_label}] 번들 패키징 시작")
-    spec_path = ROOT_DIR / "WiseEinstein.spec"
+    spec_path = ROOT_DIR / "LumiTrans.spec"
     if not spec_path.exists():
         raise FileNotFoundError(f"Spec 파일이 없습니다: {spec_path}")
 
@@ -253,11 +253,11 @@ def run_pyinstaller(edition: str = "full"):
     env["WISE_LLAMA_CPU_DIR"] = str(ensure_llama_cpu_libs())
     if edition != "lite":
         env["WISE_LLAMA_CUDA_DIR"] = str(ensure_llama_cuda_libs())
-    dist_target = ROOT_DIR / "dist" / "WiseEinstein"
+    dist_target = ROOT_DIR / "dist" / "LumiTrans"
     if dist_target.exists():
         print(f"[PyInstaller] 이전 dist 디렉터리 정리 중: {dist_target}")
         shutil.rmtree(str(dist_target), ignore_errors=True)
-    build_target = ROOT_DIR / "build" / "WiseEinstein"
+    build_target = ROOT_DIR / "build" / "LumiTrans"
     if build_target.exists():
         print(f"[PyInstaller] 이전 build 디렉터리 정리 중: {build_target}")
         shutil.rmtree(str(build_target), ignore_errors=True)
@@ -277,7 +277,7 @@ def run_pyinstaller(edition: str = "full"):
         raise RuntimeError(f"PyInstaller 빌드 실패 (코드: {res.returncode})")
 
     # 번들 무결성 확인
-    exe_path = ROOT_DIR / "dist" / "WiseEinstein" / "WiseEinstein.exe"
+    exe_path = ROOT_DIR / "dist" / "LumiTrans" / "LumiTrans.exe"
     if not exe_path.exists():
         raise FileNotFoundError(f"생성된 실행 파일이 없습니다: {exe_path}")
 
@@ -286,7 +286,7 @@ def run_pyinstaller(edition: str = "full"):
     print(f"[PyInstaller] 실행 파일: {exe_path} ({size_mb:.2f} MB)")
 
     # 에디션별 사후 번들 파일 정리 및 검증
-    dist_dir = ROOT_DIR / "dist" / "WiseEinstein"
+    dist_dir = ROOT_DIR / "dist" / "LumiTrans"
     if edition == "lite":
         # 1. Lite 에디션: STT 번들 모델 디렉토리 완전 제외 (첫 실행 시 인앱 자동 다운로드)
         for cand_models in [dist_dir / "models", dist_dir / "_internal" / "models"]:
@@ -372,7 +372,7 @@ def run_innosetup(edition: str = "full") -> Path:
         raise RuntimeError(f"Inno Setup 컴파일 실패 (코드: {res.returncode})")
 
     # 결과 검증
-    setup_path = output_dir / f"WiseEinstein_{edition_cap}_Setup_v1.0.0.exe"
+    setup_path = output_dir / f"LumiTrans_{edition_cap}_Setup_v1.0.0.exe"
     if not setup_path.exists():
         raise FileNotFoundError(f"생성된 설치 파일이 없습니다: {setup_path}")
 
@@ -385,7 +385,7 @@ def run_innosetup(edition: str = "full") -> Path:
 def build_single_edition(edition: str) -> Path:
     edition_label = "라이트(Lite - 약 190~220MB)" if edition == "lite" else "풀(Full - 약 750~800MB)"
     print("\n" + "#" * 60)
-    print(f"### [Wise-Einstein] {edition_label} 빌드 파이프라인 가동")
+    print(f"### [LumiTrans] {edition_label} 빌드 파이프라인 가동")
     print("#" * 60)
     start_t = time.time()
     run_pyinstaller(edition=edition)
@@ -395,7 +395,7 @@ def build_single_edition(edition: str) -> Path:
     return out_file
 
 def main():
-    parser = argparse.ArgumentParser(description="Wise-Einstein Windows Installer Automated Builder")
+    parser = argparse.ArgumentParser(description="LumiTrans Windows Installer Automated Builder")
     parser.add_argument(
         "--edition",
         choices=["lite", "full", "all"],
@@ -405,7 +405,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print(f"[BUILD] 실시간 AI 동시통역 자막기 - 윈도우 설치 버전 빌드 시작")
+    print(f"[BUILD] 루미트랜스 (LumiTrans) - 윈도우 설치 버전 빌드 시작")
     print(f"[TARGET] 선택된 빌드 대상: {args.edition.upper()}")
     print("=" * 60)
 

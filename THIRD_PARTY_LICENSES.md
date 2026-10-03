@@ -1,6 +1,6 @@
 # Third-Party Licenses
 
-WiseEinstein itself is licensed under the **GNU General Public License v3.0** (see [LICENSE](LICENSE)).
+LumiTrans itself is licensed under the **GNU General Public License v3.0** (see [LICENSE](LICENSE)).
 
 This project depends on, and the Windows installer bundles, the third-party software listed below.
 Each component remains under its own license. Full license texts are available from each project's

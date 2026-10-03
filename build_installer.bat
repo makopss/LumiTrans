@@ -1,9 +1,9 @@
 @echo off
-title Wise-Einstein Windows Installer Builder
+title LumiTrans Windows Installer Builder
 pushd "%~dp0"
 
 echo ========================================================
-echo  Wise-Einstein 윈도우 설치 버전 (Setup.exe) 자동 빌드
+echo  LumiTrans 윈도우 설치 버전 (Setup.exe) 자동 빌드
 echo ========================================================
 echo.
 

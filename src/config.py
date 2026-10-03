@@ -11,7 +11,8 @@ def get_config_file_path() -> str:
     1. 개발 환경: 프로젝트 루트의 config.json
     2. 배포(frozen) 환경:
        - 포터블 모드: exe와 같은 폴더에 portable.txt가 있거나 exe 폴더에 쓰기가 가능한 경우
-       - 설치(Program Files 등) 모드: %APPDATA%/WiseEinstein/config.json 사용 (권한 에러 및 업데이트 덮어쓰기 방지)
+       - 설치(Program Files 등) 모드: %APPDATA%/LumiTrans/config.json 사용 (권한 에러 및 업데이트 덮어쓰기 방지)
+         이전 이름(%APPDATA%/WiseEinstein) 폴더가 있으면 자동으로 옮긴다.
     """
     if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(sys.executable)
@@ -19,8 +20,8 @@ def get_config_file_path() -> str:
         if os.path.exists(portable_flag):
             return os.path.join(exe_dir, "config.json")
 
-        app_data = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        user_cfg_dir = os.path.join(app_data, "WiseEinstein")
+        from src.app_paths import roaming_data_dir
+        user_cfg_dir = roaming_data_dir()
         user_cfg = os.path.join(user_cfg_dir, "config.json")
 
         # exe 디렉터리 쓰기 가능 여부 테스트 (C:\Program Files 설치 등 권한 제한 감지)
@@ -505,8 +506,8 @@ def save_config(cfg, config_file=None):
             if config_file:
                 raise
             try:
-                app_data = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-                fallback_file = os.path.join(app_data, "WiseEinstein", "config.json")
+                from src.app_paths import roaming_data_dir
+                fallback_file = os.path.join(roaming_data_dir(), "config.json")
                 if os.path.abspath(fallback_file) == os.path.abspath(target_file):
                     print("[Config] 폴백 설정 파일 저장 실패: 원본 경로와 동일합니다.")
                     return

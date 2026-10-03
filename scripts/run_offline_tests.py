@@ -67,6 +67,7 @@ def main():
         overlay = load('typewriter_overlay', ROOT / 'tests/test_typewriter_and_dangling.py')
         overlay_geom = load('overlay_geometry', ROOT / 'tests/test_overlay_resize_and_monitor.py')
         panel_layout = load('control_panel_layout', ROOT / 'tests/test_control_panel_layout.py')
+        app_paths_tests = load('app_paths', ROOT / 'tests/test_app_paths.py')
         test_audio_ducking = load('test_audio_ducking', ROOT / 'tests/test_audio_ducking.py')
         test_subtitle_history = load('test_subtitle_history', ROOT / 'tests/test_subtitle_history.py')
         test_screen_ocr = load('test_screen_ocr', ROOT / 'tests/test_screen_ocr.py')
@@ -76,6 +77,7 @@ def main():
             unittest.defaultTestLoader.loadTestsFromModule(overlay),
             unittest.defaultTestLoader.loadTestsFromModule(overlay_geom),
             unittest.defaultTestLoader.loadTestsFromModule(panel_layout),
+            unittest.defaultTestLoader.loadTestsFromModule(app_paths_tests),
         ])
         for name in ('test_time_formatters', 'test_manager_core_operations', 'test_export_srt_and_txt'):
             existing.addTest(unittest.FunctionTestCase(getattr(test_subtitle_history, name)))

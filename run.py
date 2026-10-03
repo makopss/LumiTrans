@@ -15,9 +15,13 @@ try:
 except Exception as _e:
     pass
 
-app_data = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-_LOG_DIR = os.path.join(app_data, "WiseEinstein")
-os.makedirs(_LOG_DIR, exist_ok=True)
+try:
+    from src.app_paths import roaming_data_dir
+    _LOG_DIR = roaming_data_dir()
+except Exception:
+    app_data = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    _LOG_DIR = os.path.join(app_data, "LumiTrans")
+    os.makedirs(_LOG_DIR, exist_ok=True)
 _CRASH_LOG = os.path.join(_LOG_DIR, "crash.log")
 
 # 무콘솔(GUI) 모드에서 sys.stdout/stderr가 None일 때의 안전 처리
@@ -136,7 +140,7 @@ from src.dubbing_engine import DubbingEngine
 
 def main():
     print("=" * 60)
-    print("[START] 실시간 윈도우 오디오 & 화면 AI 동시통역 자막기 시작 중...")
+    print("[START] 루미트랜스 (LumiTrans) - AI 실시간 음성 & 화면 번역 시작 중...")
     print("=" * 60)
 
     # 설정 로드
@@ -351,7 +355,7 @@ def main():
     control_panel.activateWindow()
     splash.finish()
 
-    print("\n[OK] Wise-Einstein 준비 완료! (무설치 앱 단독 캡처 & 실시간 AI 통역 가동)\n")
+    print("\n[OK] LumiTrans 준비 완료! (무설치 앱 단독 캡처 & 실시간 AI 통역 가동)\n")
 
     # 이벤트 루프 실행
     exit_code = app.exec()

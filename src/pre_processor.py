@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 pre_processor.py - 도메인 사전 분석, Whisper 힌트 주입 및 STT/LLM 음운·용어 사전 교정 엔진
-Wise-Einstein 프로젝트용 고정밀 실시간 자막 전처리 모듈
+LumiTrans 프로젝트용 고정밀 실시간 자막 전처리 모듈
 """
 
 from dataclasses import dataclass, field

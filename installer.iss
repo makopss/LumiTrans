@@ -1,20 +1,24 @@
-; Inno Setup 6 Script for Wise-Einstein (Live Audio Subtitle Translator)
-#define MyAppName "실시간 AI 동시통역 자막기"
-#define MyAppEnglishName "WiseEinstein"
+; Inno Setup 6 Script for LumiTrans (AI real-time audio & screen subtitle translator)
+#define MyAppName "LumiTrans"
+#define MyAppEnglishName "LumiTrans"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "Wise-Einstein"
-#define MyAppExeName "WiseEinstein.exe"
+#define MyAppPublisher "LumiTrans"
+#define MyAppExeName "LumiTrans.exe"
+; 이전 이름. 기존 설치를 업그레이드할 때 옛 실행 파일·바로가기·데이터를 정리하는 데 쓴다.
+#define LegacyEnglishName "WiseEinstein"
+#define LegacyExeName "WiseEinstein.exe"
+#define LegacyAppName "실시간 AI 동시통역 자막기"
 
 #ifndef Edition
   #define Edition "Full"
 #endif
 
 #if Edition == "Lite"
-  #define MyAppTitle "실시간 AI 동시통역 자막기 (Lite)"
-  #define MyOutputBaseFilename "WiseEinstein_Lite_Setup_v" + MyAppVersion
+  #define MyAppTitle "LumiTrans (Lite)"
+  #define MyOutputBaseFilename "LumiTrans_Lite_Setup_v" + MyAppVersion
 #else
-  #define MyAppTitle "실시간 AI 동시통역 자막기 (Full)"
-  #define MyOutputBaseFilename "WiseEinstein_Full_Setup_v" + MyAppVersion
+  #define MyAppTitle "LumiTrans (Full)"
+  #define MyOutputBaseFilename "LumiTrans_Full_Setup_v" + MyAppVersion
 #endif
 
 [Setup]
@@ -54,9 +58,13 @@ Type: filesandordirs; Name: "{app}\_internal\llama_cpp\lib"
 Type: filesandordirs; Name: "{app}\_internal\llama_cuda"
 ; 앱은 AppData 설정이 없으면 설치 폴더의 config.json 을 복사해 오므로 클린 설치 때 함께 지운다.
 Type: files; Name: "{app}\config.json"; Tasks: cleanconfig
+; 이전 이름(WiseEinstein)으로 설치된 것을 업그레이드할 때 옛 실행 파일과 바로가기를 지운다.
+Type: files; Name: "{app}\{#LegacyExeName}"
+Type: filesandordirs; Name: "{autoprograms}\{#LegacyAppName}"
+Type: files; Name: "{autodesktop}\{#LegacyAppName}.lnk"
 
 [Files]
-Source: "dist\WiseEinstein\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\LumiTrans\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "THIRD_PARTY_LICENSES.md"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -68,6 +76,8 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 [UninstallDelete]
 Type: filesandordirs; Name: "{userappdata}\{#MyAppEnglishName}"
 Type: filesandordirs; Name: "{localappdata}\{#MyAppEnglishName}"
+Type: filesandordirs; Name: "{userappdata}\{#LegacyEnglishName}"
+Type: filesandordirs; Name: "{localappdata}\{#LegacyEnglishName}"
 ; 앱이 설치 폴더에 만든 파일. 사용자가 설치 경로를 바꿨을 수 있으므로 {app} 전체는 지우지 않는다.
 Type: files; Name: "{app}\config.json"
 Type: files; Name: "{app}\clean_install.id"
@@ -85,6 +95,7 @@ var
   ResultCode: Integer;
 begin
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM {#LegacyExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(500);
 end;
 
@@ -92,6 +103,8 @@ procedure DeleteUserData();
 begin
   DelTree(ExpandConstant('{userappdata}\{#MyAppEnglishName}'), True, True, True);
   DelTree(ExpandConstant('{localappdata}\{#MyAppEnglishName}'), True, True, True);
+  DelTree(ExpandConstant('{userappdata}\{#LegacyEnglishName}'), True, True, True);
+  DelTree(ExpandConstant('{localappdata}\{#LegacyEnglishName}'), True, True, True);
 end;
 
 function InitializeUninstall(): Boolean;

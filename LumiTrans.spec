@@ -17,7 +17,7 @@ try:
     import json
     os.makedirs(os.path.join(ROOT_DIR, 'assets'), exist_ok=True)
     with open(os.path.join(ROOT_DIR, 'assets', 'edition.json'), 'w', encoding='utf-8') as f:
-        json.dump({"edition": EDITION, "name": f"WiseEinstein {EDITION.capitalize()}"}, f, indent=2)
+        json.dump({"edition": EDITION, "name": f"LumiTrans {EDITION.capitalize()}"}, f, indent=2)
 except Exception as e:
     print(f"[Spec] Warning creating edition metadata: {e}")
 
@@ -117,9 +117,10 @@ def find_cuda_toolkit_dlls():
         r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4",
         os.environ.get("CUDA_PATH"),
         r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9",
-        os.path.join(ROOT_DIR, "dist", "WiseEinstein", "_internal"),
-        os.path.join(ROOT_DIR, "dist", "WiseEinstein"),
-        os.path.join(os.environ.get("LOCALAPPDATA", ""), "WiseEinstein", "cuda"),
+        os.path.join(ROOT_DIR, "dist", "LumiTrans", "_internal"),
+        os.path.join(ROOT_DIR, "dist", "LumiTrans"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "LumiTrans", "cuda"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "WiseEinstein", "cuda"),  # 이전 이름
     ]
     cuda_root = r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
     if os.path.isdir(cuda_root):
@@ -324,7 +325,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='WiseEinstein',
+    name='LumiTrans',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -346,5 +347,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='WiseEinstein',
+    name='LumiTrans',
 )

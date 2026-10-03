@@ -144,7 +144,7 @@ class CleanInstallMarker(unittest.TestCase):
         from src.config import _consume_clean_install_marker
         with tempfile.TemporaryDirectory() as app_dir, tempfile.TemporaryDirectory() as user_dir:
             cfg = os.path.join(user_dir, "config.json")
-            exe = os.path.join(app_dir, "WiseEinstein.exe")
+            exe = os.path.join(app_dir, "LumiTrans.exe")
             with open(os.path.join(app_dir, "clean_install.id"), "w", encoding="utf-8") as handle:
                 handle.write("20261001000000")
             with patch.object(sys, "executable", exe):

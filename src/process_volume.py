@@ -221,7 +221,7 @@ def set_process_volume(target_name_or_pid, volume: float) -> bool:
                     
                     is_match = False
                     if is_all_non_system:
-                        # Wise-Einstein 자체(더빙 출력)는 제외하고 나머지 미디어 앱 감쇄
+                        # LumiTrans 자체(더빙 출력)는 제외하고 나머지 미디어 앱 감쇄
                         if pid.value != 0 and pid.value != my_pid:
                             is_match = True
                     elif str(target_name_or_pid) == str(pid.value):
