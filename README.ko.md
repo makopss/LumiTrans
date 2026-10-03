@@ -6,6 +6,8 @@
 
 유튜브 영상, 넷플릭스, 해외 강의, 트위치 등 **PC에서 재생되는 모든 영어 소리를 실시간으로 감지하여 한국어 자막으로 번역**해 화면 최상단에 띄워주는 독립형 데스크톱 프로그램입니다.
 
+![루미트랜스 자막 오버레이](docs/images/overlay-audio.jpg)
+
 ---
 
 ## 🌟 최신 핵심 기능
@@ -36,6 +38,27 @@
 - **프레임 변동 감지 (Frame Diff)**: 정지 화면의 반복 OCR을 줄입니다. 번역 실패 시에는 정지 화면에서도 재시도합니다.
 - **스마트 영역 지정 (ROI Selector)**: 윈도우 캡처 도구처럼 마우스로 원하는 영역을 슥 드래그하여 간편하게 지정.
 - **오디오 + 화면 동시 듀얼 번역**: 소리 자막과 화면 자막을 동시에 띄워두거나 필요에 따라 개별 토글 가능.
+
+---
+
+## 📸 스크린샷
+
+| 음성 번역 | 화면 번역 (OCR) |
+|---|---|
+| ![음성 번역 탭](docs/images/panel-audio.png) | ![화면 번역 탭](docs/images/panel-screen.png) |
+| **자막 탐색기** | **자막 설정** |
+| ![자막 탐색기 탭](docs/images/panel-history.png) | ![자막 설정 탭](docs/images/panel-subtitles.png) |
+
+<details>
+<summary>더 보기: 설정 탭 · 화면 번역 오버레이</summary>
+
+![설정 탭](docs/images/panel-settings.png)
+
+![화면 번역 오버레이](docs/images/overlay-screen.jpg)
+
+</details>
+
+> 스크린샷은 데모 모드의 예시 데이터로 촬영했습니다.
 
 ---
 
@@ -91,6 +114,13 @@ python scripts/build_windows_installer.py
 - **Groq API Key**: [Groq Console](https://console.groq.com)
 
 키는 개인 `config.json`에 저장됩니다. 배포 시 이 파일과 로그·음성·자막 기록을 제외하고, 키가 비어 있는 `config.example.json`을 사용하세요. `.gitignore`는 Git 추가를 막지만 폴더 전체 압축에는 적용되지 않습니다.
+
+## 🩺 문제 해결
+
+- 설치 버전은 콘솔 창 없이 실행됩니다. 로그는 `%APPDATA%\LumiTrans` 폴더(`stdout.log`, `stderr.log`, `crash.log`)에 저장됩니다.
+- **설정 → 문제 진단 → 📂 로그 폴더 열기** 버튼으로 해당 폴더를 바로 열 수 있습니다.
+- 실시간 로그를 보려면 **시작 메뉴 → LumiTrans → LumiTrans (디버그 모드)** 로 실행하거나 `LumiTrans.exe --console` 로 실행하세요. 콘솔 창이 열리며 로그 파일에도 계속 기록됩니다.
+- 버그 제보 시 `stderr.log`와 `crash.log`를 첨부해 주세요.
 
 ## 검증
 

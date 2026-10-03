@@ -28,7 +28,8 @@ def is_nvidia_gpu_present() -> bool:
         # nvidia-smi로 1차 고속 감지
         res = subprocess.run(
             ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=2
+            capture_output=True, text=True, timeout=2,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if res.returncode == 0 and res.stdout.strip():
             present = True
@@ -41,7 +42,8 @@ def is_nvidia_gpu_present() -> bool:
             import subprocess
             res = subprocess.run(
                 ["wmic", "path", "win32_VideoController", "get", "name"],
-                capture_output=True, text=True, timeout=2
+                capture_output=True, text=True, timeout=2,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if res.returncode == 0 and "nvidia" in res.stdout.lower():
                 present = True

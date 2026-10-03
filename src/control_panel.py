@@ -3474,6 +3474,33 @@ class ControlPanel(QWidget):
         self.lbl_hotkey_status.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_SECONDARY}; padding-left: 2px;")
         start_layout.addWidget(self.lbl_hotkey_status)
 
+        # 문제 진단: 배포판은 콘솔 창이 없으므로 로그 파일 위치를 바로 열 수 있게 한다.
+        log_row = QHBoxLayout()
+        lbl_log = QLabel("문제 진단")
+        lbl_log.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_PRIMARY};")
+        self.btn_open_logs = QPushButton("📂 로그 폴더 열기")
+        self.btn_open_logs.setToolTip("오류 신고 시 이 폴더의 crash.log · stderr.log · stdout.log 를 첨부해 주세요.")
+        self.btn_open_logs.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_open_logs.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_CARD_INNER};
+                color: {COLOR_TEXT_SECONDARY};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                color: #FFFFFF;
+                border-color: #94A3B8;
+            }}
+        """)
+        self.btn_open_logs.clicked.connect(self.open_log_folder)
+        log_row.addWidget(lbl_log)
+        log_row.addStretch(1)
+        log_row.addWidget(self.btn_open_logs)
+        start_layout.addLayout(log_row)
+
         col1_layout.addWidget(start_card)
 
         # 2) 설정 프리셋 카드 (시작 옵션 하단 배치, 남은 공간 채움)
@@ -4089,6 +4116,19 @@ class ControlPanel(QWidget):
         main_layout.addLayout(col3_layout, stretch=4)
 
         return container
+
+    def open_log_folder(self):
+        """로그(crash.log·stderr.log·stdout.log)가 저장되는 사용자 데이터 폴더를 탐색기로 연다."""
+        try:
+            from src.app_paths import roaming_data_dir
+            from PyQt6.QtCore import QUrl
+            from PyQt6.QtGui import QDesktopServices
+            folder = roaming_data_dir()
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+            return folder
+        except Exception as error:
+            print(f"[로그] 로그 폴더를 열 수 없습니다: {error}")
+            return None
 
     def _toggle_echo_mode(self, line_edit: QLineEdit, btn: QPushButton = None):
         if line_edit.echoMode() == QLineEdit.EchoMode.Password:

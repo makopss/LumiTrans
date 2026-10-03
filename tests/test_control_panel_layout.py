@@ -49,6 +49,15 @@ class TestControlPanelLayout(unittest.TestCase):
 
     def tearDown(self):
         self.panel.close()
+
+    def test_open_log_folder_button_opens_user_data_dir(self):
+        from PyQt6.QtGui import QDesktopServices
+        self.assertEqual(self.panel.btn_open_logs.text(), "📂 로그 폴더 열기")
+        with patch("src.app_paths.roaming_data_dir", return_value=r"C:\fake\LumiTrans"), \
+             patch.object(QDesktopServices, "openUrl", return_value=True) as open_url:
+            self.panel.btn_open_logs.click()
+        open_url.assert_called_once()
+        self.assertEqual(open_url.call_args[0][0].toLocalFile().replace("/", "\\"), r"C:\fake\LumiTrans")
         self.panel.deleteLater()
 
     def test_minimum_size_is_stable_across_tabs(self):

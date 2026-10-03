@@ -24,17 +24,76 @@ except Exception:
     os.makedirs(_LOG_DIR, exist_ok=True)
 _CRASH_LOG = os.path.join(_LOG_DIR, "crash.log")
 
-# 무콘솔(GUI) 모드에서 sys.stdout/stderr가 None일 때의 안전 처리
+# 배포판은 콘솔 없이(GUI 모드) 실행되어 sys.stdout/stderr 가 None 이다. 이때 로그는 파일로 남긴다.
+# "--console" 옵션(시작 메뉴의 '디버그 모드' 바로가기)으로 실행하면 콘솔 창을 새로 열어 실시간 로그도 보여 준다.
+_CONSOLE_MODE = "--console" in sys.argv
+if _CONSOLE_MODE:
+    sys.argv = [a for a in sys.argv if a != "--console"]
+
+
+def _open_log(name):
+    path = os.path.join(_LOG_DIR, name)
+    try:
+        # 계속 쌓이지 않도록 5MB 를 넘으면 한 세대만 보관하고 새로 시작한다.
+        if os.path.exists(path) and os.path.getsize(path) > 5_000_000:
+            os.replace(path, path + ".1")
+        return open(path, "a", encoding="utf-8", buffering=1)
+    except Exception:
+        return open(os.devnull, "w", encoding="utf-8")
+
+
+class _Tee:
+    """콘솔과 로그 파일에 동시에 기록한다."""
+
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data):
+        for s in self._streams:
+            try:
+                s.write(data)
+            except Exception:
+                pass
+        return len(data)
+
+    def flush(self):
+        for s in self._streams:
+            try:
+                s.flush()
+            except Exception:
+                pass
+
+    def isatty(self):
+        return False
+
+    @property
+    def encoding(self):
+        return "utf-8"
+
+    def fileno(self):
+        # faulthandler 등 OS 수준 핸들이 필요한 라이브러리는 로그 파일에 기록한다.
+        return self._streams[-1].fileno()
+
+    def __getattr__(self, name):
+        return getattr(self._streams[-1], name)
+
+
+_console_stream = None
+if _CONSOLE_MODE and sys.platform == "win32" and sys.stdout is None:
+    try:
+        import ctypes
+        ctypes.windll.kernel32.AllocConsole()
+        ctypes.windll.kernel32.SetConsoleTitleW("LumiTrans 디버그 콘솔 (이 창을 닫으면 앱도 종료됩니다)")
+        _console_stream = open("CONOUT$", "w", encoding="utf-8", errors="replace", buffering=1)
+    except Exception:
+        _console_stream = None
+
 if sys.stdout is None:
-    try:
-        sys.stdout = open(os.path.join(_LOG_DIR, "stdout.log"), "a", encoding="utf-8", buffering=1)
-    except Exception:
-        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    _out = _open_log("stdout.log")
+    sys.stdout = _Tee(_console_stream, _out) if _console_stream else _out
 if sys.stderr is None:
-    try:
-        sys.stderr = open(os.path.join(_LOG_DIR, "stderr.log"), "a", encoding="utf-8", buffering=1)
-    except Exception:
-        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    _err = _open_log("stderr.log")
+    sys.stderr = _Tee(_console_stream, _err) if _console_stream else _err
 
 # ONNX Runtime 및 OpenMP 연산 스레드 상한 제한 (CPU 90% 폭주 방지 및 안정화)
 os.environ["OMP_NUM_THREADS"] = "2"

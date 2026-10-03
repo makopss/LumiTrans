@@ -6,6 +6,8 @@
 
 LumiTrans is a standalone desktop app that **listens to any English audio playing on your PC — YouTube, Netflix, online lectures, Twitch, and more — and translates it into Korean subtitles in real time**, displayed in an always-on-top overlay.
 
+![LumiTrans subtitle overlay](docs/images/overlay-audio.jpg)
+
 ---
 
 ## 🌟 Key Features
@@ -36,6 +38,27 @@ LumiTrans is a standalone desktop app that **listens to any English audio playin
 - **Frame-diff detection**: Avoids repeated OCR on static frames; retries on static frames only when a translation fails.
 - **ROI selector**: Drag to select the area to watch, just like the Windows Snipping Tool.
 - **Dual audio + screen translation**: Show audio and screen subtitles together, or toggle each independently.
+
+---
+
+## 📸 Screenshots
+
+| Audio translation | Screen translation (OCR) |
+|---|---|
+| ![Audio translation tab](docs/images/panel-audio.png) | ![Screen translation tab](docs/images/panel-screen.png) |
+| **Subtitle explorer** | **Subtitle style** |
+| ![Subtitle explorer tab](docs/images/panel-history.png) | ![Subtitle style tab](docs/images/panel-subtitles.png) |
+
+<details>
+<summary>More: settings tab &amp; screen-translation overlay</summary>
+
+![Settings tab](docs/images/panel-settings.png)
+
+![Screen translation overlay](docs/images/overlay-screen.jpg)
+
+</details>
+
+> The UI is currently in Korean. Screenshots were taken in demo mode with sample data.
 
 ---
 
@@ -90,6 +113,13 @@ Click the **`[🔑 무료 API 키 등록 및 관리]`** (Manage free API keys) b
 - **Groq API Key**: [Groq Console](https://console.groq.com)
 
 Keys are stored in your personal `config.json`. When redistributing, exclude this file along with logs, audio, and subtitle history, and ship `config.example.json` (with empty keys) instead. Note that `.gitignore` only prevents Git from adding these files; it does not apply when you zip the whole folder.
+
+## 🩺 Troubleshooting
+
+- The installed app runs without a console window. Logs are written to `%APPDATA%\LumiTrans` (`stdout.log`, `stderr.log`, `crash.log`).
+- **Settings → 문제 진단 (Diagnostics) → 📂 로그 폴더 열기 (Open log folder)** opens that folder directly.
+- To watch live logs, launch **Start menu → LumiTrans → LumiTrans (디버그 모드)** (Debug mode), or run `LumiTrans.exe --console`. A console window opens and output is still saved to the log files.
+- When reporting a bug, please attach `stderr.log` and `crash.log`.
 
 ## Testing
 

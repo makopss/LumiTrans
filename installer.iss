@@ -70,6 +70,7 @@ Source: "THIRD_PARTY_LICENSES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName} (디버그 모드)"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--console"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "실시간 로그 콘솔 창과 함께 실행 (문제 진단용)"
 Name: "{group}\{#MyAppName} 삭제"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 

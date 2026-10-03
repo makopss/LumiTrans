@@ -461,6 +461,7 @@ def _restrict_config_permissions(path):
                 capture_output=True,
                 timeout=3,
                 check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         else:
             os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
