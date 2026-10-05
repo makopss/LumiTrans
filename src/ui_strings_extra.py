@@ -577,6 +577,32 @@ _T = {
 "speaker_segmentation_prep": _t2("화자 교대 모델 준비 중", "Preparing segmentation model"),
 "speaker_segmentation_active": _t2("화자 교대 분석 작동 중", "Speaker change analysis active"),
 "speaker_single_speech_mode": _t2("단일 발화 판정 · 교대 분석 꺼짐", "Single speech · Diarization off"),
+"speaker_model_prep_failed": _t2("화자 모델 준비 실패 · 5초 후 재시도", "Speaker model preparation failed · Retrying in 5s"),
+"speaker_segmentation_unavailable_retry": _t2("화자 교대 분석 불가 · 미확정 표시 / 재시도", "Speaker diarization unavailable · Marked unconfirmed / Retrying"),
+"speaker_segmentation_error_unconfirmed": _t2("화자 교대 분석 오류 · 미확정 표시", "Speaker diarization error · Marked unconfirmed"),
+
+# Splash loading messages
+"splash_prep_ui": _t2("화면을 준비하는 중...", "Preparing display..."),
+"splash_loading_config_module": _t2("설정 모듈을 불러오는 중...", "Loading settings module..."),
+"splash_loading_stt_lib": _t2("음성인식 라이브러리를 불러오는 중...", "Loading speech recognition libraries..."),
+"splash_loading_translation_lib": _t2("자막·화면 번역 모듈을 불러오는 중...", "Loading subtitle & translation modules..."),
+"splash_loading_config": _t2("환경 설정을 불러오는 중...", "Loading preferences..."),
+"splash_prep_subtitles": _t2("자막 오버레이를 준비하는 중...", "Preparing subtitle overlay..."),
+"splash_prep_screen_subtitles": _t2("화면 자막 창을 준비하는 중...", "Preparing screen subtitle window..."),
+"splash_prep_stt": _t2("음성인식 엔진을 준비하는 중...", "Preparing speech recognition engine..."),
+"splash_prep_diarization": _t2("화자 분리 모델을 준비하는 중...", "Preparing speaker diarization model..."),
+"splash_prep_deepgram": _t2("Deepgram 클라우드 STT 준비 중 ({model})...", "Preparing Deepgram Cloud STT ({model})..."),
+"splash_prep_groq": _t2("Groq 클라우드 STT 준비 중 ({model})...", "Preparing Groq Cloud STT ({model})..."),
+"splash_loading_stt": _t2("STT 모델 로드 중 ({model})...", "Loading STT model ({model})..."),
+"splash_loaded_stt": _t2("STT 모델 로드 완료 ({model})", "STT model loaded ({model})"),
+"splash_loaded_parakeet": _t2("Parakeet STT 모델 로드 완료", "Parakeet STT model loaded"),
+"splash_loaded_sensevoice": _t2("SenseVoice STT 모델 로드 완료", "SenseVoice STT model loaded"),
+"splash_loaded_moonshine": _t2("Moonshine STT 모델 로드 완료", "Moonshine STT model loaded"),
+"splash_prep_dubbing": _t2("더빙 엔진을 준비하는 중...", "Preparing dubbing engine..."),
+"splash_prep_screen_worker": _t2("화면 번역 워커를 준비하는 중...", "Preparing screen translation worker..."),
+"splash_prep_control_panel": _t2("컨트롤 패널을 만드는 중...", "Creating control panel..."),
+"splash_prep_audio_capture": _t2("오디오 캡처를 준비하는 중...", "Preparing audio capture..."),
+"splash_start_pipeline": _t2("통역 파이프라인을 시작하는 중...", "Starting translation pipeline..."),
 }
 
 EXTRA_ROWS = [_row(key, values) for key, values in _T.items()]

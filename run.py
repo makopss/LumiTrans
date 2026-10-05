@@ -174,19 +174,24 @@ apply_dark_theme(app)
 from src.no_wheel_combobox import NoWheelFilter
 app.installEventFilter(NoWheelFilter(app))
 
+# 설정 및 다국어 조기 로드
+from src.config import load_config, save_config
+from src.i18n import set_ui_language, tr
+init_cfg = load_config()
+set_ui_language(init_cfg.get("ui_lang", "ko"))
+
 # 2. 프리미엄 스플래시 스크린 즉시 표시
 from src.splash_screen import LumiSplashScreen
 splash = LumiSplashScreen()
 splash.show()
-splash.set_message("화면을 준비하는 중...", 5)
+splash.set_message(tr("splash_prep_ui"), 5)
 
 # 3. 오디오 및 AI 모듈 로드
-splash.set_message("설정 모듈을 불러오는 중...", 12)
-from src.config import load_config, save_config
-splash.set_message("음성인식 라이브러리를 불러오는 중...", 20)
+splash.set_message(tr("splash_loading_config_module"), 12)
+splash.set_message(tr("splash_loading_stt_lib"), 20)
 from src.audio_capture import AudioLoopbackCapture
 from src.stt_engine import STTWorker
-splash.set_message("자막·화면 번역 모듈을 불러오는 중...", 28)
+splash.set_message(tr("splash_loading_translation_lib"), 28)
 from src.overlay_window import SubtitleOverlay
 from src.screen_overlay_manager import ScreenOverlayManager
 from src.screen_ocr_worker import ScreenOCRWorker
@@ -203,27 +208,26 @@ def main():
     print("=" * 60)
 
     # 설정 로드
-    splash.set_message("환경 설정을 불러오는 중...", 34)
+    splash.set_message(tr("splash_loading_config"), 34)
     config = load_config()
-    from src.i18n import set_ui_language
     set_ui_language(config.get("ui_lang", "ko"))
 
     # 오디오 큐 생성
     audio_queue = queue.Queue(maxsize=32)
 
     # 1. 오디오 자막 오버레이 창 생성
-    splash.set_message("자막 오버레이를 준비하는 중...", 40)
+    splash.set_message(tr("splash_prep_subtitles"), 40)
     overlay = SubtitleOverlay(config, on_config_change=save_config)
 
     # 2. 화면 번역 전용 자막 오버레이 통합 관리자 생성 (다중 ROI 1:1 독립 자막창 및 밀착 지원)
-    splash.set_message("화면 자막 창을 준비하는 중...", 46)
+    splash.set_message(tr("splash_prep_screen_subtitles"), 46)
     screen_overlay = ScreenOverlayManager(config, on_config_change=save_config)
 
     # 2-1. 관심 영역 외곽 테두리(엣지) 화면 오버랩 관리자 생성
     roi_border_manager = ROIBorderManager(config)
 
     # 3. STT & 오디오 번역 워커 스레드 초기화
-    splash.set_message("음성인식 엔진을 준비하는 중...", 52)
+    splash.set_message(tr("splash_prep_stt"), 52)
     stt_worker = STTWorker(
         audio_queue=audio_queue,
         subtitle_callback=overlay.update_subtitle_signal.emit,
@@ -233,7 +237,7 @@ def main():
     )
 
     # 3-1. 실시간 AI 음성 더빙 엔진 초기화 (Edge-TTS 비동기 스트리밍)
-    splash.set_message("더빙 엔진을 준비하는 중...", 72)
+    splash.set_message(tr("splash_prep_dubbing"), 72)
     dubbing_engine = DubbingEngine(
         config=config,
         speaker_identifier=getattr(stt_worker, 'speaker_identifier', None)
@@ -241,7 +245,7 @@ def main():
     stt_worker.set_dubbing_engine(dubbing_engine)
 
     # 4. 실시간 화면 OCR 번역 워커 스레드 초기화 (동일한 RealtimeTranslator 엔진 공유)
-    splash.set_message("화면 번역 워커를 준비하는 중...", 76)
+    splash.set_message(tr("splash_prep_screen_worker"), 76)
     screen_worker = ScreenOCRWorker(
         config=config,
         translator=stt_worker.translator,
@@ -265,7 +269,7 @@ def main():
     )
 
     # 5. 컨트롤 패널 생성
-    splash.set_message("컨트롤 패널을 만드는 중...", 84)
+    splash.set_message(tr("splash_prep_control_panel"), 84)
     control_panel = ControlPanel(
         config=config,
         overlay=overlay,
@@ -281,7 +285,7 @@ def main():
     screen_worker.status_signal.connect(control_panel.update_screen_worker_status)
 
     # 오디오 캡처 스레드 초기화
-    splash.set_message("오디오 캡처를 준비하는 중...", 90)
+    splash.set_message(tr("splash_prep_audio_capture"), 90)
     audio_capture = AudioLoopbackCapture(
         audio_queue=audio_queue,
         level_callback=control_panel.audio_level_signal.emit,
@@ -334,7 +338,7 @@ def main():
     )
 
     # 백그라운드 스레드 시작
-    splash.set_message("통역 파이프라인을 시작하는 중...", 96)
+    splash.set_message(tr("splash_start_pipeline"), 96)
     stt_worker.start()
     audio_capture.start()
     screen_worker.start()

@@ -187,6 +187,9 @@ class TestI18nNewTranslations(unittest.TestCase):
         self.assertEqual(localize_speaker_status("화자 모델 준비 중"), "화자 모델 준비 중")
         self.assertEqual(localize_speaker_status("화자 교대 분석 작동 중"), "화자 교대 분석 작동 중")
         self.assertEqual(localize_speaker_status("단일 발화 판정 · 교대 분석 꺼짐"), "단일 발화 판정 · 교대 분석 꺼짐")
+        self.assertEqual(localize_speaker_status("화자 모델 준비 실패 · 5초 후 재시도 (ValueError)"), "화자 모델 준비 실패 · 5초 후 재시도 (ValueError)")
+        self.assertEqual(localize_speaker_status("화자 교대 분석 불가 · 미확정 표시 / 재시도 (RuntimeError)"), "화자 교대 분석 불가 · 미확정 표시 / 재시도 (RuntimeError)")
+        self.assertEqual(localize_speaker_status("화자 교대 분석 오류 · 미확정 표시 (Exception)"), "화자 교대 분석 오류 · 미확정 표시 (Exception)")
 
         set_ui_language("en")
         self.assertEqual(spk_id.get_display_name("화자 1"), "Speaker 1")
@@ -196,6 +199,9 @@ class TestI18nNewTranslations(unittest.TestCase):
         self.assertEqual(localize_speaker_status("화자 모델 준비 중"), "Preparing speaker model")
         self.assertEqual(localize_speaker_status("화자 교대 분석 작동 중"), "Speaker change analysis active")
         self.assertEqual(localize_speaker_status("단일 발화 판정 · 교대 분석 꺼짐"), "Single speech · Diarization off")
+        self.assertEqual(localize_speaker_status("화자 모델 준비 실패 · 5초 후 재시도 (ValueError)"), "Speaker model preparation failed · Retrying in 5s (ValueError)")
+        self.assertEqual(localize_speaker_status("화자 교대 분석 불가 · 미확정 표시 / 재시도 (RuntimeError)"), "Speaker diarization unavailable · Marked unconfirmed / Retrying (RuntimeError)")
+        self.assertEqual(localize_speaker_status("화자 교대 분석 오류 · 미확정 표시 (Exception)"), "Speaker diarization error · Marked unconfirmed (Exception)")
 
     def test_stt_default_download_progress_localized(self):
         from src.stt_model_manager import STTModelManager
@@ -209,6 +215,27 @@ class TestI18nNewTranslations(unittest.TestCase):
         pct_en, msg_en = STTModelManager.get_last_progress("non_existent_model_id")
         self.assertEqual(pct_en, 0)
         self.assertEqual(msg_en, "Download in progress...")
+
+    def test_splash_loading_messages_localized(self):
+        set_ui_language("ko")
+        self.assertEqual(tr("splash_prep_diarization"), "화자 분리 모델을 준비하는 중...")
+        self.assertEqual(tr("splash_prep_deepgram", model="nova-3"), "Deepgram 클라우드 STT 준비 중 (nova-3)...")
+        self.assertEqual(tr("splash_prep_groq", model="whisper-large-v3-turbo"), "Groq 클라우드 STT 준비 중 (whisper-large-v3-turbo)...")
+        self.assertEqual(tr("splash_loading_stt", model="small.en"), "STT 모델 로드 중 (small.en)...")
+        self.assertEqual(tr("splash_loaded_stt", model="small.en"), "STT 모델 로드 완료 (small.en)")
+        self.assertEqual(tr("splash_loaded_parakeet"), "Parakeet STT 모델 로드 완료")
+        self.assertEqual(tr("splash_loaded_sensevoice"), "SenseVoice STT 모델 로드 완료")
+        self.assertEqual(tr("splash_loaded_moonshine"), "Moonshine STT 모델 로드 완료")
+
+        set_ui_language("en")
+        self.assertEqual(tr("splash_prep_diarization"), "Preparing speaker diarization model...")
+        self.assertEqual(tr("splash_prep_deepgram", model="nova-3"), "Preparing Deepgram Cloud STT (nova-3)...")
+        self.assertEqual(tr("splash_prep_groq", model="whisper-large-v3-turbo"), "Preparing Groq Cloud STT (whisper-large-v3-turbo)...")
+        self.assertEqual(tr("splash_loading_stt", model="small.en"), "Loading STT model (small.en)...")
+        self.assertEqual(tr("splash_loaded_stt", model="small.en"), "STT model loaded (small.en)")
+        self.assertEqual(tr("splash_loaded_parakeet"), "Parakeet STT model loaded")
+        self.assertEqual(tr("splash_loaded_sensevoice"), "SenseVoice STT model loaded")
+        self.assertEqual(tr("splash_loaded_moonshine"), "Moonshine STT model loaded")
 
     def test_overlay_windows_apply_ui_language(self):
         from PyQt6.QtWidgets import QApplication

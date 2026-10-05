@@ -440,7 +440,7 @@ class STTWorker(threading.Thread):
         self.speaker_identifier = None
         if self.config.get("speaker_diarization_enabled", False):
             try:
-                self._report_load_progress("화자 분리 모델을 준비하는 중...", 52)
+                self._report_load_progress(tr("splash_prep_diarization"), 52)
                 from .speaker_identifier import SpeakerIdentifier
                 self.speaker_identifier = SpeakerIdentifier(config=self.config)
             except Exception as e:
@@ -791,12 +791,12 @@ class STTWorker(threading.Thread):
         # 1. 클라우드 STT 활성 시 무거운 로컬 가중치 로딩 건너뜀 (초고속 시작, GPU 0%)
         if self.config.get("stt_provider") == "deepgram" and self.config.get("deepgram_api_key"):
             dg_m = self.config.get("deepgram_model", "nova-3")
-            self._report_load_progress(f"Deepgram 클라우드 STT 준비 중 ({dg_m})...", 62)
+            self._report_load_progress(tr("splash_prep_deepgram", model=dg_m), 62)
             print(f"[STT] Deepgram Nova 클라우드 모드 가동 완료! (API 모델: {dg_m})")
             return
         if self.config.get("stt_provider") == "groq" and self.config.get("groq_api_key"):
             groq_m = self.config.get("groq_model", "whisper-large-v3-turbo")
-            self._report_load_progress(f"Groq 클라우드 STT 준비 중 ({groq_m})...", 62)
+            self._report_load_progress(tr("splash_prep_groq", model=groq_m), 62)
             print(f"[STT] Groq Cloud LPU 모드 가동 완료! (API 모델: {groq_m}, GPU 0%, 지연 0.05s)")
             return
 
@@ -808,7 +808,7 @@ class STTWorker(threading.Thread):
             model_id = normalize_whisper_model_id(self.model_size)
 
         print(f"[STT] 모델 로드 중: {self.model_size} (디바이스: {self.device}, 타입: {self.compute_type})...")
-        self._report_load_progress(f"STT 모델 로드 중 ({self.model_size})...", 58)
+        self._report_load_progress(tr("splash_loading_stt", model=self.model_size), 58)
 
         if self.model_size == "parakeet-tdt-0.6b":
             try:
@@ -826,7 +826,7 @@ class STTWorker(threading.Thread):
                     provider='cpu'
                 )
                 print("[STT] NVIDIA Parakeet-TDT 0.6B 모델 준비 완료! (리더보드 1위)")
-                self._report_load_progress("Parakeet STT 모델 로드 완료", 70)
+                self._report_load_progress(tr("splash_loaded_parakeet"), 70)
                 return
             except Exception as e:
                 print(f"[STT] Parakeet 로드 실패({e}), Whisper로 폴백...")
@@ -845,7 +845,7 @@ class STTWorker(threading.Thread):
                     use_itn=True
                 )
                 print("[STT] SenseVoice-Small 초고속 병렬 모델 준비 완료! (GPU 0%, 0.1초대)")
-                self._report_load_progress("SenseVoice STT 모델 로드 완료", 70)
+                self._report_load_progress(tr("splash_loaded_sensevoice"), 70)
                 return
             except Exception as e:
                 print(f"[STT] SenseVoice 로드 실패({e}), Whisper로 폴백...")
@@ -866,7 +866,7 @@ class STTWorker(threading.Thread):
                     num_threads=4
                 )
                 print("[STT] Moonshine 초저지연 스트리밍 모델 준비 완료! (0.12초)")
-                self._report_load_progress("Moonshine STT 모델 로드 완료", 70)
+                self._report_load_progress(tr("splash_loaded_moonshine"), 70)
                 return
             except Exception as e:
                 print(f"[STT] Moonshine 로드 실패({e}), Whisper로 폴백...")
@@ -897,7 +897,7 @@ class STTWorker(threading.Thread):
                     download_root=hub_cache
                 )
                 print(f"[STT] AMD/Intel CPU 초경량(INT8) 모델 로드 완료! ({model_id}) [대상: {load_target}]")
-                self._report_load_progress(f"STT 모델 로드 완료 ({model_id})", 70)
+                self._report_load_progress(tr("splash_loaded_stt", model=model_id), 70)
             else:
                 self.model = WhisperModel(
                     load_target,
@@ -913,7 +913,7 @@ class STTWorker(threading.Thread):
                     raise RuntimeError(f"CUDA STT 연산 초기화 실패 ({warm_err})")
                 self._loaded_device = "cuda"
                 print(f"[STT] NVIDIA CUDA 가속 모델 준비 완료! ({model_id}) [대상: {load_target}]")
-                self._report_load_progress(f"STT 모델 로드 완료 ({model_id})", 70)
+                self._report_load_progress(tr("splash_loaded_stt", model=model_id), 70)
         except Exception as e:
             print(f"[STT] {target_device} 로드 실패({e}), CPU int8 모드로 폴백...")
             try:
@@ -929,7 +929,7 @@ class STTWorker(threading.Thread):
                     download_root=fb_hub
                 )
                 print(f"[STT] CPU int8 폴백 완료! ({fallback_id}) [대상: {fb_target}]")
-                self._report_load_progress(f"STT 모델 로드 완료 ({fallback_id})", 70)
+                self._report_load_progress(tr("splash_loaded_stt", model=fallback_id), 70)
             except Exception as e2:
                 print(f"[STT] CPU 폴백 실패: {e2}. 기본 내장 번들 모델(distil-small.en)로 최종 폴백...")
                 try:

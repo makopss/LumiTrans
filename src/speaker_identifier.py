@@ -22,17 +22,24 @@ def _safe_print(msg: str):
 def localize_speaker_status(status_str: str) -> str:
     if not status_str:
         return ""
-    mapping = {
-        "화자 모델 준비 중": "speaker_model_prep",
-        "화자 분리 꺼짐": "speaker_off",
-        "화자 음성 모델 준비 중": "speaker_voice_prep",
-        "화자 교대 모델 준비 중": "speaker_segmentation_prep",
-        "화자 교대 분석 작동 중": "speaker_segmentation_active",
-        "단일 발화 판정 · 교대 분석 꺼짐": "speaker_single_speech_mode",
-    }
-    for ko_text, key in mapping.items():
+    # Extract trailing error name in parentheses if present, e.g. " (ValueError)"
+    match = re.search(r'\s*\(([^)]+)\)$', status_str.strip())
+    err_suffix = f" ({match.group(1)})" if match else ""
+
+    mapping = [
+        ("화자 모델 준비 실패 · 5초 후 재시도", "speaker_model_prep_failed"),
+        ("화자 교대 분석 불가 · 미확정 표시 / 재시도", "speaker_segmentation_unavailable_retry"),
+        ("화자 교대 분석 오류 · 미확정 표시", "speaker_segmentation_error_unconfirmed"),
+        ("화자 모델 준비 중", "speaker_model_prep"),
+        ("화자 분리 꺼짐", "speaker_off"),
+        ("화자 음성 모델 준비 중", "speaker_voice_prep"),
+        ("화자 교대 모델 준비 중", "speaker_segmentation_prep"),
+        ("화자 교대 분석 작동 중", "speaker_segmentation_active"),
+        ("단일 발화 판정 · 교대 분석 꺼짐", "speaker_single_speech_mode"),
+    ]
+    for ko_text, key in mapping:
         if ko_text in status_str:
-            return tr(key)
+            return f"{tr(key)}{err_suffix}"
     return status_str
 
 # 화자별 고유 테마 색상 (어두운 배경/밝은 배경 모두에서 뛰어난 가독성)
