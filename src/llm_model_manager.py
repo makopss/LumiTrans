@@ -6,6 +6,7 @@ import requests
 import threading
 from typing import List, Dict, Optional, Tuple, Any
 from PyQt6.QtCore import pyqtSignal, QObject
+from src.i18n import tr
 
 OLLAMA_API_BASE = "http://127.0.0.1:11434"
 _CUDA_ARCH_CACHE = {}
@@ -219,19 +220,20 @@ class OllamaPullWorker(threading.Thread):
     def run(self):
         url = f"{OLLAMA_API_BASE}/api/pull"
         LLMModelManager.register_ollama_worker(self.model_tag, self)
-        LLMModelManager.set_last_ollama_progress(self.model_tag, 0, f"Ollama 연결 중... ({self.model_tag})")
-        self.progress_signal.emit(self.model_tag, 0, f"Ollama 연결 중... ({self.model_tag})")
+        conn_msg = tr("ollama_connecting", tag=self.model_tag)
+        LLMModelManager.set_last_ollama_progress(self.model_tag, 0, conn_msg)
+        self.progress_signal.emit(self.model_tag, 0, conn_msg)
         try:
             resp = requests.post(url, json={"name": self.model_tag, "stream": True}, stream=True, timeout=10)
             self._resp = resp
             if resp.status_code != 200:
-                self.finished_signal.emit(self.model_tag, False, f"Ollama 응답 오류 (코드 {resp.status_code})")
+                self.finished_signal.emit(self.model_tag, False, tr("ollama_resp_error", code=resp.status_code))
                 return
 
             max_pct = 0
             for line in resp.iter_lines():
                 if self._is_cancelled:
-                    self.finished_signal.emit(self.model_tag, False, "다운로드가 취소되었습니다.")
+                    self.finished_signal.emit(self.model_tag, False, tr("model_download_cancelled"))
                     return
                 if line:
                     try:
@@ -254,14 +256,14 @@ class OllamaPullWorker(threading.Thread):
                     except Exception:
                         pass
 
-            self.progress_signal.emit(self.model_tag, 100, "다운로드 및 모델 준비 완료!")
+            self.progress_signal.emit(self.model_tag, 100, tr("ollama_model_ready"))
             LLMModelManager.get_installed_ollama_models(force_refresh=True)
-            self.finished_signal.emit(self.model_tag, True, f"'{self.model_tag}' 모델이 성공적으로 설치되었습니다.")
+            self.finished_signal.emit(self.model_tag, True, tr("ollama_installed_success", name=self.model_tag))
         except Exception as e:
             if self._is_cancelled:
-                self.finished_signal.emit(self.model_tag, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(self.model_tag, False, tr("model_download_cancelled"))
             else:
-                self.finished_signal.emit(self.model_tag, False, f"Ollama 통신 실패: {e}")
+                self.finished_signal.emit(self.model_tag, False, tr("ollama_comm_failed", error=str(e)))
         finally:
             LLMModelManager.unregister_ollama_worker(self.model_tag)
 
@@ -322,8 +324,9 @@ class GGUFDownloadWorker(threading.Thread):
         repo_id = self.model_info["repo_id"]
         filename = self.model_info["filename"]
         LLMModelManager.register_gguf_worker(m_id, self)
-        LLMModelManager.set_last_gguf_progress(m_id, 0, f"HuggingFace 연결 중... ({filename})")
-        self.progress_signal.emit(m_id, 0, f"HuggingFace 연결 중... ({filename})")
+        conn_msg = tr("hf_connecting", filename=filename)
+        LLMModelManager.set_last_gguf_progress(m_id, 0, conn_msg)
+        self.progress_signal.emit(m_id, 0, conn_msg)
 
         try:
             import time
@@ -417,21 +420,21 @@ class GGUFDownloadWorker(threading.Thread):
 
             if self._is_cancelled:
                 LLMModelManager.delete_gguf_model(self.model_info)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
                 return
 
-            self.progress_signal.emit(m_id, 100, "다운로드 완료!")
-            self.finished_signal.emit(m_id, True, f"GGUF 모델 다운로드 완료:\n{path}")
+            self.progress_signal.emit(m_id, 100, tr("model_download_done"))
+            self.finished_signal.emit(m_id, True, tr("gguf_download_done", path=path))
         except (InterruptedError, RuntimeError) as e:
             if self._is_cancelled or "cancel" in str(e).lower():
                 LLMModelManager.delete_gguf_model(self.model_info)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
             else:
                 self.finished_signal.emit(m_id, False, str(e))
         except Exception as e:
             if self._is_cancelled or "cancel" in str(e).lower():
                 LLMModelManager.delete_gguf_model(self.model_info)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
             else:
                 self.finished_signal.emit(m_id, False, str(e))
         finally:
@@ -505,7 +508,7 @@ class CUDAPackDownloadWorker(threading.Thread):
         temp_path = os.path.join(target_dir, f"_temp_{int(time.time()*1000)}.whl")
         extracted_files = []
         try:
-            status_msg = f"{label} 다운로드 준비 중..."
+            status_msg = tr("model_download_prep_label", label=label)
             LLMModelManager.set_last_cuda_progress(start_pct, status_msg)
             self.progress_signal.emit(start_pct, status_msg)
 
@@ -567,8 +570,9 @@ class CUDAPackDownloadWorker(threading.Thread):
 
     def run(self):
         LLMModelManager.register_cuda_worker(self)
-        LLMModelManager.set_last_cuda_progress(0, "NVIDIA CUDA 가속 팩 서버 연결 중...")
-        self.progress_signal.emit(0, "NVIDIA CUDA 가속 팩 서버 연결 중...")
+        conn_msg = tr("cuda_pack_connecting")
+        LLMModelManager.set_last_cuda_progress(0, conn_msg)
+        self.progress_signal.emit(0, conn_msg)
 
         try:
             import shutil
@@ -585,9 +589,7 @@ class CUDAPackDownloadWorker(threading.Thread):
             )
 
             if not is_nvidia_gpu_present():
-                self.finished_signal.emit(
-                    False, "NVIDIA 그래픽 카드가 감지되지 않아 GPU 가속 팩을 설치할 수 없습니다.\n"
-                           "음성인식과 로컬 번역은 CPU로 계속 사용할 수 있습니다.")
+                self.finished_signal.emit(False, tr("cuda_no_nvidia_error"))
                 return
 
             target_dir = get_cuda_target_install_dir()
@@ -602,10 +604,10 @@ class CUDAPackDownloadWorker(threading.Thread):
 
             if not any((needs_cublas, needs_cudart, needs_llama)):
                 register_cuda_dll_directories()
-                done_msg = "NVIDIA CUDA 가속 라이브러리가 이미 최신 상태로 설치되어 있습니다."
+                done_msg = tr("cuda_already_installed")
                 if llm_issue:
-                    done_msg += f"\n\n로컬 LLM 번역은 CPU로 동작합니다: {llm_issue}"
-                self.progress_signal.emit(100, "CUDA 가속 라이브러리가 이미 설치되어 있습니다.")
+                    done_msg += f"\n\n{tr('cuda_llm_cpu_fallback', issue=llm_issue)}"
+                self.progress_signal.emit(100, tr("cuda_already_installed_short"))
                 self.finished_signal.emit(True, done_msg)
                 return
 
@@ -616,13 +618,13 @@ class CUDAPackDownloadWorker(threading.Thread):
             # (label, url, patterns, weight, dest, path_contains)
             tasks = []
             if needs_cublas:
-                tasks.append(("cuBLAS 12 STT 가속 팩", self.CUBLAS_WHL_URL, ["cublas64_12.dll", "cublasLt64_12.dll"], 20, target_dir, None))
+                tasks.append((tr("cublas_12_stt"), self.CUBLAS_WHL_URL, ["cublas64_12.dll", "cublasLt64_12.dll"], 20, target_dir, None))
             if needs_cudart:
-                tasks.append(("CUDA 12 런타임", self.CUDART_WHL_URL, ["cudart64_12.dll"], 5, target_dir, None))
+                tasks.append((tr("cuda_12_runtime"), self.CUDART_WHL_URL, ["cudart64_12.dll"], 5, target_dir, None))
             if needs_llama:
-                tasks.append(("cuBLAS 13 LLM 가속 팩", self.CUBLAS13_WHL_URL, ["cublas64_13.dll", "cublaslt64_13.dll"], 35, llama_staging, None))
-                tasks.append(("CUDA 13 런타임", self.CUDART13_WHL_URL, ["cudart64_13.dll"], 5, llama_staging, None))
-                tasks.append(("로컬 LLM CUDA 라이브러리", self.LLAMA_WHL_URL, [".dll"], 35, llama_staging, "llama_cpp/lib/"))
+                tasks.append((tr("cublas_13_llm"), self.CUBLAS13_WHL_URL, ["cublas64_13.dll", "cublaslt64_13.dll"], 35, llama_staging, None))
+                tasks.append((tr("cuda_13_runtime"), self.CUDART13_WHL_URL, ["cudart64_13.dll"], 5, llama_staging, None))
+                tasks.append((tr("local_llm_cuda_lib"), self.LLAMA_WHL_URL, [".dll"], 35, llama_staging, "llama_cpp/lib/"))
 
             total_weight = sum(t[3] for t in tasks) or 1
             cur_start = 0
@@ -630,12 +632,12 @@ class CUDAPackDownloadWorker(threading.Thread):
 
             for label, url, patterns, weight, dest, path_contains in tasks:
                 if self._is_cancelled:
-                    raise RuntimeError("다운로드가 취소되었습니다.")
+                    raise RuntimeError(tr("model_download_cancelled"))
                 step_end = int(cur_start + (weight / total_weight) * 98)
                 extracted = self._download_and_extract(
                     url, dest, patterns, label, cur_start, step_end, path_contains=path_contains)
                 if path_contains and not extracted:
-                    raise RuntimeError(f"{label} 안에서 필요한 DLL을 찾지 못했습니다.")
+                    raise RuntimeError(tr("cuda_dll_not_found", label=label))
                 installed_all.extend(extracted)
                 cur_start = step_end
 
@@ -648,21 +650,16 @@ class CUDAPackDownloadWorker(threading.Thread):
             llama_state = configure_llama_backend()
 
             if llama_state["backend"] == "cuda":
-                llm_line = "• 로컬 LLM 번역: 다음 번역부터 GPU로 동작합니다."
+                llm_line = tr("cuda_llm_gpu_next")
             elif llama_state.get("restart_required"):
-                llm_line = ("• 로컬 LLM 번역: 이번 실행에서 이미 CPU 라이브러리로 로드되어 있어, "
-                            "프로그램을 다시 시작하면 GPU로 동작합니다.")
+                llm_line = tr("cuda_llm_restart_req")
             else:
-                llm_line = f"• 로컬 LLM 번역: CPU로 동작합니다. ({llm_issue or llama_state.get('issue') or 'CUDA 라이브러리 확인 실패'})"
+                llm_line = tr("cuda_llm_cpu_fallback", issue=llm_issue or llama_state.get('issue') or 'CUDA check failed')
 
-            self.progress_signal.emit(100, "CUDA 가속 팩 전체 설치 완료!")
+            self.progress_signal.emit(100, tr("cuda_pack_all_done"))
             self.finished_signal.emit(
                 True,
-                "NVIDIA CUDA 가속 라이브러리가 설치되었습니다.\n\n"
-                f"• 설치 디렉터리: {target_dir}\n"
-                f"• 설치 파일: {len(installed_all)}개 DLL\n"
-                "• 음성인식(STT): 재시작 없이 GPU로 전환할 수 있습니다.\n"
-                f"{llm_line}"
+                tr("cuda_pack_installed_msg", dir=target_dir, count=len(installed_all), llm=llm_line)
             )
         except Exception as e:
             try:

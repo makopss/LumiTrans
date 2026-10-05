@@ -157,3 +157,61 @@ def refresh_texts(root):
         if not isinstance(fmt, dict):
             fmt = {}
         widget.setText(tr(str(key), **fmt))
+
+
+_DESC_TO_KEY = {
+    "초경량 테스트/저사양용, 초저지연 (영어 전용)": "model_desc_tiny.en",
+    "초경량 다국어(한국어 포함) 지원 모델": "model_desc_tiny",
+    "경량 기본 모델, 빠른 반응 (영어 전용)": "model_desc_base.en",
+    "경량 다국어(한국어 포함) 기본 모델": "model_desc_base",
+    "가성비 및 속도-정확도 균형 표준 (영어 전용)": "model_desc_small.en",
+    "가성비 및 속도-정확도 균형 표준 (다국어/한국어 지원)": "model_desc_small",
+    "고품질 영어 전사 (권장 VRAM 4GB+ · GPU 권장)": "model_desc_medium.en",
+    "고품질 다국어(한국어 포함) 전사 (권장 VRAM 4GB+ · GPU 권장)": "model_desc_medium",
+    "검증된 대규모 다국어 플래그십 (CUDA GPU 필수)": "model_desc_large-v2",
+    "최고의 음성 인식 정확도 (한국어/다국어 · CUDA GPU 필수)": "model_desc_large-v3",
+    "최신 공식 Turbo 8배 가속 모델 (CUDA GPU 권장)": "model_desc_large-v3-turbo",
+    "★ 기본 내장 번들 모델 · 5배 가속 초경량 증류 모델 (CPU 최적화)": "model_desc_distil-small.en",
+    "고속 중간 크기 증류 모델 (CPU 원활 / 지연시간 단축)": "model_desc_distil-medium.en",
+    "대규모 영어 데이터 증류 모델 (CUDA GPU 권장)": "model_desc_distil-large-v2",
+    "지연시간을 50% 단축한 고속 대형 증류 모델 (CUDA GPU 권장)": "model_desc_distil-large-v3",
+    "최신 고정밀 증류 모델 (영어 전용 · CUDA GPU 권장)": "model_desc_distil-large-v3.5",
+    "Groq LPU 초고속 전사 (한국어/다국어 지원, $0.04/h)": "model_desc_whisper-large-v3-turbo",
+    "Groq LPU 고정밀 전사 (한국어/다국어 지원, $0.111/h)": "model_desc_whisper-large-v3",
+    "Deepgram 차세대 플래그십 (최고 정확도 · 0.15s 초저지연)": "model_desc_nova-3",
+    "검증된 고정밀 글로벌 음향 모델": "model_desc_nova-2",
+    "다양한 억양 및 소음 환경 최적화": "model_desc_nova-2-general",
+    "로컬 최고 품질 | 원작 뉘앙스/문맥 번역 종결자": "model_desc_translategemma:4b",
+    "로컬 최고 품질 | 원작 뉘앙스/문맥 번역 종결자 (GGUF)": "model_desc_translategemma-4b",
+    "로컬 균형형 | LG 한국어 특화 자연스러운 문체": "model_desc_exaone3.5:2.4b",
+    "로컬 균형형 | LG 한국어 특화 자연스러운 문체 (GGUF)": "model_desc_exaone-3.5-2.4b",
+    "로컬 최고 지능 | LG 국산 7.8B 고품질 심층 번역 및 문맥 추론": "model_desc_exaone3.5:7.8b",
+    "로컬 최고 지능 | LG 국산 7.8B 고품질 심층 번역 (GGUF)": "model_desc_exaone-3.5-7.8b",
+    "초경량 번역 특화 | VRAM 1.4GB 텐센트 차세대 IFMT 전문 번역": "model_desc_tencent/hy-mt2:1.8b",
+    "초경량 번역 특화 | 텐센트 공식 GGUF 차세대 IFMT 전문 번역 (GGUF)": "model_desc_hymt-2-1.8b",
+}
+
+
+def get_model_desc(model_info_or_desc) -> str:
+    """Return localized description for STT / LLM models."""
+    if isinstance(model_info_or_desc, dict):
+        m_id = str(model_info_or_desc.get("id") or model_info_or_desc.get("tag") or "").strip()
+        key = f"model_desc_{m_id}"
+        val = tr(key)
+        if val != key:
+            return val
+        raw_desc = str(model_info_or_desc.get("desc") or "").strip()
+        if raw_desc in _DESC_TO_KEY:
+            return tr(_DESC_TO_KEY[raw_desc])
+        return raw_desc
+    elif isinstance(model_info_or_desc, str):
+        s = model_info_or_desc.strip()
+        if s in _DESC_TO_KEY:
+            return tr(_DESC_TO_KEY[s])
+        key = f"model_desc_{s}"
+        val = tr(key)
+        if val != key:
+            return val
+        return model_info_or_desc
+    return str(model_info_or_desc or "")
+

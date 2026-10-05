@@ -14,7 +14,7 @@ from .ui_theme import (
     COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_PURPLE,
     COLOR_ACCENT_CYAN, COLOR_ACCENT_PINK, CardWidget
 )
-from src.i18n import ask, is_cancel_message, tell, tr
+from src.i18n import ask, is_cancel_message, tell, tr, get_model_desc
 from .stt_model_manager import STTModelManager, STTDownloadWorker, AVAILABLE_STT_MODELS, get_hf_hub_cache_dir
 
 
@@ -57,7 +57,7 @@ class STTModelCard(QFrame):
         top_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         # 툴팁으로 상세 사양 제공 (마우스 호버 시 확인 가능)
-        self.setToolTip(f"{self.model_info['desc']} · {tr('stt_download_size')}: ~{self.model_info['size_mb']}MB · {tr('stt_rec_vram')}: {self.model_info['vram_mb']}MB")
+        self.setToolTip(f"{get_model_desc(self.model_info)} · {tr('stt_download_size')}: ~{self.model_info['size_mb']}MB · {tr('stt_rec_vram')}: {self.model_info['vram_mb']}MB")
 
         # 모델 정보 영역 (모델 이름(ID) + 설치 상태만 심플하게 표시)
         title_row = QHBoxLayout()

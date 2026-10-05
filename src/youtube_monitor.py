@@ -10,6 +10,7 @@ import time
 from typing import Optional, Callable
 from src.youtube_helper import auto_detect_youtube_url, fetch_youtube_full_data, extract_youtube_id
 from src.pre_processor import GeminiPreProcessor, PreProcessingContext
+from src.i18n import tr
 
 
 class YouTubeMonitor(threading.Thread):
@@ -158,7 +159,7 @@ class YouTubeMonitor(threading.Thread):
                 if self.stt_worker:
                     self.stt_worker.set_pre_context(ctx)
 
-                success_msg = f"[도메인 사전 활성화] {title[:20]}... (용어 {len(ctx.glossary)}개, 교정 {len(ctx.phonetic_fix_map)}개)"
+                success_msg = tr("yt_glossary_active_detail", title=title[:20], terms=len(ctx.glossary), fixes=len(ctx.phonetic_fix_map))
                 try:
                     print(f"[YouTubeMonitor] {success_msg}")
                 except Exception:

@@ -13,6 +13,7 @@ from .pipeline_trace import PipelineTrace
 from .audio_chunk import CapturedAudio, offer_queue
 from .speaker_tracking import align_transcript
 from .stt_model_manager import get_hf_hub_cache_dir, STTModelManager
+from src.i18n import tr
 
 HALLUCINATIONS = {
     "you", "thank you", "thank you.", "thank you very much.", "thanks for watching!",
@@ -673,18 +674,18 @@ class STTWorker(threading.Thread):
             silence_sec = 0.30
             max_buf = 1.8
             dub_speed = "+25%"
-            tempo_desc = f"⚡ 빠른 템포 ({int(wpm)} WPM) · 저지연 가속 가동"
+            tempo_desc = tr("tempo_status_fast", wpm=int(wpm))
         elif wpm <= 115.0:
             silence_sec = 0.70
             max_buf = 3.6
             dub_speed = "+0%"
-            tempo_desc = f"🌿 차분한 템포 ({int(wpm)} WPM) · 문맥 완결 보존"
+            tempo_desc = tr("tempo_status_calm", wpm=int(wpm))
         else:
             ratio = (wpm - 115.0) / (170.0 - 115.0)  # 0.0 ~ 1.0
             silence_sec = round(0.70 - ratio * (0.70 - 0.30), 2)
             max_buf = round(3.6 - ratio * (3.6 - 1.8), 1)
             dub_speed = "+15%" if wpm >= 145 else "+10%"
-            tempo_desc = f"🟢 균형 템포 ({int(wpm)} WPM) · 표준 적응 가동"
+            tempo_desc = tr("tempo_status_balanced", wpm=int(wpm))
 
         self.silence_duration_sec = silence_sec
         self.max_buffer_sec = max_buf
@@ -694,7 +695,7 @@ class STTWorker(threading.Thread):
             self.dubbing_engine.set_smart_speed(dub_speed)
 
         if not self._uses_local_vad():
-            tempo_desc = f"🧠 스마트 자동 · Deepgram 분절은 독립 (더빙 {dub_speed})"
+            tempo_desc = tr("tempo_status_smart_deepgram", dub_speed=dub_speed)
         self._emit_tempo_status(tempo_desc)
 
     def _apply_fixed_preset(self, preset_key: str):
@@ -712,11 +713,14 @@ class STTWorker(threading.Thread):
         if self.dubbing_engine and hasattr(self.dubbing_engine, 'set_smart_speed'):
             self.dubbing_engine.set_smart_speed(dub_speed)
 
-        short = preset.get("short_name", preset["name"])
+        short_key = f"tempo_{preset_key}"
+        short = tr(short_key)
+        if short == short_key:
+            short = preset.get("short_name", preset["name"])
         if self._uses_local_vad():
-            desc = f"🔒 [{short}] 고정 (침묵 {silence_sec}s / 버퍼 {max_buf}s / 더빙 {dub_speed})"
+            desc = tr("tempo_status_fixed_local", short=short, silence=silence_sec, buf=max_buf, speed=dub_speed)
         else:
-            desc = f"🔒 [{short}] 더빙 {dub_speed} · Deepgram 분절은 독립"
+            desc = tr("tempo_status_fixed_deepgram", short=short, speed=dub_speed)
         self._emit_tempo_status(desc)
 
     def apply_tempo_preset(self, preset_key: str):

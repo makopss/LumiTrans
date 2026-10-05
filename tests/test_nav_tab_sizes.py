@@ -48,6 +48,33 @@ class TestNavTabSizes(unittest.TestCase):
         self.assertIn("QPushButton:checked", sheet)
         self.assertNotIn("transparent", sheet)
 
+    def test_nav_host_updates_size_on_language_change(self):
+        from src.control_panel import ControlPanel
+        from src.config import DEFAULT_CONFIG
+        import copy
+        from unittest.mock import patch
+
+        with patch("src.process_volume.AudioDuckingManager", autospec=True), \
+             patch("src.audio_capture.AudioLoopbackCapture.get_available_capture_sources", return_value=[{"id": "default", "type": "device", "name": "default"}]), \
+             patch("soundcard.all_speakers", return_value=[]):
+            cfg = copy.deepcopy(DEFAULT_CONFIG)
+            cfg["ui_lang"] = "en"
+            panel = ControlPanel(cfg, overlay=None, audio_thread=None, stt_thread=None, save_config_cb=lambda c: None)
+            try:
+                en_host_w = panel.nav_host.width()
+                en_btn_total = sum(btn.width() for btn in panel.nav_buttons) + (len(panel.nav_buttons) - 1) * 4
+                self.assertEqual(en_host_w, en_btn_total)
+
+                panel.config["ui_lang"] = "ko"
+                panel._apply_ui_language()
+
+                ko_host_w = panel.nav_host.width()
+                ko_btn_total = sum(btn.width() for btn in panel.nav_buttons) + (len(panel.nav_buttons) - 1) * 4
+                self.assertEqual(ko_host_w, ko_btn_total)
+                self.assertNotEqual(ko_host_w, en_host_w)
+            finally:
+                panel.close()
+
 
 if __name__ == "__main__":
     unittest.main()

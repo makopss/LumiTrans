@@ -67,23 +67,34 @@ class AudioLoopbackCapture(threading.Thread):
         # 패스스루 백그라운드 워커 스레드 시작
         self.passthrough_thread = threading.Thread(target=self._passthrough_loop, daemon=True, name="AudioPassthroughWorker")
 
-    KNOWN_MEDIA_APPS = {
-        "whale.exe": "네이버 웨일 (Whale)",
-        "chrome.exe": "Google Chrome",
-        "msedge.exe": "Microsoft Edge",
-        "brave.exe": "Brave 브라우저",
-        "firefox.exe": "Mozilla Firefox",
-        "opera.exe": "Opera 브라우저",
-        "vivaldi.exe": "Vivaldi 브라우저",
-        "potplayer64.exe": "팟플레이어 64-bit",
-        "potplayermini64.exe": "팟플레이어 64-bit",
-        "potplayermini.exe": "팟플레이어 32-bit",
-        "vlc.exe": "VLC 미디어 플레이어",
-        "wmplayer.exe": "Windows 미디어 플레이어",
-        "spotify.exe": "스포티파이 (Spotify)",
-        "discord.exe": "디스코드 (Discord)",
-        "zoom.exe": "줌 (Zoom)",
+    KNOWN_MEDIA_APPS_I18N = {
+        "whale.exe": {"ko": "네이버 웨일 (Whale)", "en": "Naver Whale"},
+        "chrome.exe": {"ko": "Google Chrome", "en": "Google Chrome"},
+        "msedge.exe": {"ko": "Microsoft Edge", "en": "Microsoft Edge"},
+        "brave.exe": {"ko": "Brave 브라우저", "en": "Brave Browser"},
+        "firefox.exe": {"ko": "Mozilla Firefox", "en": "Mozilla Firefox"},
+        "opera.exe": {"ko": "Opera 브라우저", "en": "Opera Browser"},
+        "vivaldi.exe": {"ko": "Vivaldi 브라우저", "en": "Vivaldi Browser"},
+        "potplayer64.exe": {"ko": "팟플레이어 64-bit", "en": "PotPlayer 64-bit"},
+        "potplayermini64.exe": {"ko": "팟플레이어 64-bit", "en": "PotPlayer 64-bit"},
+        "potplayermini.exe": {"ko": "팟플레이어 32-bit", "en": "PotPlayer 32-bit"},
+        "vlc.exe": {"ko": "VLC 미디어 플레이어", "en": "VLC Media Player"},
+        "wmplayer.exe": {"ko": "Windows 미디어 플레이어", "en": "Windows Media Player"},
+        "spotify.exe": {"ko": "스포티파이 (Spotify)", "en": "Spotify"},
+        "discord.exe": {"ko": "디스코드 (Discord)", "en": "Discord"},
+        "zoom.exe": {"ko": "줌 (Zoom)", "en": "Zoom"},
     }
+    KNOWN_MEDIA_APPS = {k: v["ko"] for k, v in KNOWN_MEDIA_APPS_I18N.items()}
+
+    @classmethod
+    def get_known_app_label(cls, p_name: str) -> str:
+        key = str(p_name or "").lower()
+        info = cls.KNOWN_MEDIA_APPS_I18N.get(key)
+        if not info:
+            return cls.KNOWN_MEDIA_APPS.get(key, p_name)
+        from src.i18n import ui_language
+        lang = ui_language()
+        return info.get(lang) or info.get("en") or info.get("ko") or p_name
 
     @classmethod
     def find_root_pid(cls, app_name: str):
@@ -137,12 +148,14 @@ class AudioLoopbackCapture(threading.Thread):
             for proc in active_procs:
                 p_name = proc["name"]
                 orig_name = proc.get("original_name", p_name)
+                p_name_lower = p_name.lower()
                 # 알려진 미디어 앱 라벨 매칭
-                if p_name in cls.KNOWN_MEDIA_APPS:
-                    label = cls.KNOWN_MEDIA_APPS[p_name]
+                if p_name_lower in cls.KNOWN_MEDIA_APPS:
+                    label = cls.get_known_app_label(p_name_lower)
                     name_display = f"🌐 {label} ({orig_name})"
                 else:
-                    name_display = f"🎮 [앱] {orig_name}"
+                    tag = tr("audio_app_tag")
+                    name_display = f"🎮 [{tag}] {orig_name}"
                 detected_apps[p_name] = {
                     "id": f"process:{p_name}",
                     "type": "process",
@@ -163,7 +176,7 @@ class AudioLoopbackCapture(threading.Thread):
                         continue
                     name_lower = name.lower()
                     if name_lower in cls.KNOWN_MEDIA_APPS and name_lower not in detected_apps:
-                        label = cls.KNOWN_MEDIA_APPS[name_lower]
+                        label = cls.get_known_app_label(name_lower)
                         detected_apps[name_lower] = {
                             "id": f"process:{name_lower}",
                             "type": "process",
@@ -180,12 +193,13 @@ class AudioLoopbackCapture(threading.Thread):
         if current_selected and str(current_selected).startswith("process:"):
             target_app = str(current_selected).split(":", 1)[1].lower()
             if target_app not in detected_apps:
-                label = cls.KNOWN_MEDIA_APPS.get(target_app, target_app)
+                label = cls.get_known_app_label(target_app)
+                pending_tag = tr("audio_pending_tag")
                 detected_apps[target_app] = {
                     "id": f"process:{target_app}",
                     "type": "process",
                     "app_name": target_app,
-                    "name": f"⏳ [실행 대기] {label}",
+                    "name": f"⏳ [{pending_tag}] {label}",
                     "pid": None
                 }
 

@@ -5,6 +5,7 @@ import threading
 import logging
 from typing import List, Dict, Optional, Tuple, Any
 from PyQt6.QtCore import pyqtSignal, QObject
+from src.i18n import tr
 
 logger = logging.getLogger("STTModelManager")
 
@@ -335,8 +336,9 @@ class STTDownloadWorker(threading.Thread):
         m_id = self.model_info["id"]
         hf_id = self.model_info["hf_id"]
         STTModelManager.register_worker(m_id, self)
-        STTModelManager.set_last_progress(m_id, 0, f"다운로드 준비 중... ({hf_id})")
-        self.progress_signal.emit(m_id, 0, f"다운로드 준비 중... ({hf_id})")
+        prep_msg = tr("model_download_preparing", repo=hf_id)
+        STTModelManager.set_last_progress(m_id, 0, prep_msg)
+        self.progress_signal.emit(m_id, 0, prep_msg)
 
         output_dir = get_hf_hub_cache_dir()
         total_expected_mb = float(self.model_info.get("size_mb", 500))
@@ -404,7 +406,7 @@ class STTDownloadWorker(threading.Thread):
                                 else:
                                     size_str = f"{cur_mb:.1f} MB / {tot_mb:.1f} MB"
 
-                                msg = f"가중치 다운로드 중... {size_str} ({pct}%){speed_str}"
+                                msg = tr("model_download_weights", size=size_str, pct=pct, speed=speed_str)
                                 shared_state["last_pct"] = pct
                                 STTModelManager.set_last_progress(m_id, pct, msg)
                                 worker_self.progress_signal.emit(m_id, pct, msg)
@@ -419,7 +421,7 @@ class STTDownloadWorker(threading.Thread):
 
             if self._is_cancelled:
                 STTModelManager.delete_model(m_id)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
                 return
 
             model_path = huggingface_hub.snapshot_download(
@@ -431,7 +433,7 @@ class STTDownloadWorker(threading.Thread):
 
             if self._is_cancelled:
                 STTModelManager.delete_model(m_id)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
                 return
 
             if model_path and os.path.isdir(model_path):
@@ -439,21 +441,21 @@ class STTDownloadWorker(threading.Thread):
 
             if self._is_cancelled:
                 STTModelManager.delete_model(m_id)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
                 return
 
-            self.progress_signal.emit(m_id, 100, "다운로드 및 무결성 검증 완료!")
-            self.finished_signal.emit(m_id, True, "설치가 성공적으로 완료되었습니다.")
+            self.progress_signal.emit(m_id, 100, tr("model_download_verified"))
+            self.finished_signal.emit(m_id, True, tr("model_install_success"))
         except (InterruptedError, RuntimeError) as e:
             if self._is_cancelled or "cancel" in str(e).lower():
                 STTModelManager.delete_model(m_id)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
             else:
                 self.finished_signal.emit(m_id, False, str(e))
         except Exception as e:
             if self._is_cancelled or "cancel" in str(e).lower():
                 STTModelManager.delete_model(m_id)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
             else:
                 self.finished_signal.emit(m_id, False, str(e))
         finally:

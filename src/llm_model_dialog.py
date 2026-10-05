@@ -14,7 +14,7 @@ from .ui_theme import (
     COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_PURPLE,
     COLOR_ACCENT_CYAN, COLOR_ACCENT_PINK, COLOR_ACCENT_MINT, CardWidget
 )
-from src.i18n import ask, is_cancel_message, tell, tr
+from src.i18n import ask, is_cancel_message, tell, tr, get_model_desc
 from .llm_model_manager import (
     LLMModelManager, OllamaPullWorker, GGUFDownloadWorker, CUDAPackDownloadWorker,
     RECOMMENDED_OLLAMA_MODELS, RECOMMENDED_GGUF_MODELS,
@@ -74,7 +74,7 @@ class UnifiedLLMModelCard(QFrame):
         self.lbl_status = QLabel()
         self.lbl_status.setStyleSheet("font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: bold;")
 
-        desc_text = f"{self.ollama_info['desc']} · {tr('stt_download_size')}: ~{self.gguf_info['size_mb']}MB"
+        desc_text = f"{get_model_desc(self.ollama_info)} · {tr('stt_download_size')}: ~{self.gguf_info['size_mb']}MB"
         self.setToolTip(desc_text)
         self.lbl_name.setToolTip(desc_text)
         self.lbl_desc = QLabel(desc_text)

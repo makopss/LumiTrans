@@ -20,6 +20,7 @@ from src.screen_capture import preprocess_game_image
 from src.screen_ocr_worker import clean_ocr_english_text
 from src.hotkey_utils import parse_hotkey_string, normalize_hotkey_string, VK_MAP, QT_KEY_TO_NAME
 from src.ui_theme import set_windows_dark_mode
+from src.i18n import tr
 
 VK_F4 = 0x73
 HOTKEY_ID = 8848
@@ -291,11 +292,11 @@ class GlobalHotkeyWorker(threading.Thread):
 
         if ret:
             self.registered = True
-            msg = f"전역 단축키 '{self.hotkey_str}' 등록 성공!"
+            msg = tr("inplace_hotkey_registered", key=self.hotkey_str)
             print(f"[InPlaceHotkey] {msg} (VK: 0x{self.vk_code:X}, Mod: 0x{self.modifiers:X})")
             self.registration_status.emit(True, msg)
         else:
-            msg = f"단축키 '{self.hotkey_str}' 등록 실패 (다른 프로그램과 충돌 가능성)"
+            msg = tr("inplace_hotkey_failed", key=self.hotkey_str)
             print(f"[InPlaceHotkey] {msg}")
             self.registration_status.emit(False, msg)
 
@@ -375,7 +376,7 @@ class GameTextBadge(QWidget):
         self.font.setBold(self.is_bold)
         self.font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.4)
 
-        self.setToolTip(f"원문:\n{self.english_text}\n\n(OCR 신뢰도: {int(self.score * 100)}%)")
+        self.setToolTip(f"{tr('inplace_original')}:\n{self.english_text}\n\n({tr('inplace_ocr_confidence')}: {int(self.score * 100)}%)")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def set_clean_mode(self, enabled: bool):
@@ -478,6 +479,9 @@ class InPlaceOverlayWindow(QWidget):
         self.idle_timer.setSingleShot(True)
         self.idle_timer.timeout.connect(self._on_idle_timeout)
 
+    def _clean_mode_btn_text(self) -> str:
+        return ("✨ " + tr("inplace_text_only")) if not self.clean_text_mode else ("🔲 " + tr("inplace_with_bg"))
+
     def _init_ui(self):
         self.banner_widget = QWidget(self)
         banner_layout = QHBoxLayout(self.banner_widget)
@@ -489,8 +493,8 @@ class InPlaceOverlayWindow(QWidget):
         banner_layout.addWidget(self.banner_label)
 
         # 클린 텍스트 모드 토글 버튼
-        self.btn_clean_mode = QPushButton("✨ 텍스트만" if not self.clean_text_mode else "🔲 배경포함", self.banner_widget)
-        self.btn_clean_mode.setToolTip("말풍선 배경 박스를 숨기고 외곽선 텍스트만 깔끔하게 표시 (단축키: T)")
+        self.btn_clean_mode = QPushButton(self._clean_mode_btn_text(), self.banner_widget)
+        self.btn_clean_mode.setToolTip(tr("inplace_clean_mode_tooltip"))
         self.btn_clean_mode.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clean_mode.setFixedHeight(22)
         self.btn_clean_mode.setStyleSheet("""
@@ -512,7 +516,7 @@ class InPlaceOverlayWindow(QWidget):
         banner_layout.addWidget(self.btn_clean_mode)
 
         self.btn_font_dec = QPushButton("A-", self.banner_widget)
-        self.btn_font_dec.setToolTip("글자 크기 축소 (단축키: - 또는 [)")
+        self.btn_font_dec.setToolTip(tr("inplace_font_dec_tooltip"))
         self.btn_font_dec.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_font_dec.setFixedSize(28, 22)
         self.btn_font_dec.setStyleSheet("""
@@ -533,7 +537,7 @@ class InPlaceOverlayWindow(QWidget):
         banner_layout.addWidget(self.btn_font_dec)
 
         self.btn_font_inc = QPushButton("A+", self.banner_widget)
-        self.btn_font_inc.setToolTip("글자 크기 확대 (단축키: + 또는 ])")
+        self.btn_font_inc.setToolTip(tr("inplace_font_inc_tooltip"))
         self.btn_font_inc.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_font_inc.setFixedSize(28, 22)
         self.btn_font_inc.setStyleSheet(self.btn_font_dec.styleSheet())
@@ -581,7 +585,7 @@ class InPlaceOverlayWindow(QWidget):
     def toggle_clean_mode(self):
         self.clean_text_mode = not self.clean_text_mode
         self.config["inplace_clean_text_mode"] = self.clean_text_mode
-        self.btn_clean_mode.setText("✨ 텍스트만" if not self.clean_text_mode else "🔲 배경포함")
+        self.btn_clean_mode.setText(self._clean_mode_btn_text())
         for b in self.badges:
             b.set_clean_mode(self.clean_text_mode)
         self.update()
@@ -596,9 +600,9 @@ class InPlaceOverlayWindow(QWidget):
 
     def _update_banner_text(self):
         count = len(self.current_items)
-        offset_desc = f"{self.font_offset:+d}" if self.font_offset != 0 else "기본"
+        offset_desc = f"{self.font_offset:+d}" if self.font_offset != 0 else tr("inplace_font_default")
         self.banner_label.setText(
-            f"📸 [인플레이스 번역] {count}개 문단 ({self.current_engine_name})  |  글자 크기: {offset_desc}  |  닫기: [ESC] 또는 클릭"
+            f"📸 [{tr('inplace_banner_title')}] {tr('inplace_paragraphs', count=count)} ({self.current_engine_name})  |  {tr('inplace_font_size', offset=offset_desc)}  |  {tr('inplace_close_hint')}"
         )
         self.banner_widget.adjustSize()
         if self.current_screen_geo:
@@ -822,7 +826,7 @@ class SnapshotWorkerThread(threading.Thread):
             # 1. DirectML OCR 인스턴스 획득
             ocr = self.get_ocr_cb()
             if ocr is None:
-                self.error_signal.emit("OCR 엔진을 로드할 수 없습니다.")
+                self.error_signal.emit(tr("inplace_err_ocr_engine"))
                 return
 
             if self.config.get("screen_ocr_preprocess", True):
@@ -839,7 +843,7 @@ class SnapshotWorkerThread(threading.Thread):
 
             if not ocr_result:
                 print("[InPlace] 감지된 텍스트가 없습니다.")
-                self.error_signal.emit("감지된 영문 텍스트가 없습니다.")
+                self.error_signal.emit(tr("inplace_err_no_text"))
                 return
 
             # 3. 유효 라인 필터링
@@ -853,7 +857,7 @@ class SnapshotWorkerThread(threading.Thread):
                     valid_items.append((box, cleaned, score))
 
             if not valid_items:
-                self.error_signal.emit("유효한 영문 단락이 없습니다.")
+                self.error_signal.emit(tr("inplace_err_no_paragraphs"))
                 return
 
             # 4. 문단(Paragraph) 구조 지능형 병합 (물리 좌표계 기준)

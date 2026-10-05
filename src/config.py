@@ -397,7 +397,10 @@ def tempo_deepgram_notice(config=None):
 def tempo_preset_desc(preset_key, config=None):
     from src.i18n import tr
     preset = CONTENT_TEMPO_PRESETS.get(preset_key) or CONTENT_TEMPO_PRESETS["smart"]
-    desc = preset.get("desc", "")
+    desc_key = f"tempo_{preset_key}_desc"
+    desc = tr(desc_key)
+    if desc == desc_key:
+        desc = preset.get("desc", "")
     if uses_local_tempo_vad(config):
         return desc
     return tr("tempo_desc_deepgram_suffix", desc=desc)

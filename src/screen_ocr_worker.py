@@ -3,6 +3,7 @@ import re
 import threading
 from PyQt6.QtCore import QObject, pyqtSignal, Qt
 from src.screen_capture import capture_screen_area, is_frame_changed, smart_capture_screen_area, preprocess_game_image
+from src.i18n import tr
 
 try:
     import wordninja
@@ -244,7 +245,7 @@ class ScreenOCRWorker(threading.Thread):
         idx = token[2]
         self.subtitle_signal.emit(original, translated, engine, idx)
         success = bool(translated and "원문" not in engine)
-        self.status_signal.emit(f"번역 완료 ({engine})" if success else "번역 연결 확인 중 · 자동 재시도")
+        self.status_signal.emit(tr("ocr_status_done", engine=engine) if success else tr("ocr_status_retrying"))
         if success and self.dubbing_engine and self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", False):
             spk_trans, pure_trans = extract_speaker_and_dialogue(translated)
             spk_orig, _ = extract_speaker_and_dialogue(original)
@@ -301,7 +302,7 @@ class ScreenOCRWorker(threading.Thread):
         if not self._is_current(token):
             return
         self._check_and_link_speaker_name(text)
-        self.status_signal.emit(f"영역 {idx + 1} 번역 중...")
+        self.status_signal.emit(tr("ocr_status_translating_area", n=idx + 1))
         try:
             translated, engine = self.translator.translate(text)
         except Exception as error:
@@ -330,11 +331,11 @@ class ScreenOCRWorker(threading.Thread):
             rois = self._regions()
             if not rois:
                 if instant:
-                    self.status_signal.emit("영역 없음")
+                    self.status_signal.emit(tr("ocr_status_no_areas"))
                 return
             ocr = self._get_ocr()
             if ocr is None:
-                self.status_signal.emit("OCR 로드 실패")
+                self.status_signal.emit(tr("ocr_status_load_failed"))
                 return
             generation = self._generation
             for idx in range(len(rois)):
@@ -379,7 +380,7 @@ class ScreenOCRWorker(threading.Thread):
     def set_paused(self, paused: bool):
         self.is_paused = paused
         self.invalidate_regions()
-        self.status_signal.emit("일시정지됨" if paused else "감시 중")
+        self.status_signal.emit(tr("ocr_status_paused") if paused else tr("ocr_status_monitoring"))
 
     set_paused_state = set_paused
 

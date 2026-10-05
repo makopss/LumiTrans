@@ -31,7 +31,7 @@ from src.subtitle_manager import (
     recent_screen_dialogues, clean_html_tags,
 )
 from src.config import active_builtin_presets, CONTENT_TEMPO_PRESETS, tempo_preset_desc, tempo_scope_caption, tempo_deepgram_notice, uses_local_tempo_vad
-from src.i18n import ask, bind, is_cancel_message, refresh_texts, set_ui_language, tell, tr, ui_language, UI_LANGUAGE_NAMES
+from src.i18n import ask, bind, is_cancel_message, refresh_texts, set_ui_language, tell, tr, ui_language, UI_LANGUAGE_NAMES, get_model_desc
 from src.product import is_global
 from src.ui_theme import (
     GLOBAL_QSS, ModernToggle, SegmentLevelMeter, CardWidget,
@@ -209,8 +209,8 @@ def _header_metric_font(base_font: QFont | None, point_size: float, weight: QFon
 
 
 def nav_tab_width(text: str, base_font: QFont | None = None) -> int:
-    font = _header_metric_font(base_font, 12.5, QFont.Weight.DemiBold)
-    return QFontMetrics(font).horizontalAdvance(text) + NAV_TAB_PAD_X * 2 + 6
+    font = _header_metric_font(base_font, 12.5, QFont.Weight.Bold)
+    return QFontMetrics(font).horizontalAdvance(text) + NAV_TAB_PAD_X * 2 + 10
 
 
 def control_panel_min_width(base_font: QFont | None = None) -> int:
@@ -231,7 +231,8 @@ def control_panel_min_width(base_font: QFont | None = None) -> int:
     root_margins = 20
     header_margins = 28
     header_gap = 12
-    return root_margins + header_margins + brand + header_gap + tab_total + 8
+    ui_lang_combo = 120
+    return root_margins + header_margins + brand + header_gap + ui_lang_combo + tab_total + 16
 
 
 def nav_tab_stylesheet(palette: dict) -> str:
@@ -1361,6 +1362,7 @@ class ControlPanel(QWidget):
 
         nav_width = sum(btn.width() for btn in self.nav_buttons) + NAV_TAB_SPACING * (len(self.nav_buttons) - 1)
         nav_host.setFixedSize(nav_width, NAV_TAB_HEIGHT)
+        self.nav_host = nav_host
         h_layout.addWidget(nav_host)
         return header
 
@@ -4922,16 +4924,16 @@ class ControlPanel(QWidget):
                     # 오버레이 알림 시그널
                     if self.overlay and hasattr(self.overlay, "update_preview_signal"):
                         try:
-                            self.overlay.update_preview_signal.emit(f"[도메인 사전 활성화] {title[:20]}...", "YouTube")
+                            self.overlay.update_preview_signal.emit(f"[{tr('yt_glossary_active')}] {title[:20]}...", "YouTube")
                         except Exception:
                             pass
 
-                    msg = f"✅ [도메인 사전 활성화] {title[:22]}... (용어 {len(ctx.glossary)}개, 교정 {len(ctx.phonetic_fix_map)}개)"
+                    msg = tr("yt_glossary_active_detail", title=title[:22], terms=len(ctx.glossary), fixes=len(ctx.phonetic_fix_map))
                     self.youtube_status_signal.emit(True, msg)
                 else:
-                    self.youtube_status_signal.emit(False, "❌ 도메인 사전을 생성하지 못했습니다. (API 키 확인 필요)")
+                    self.youtube_status_signal.emit(False, tr("yt_glossary_failed_key"))
             except Exception as e:
-                self.youtube_status_signal.emit(False, f"❌ 사전 생성 실패: {e}")
+                self.youtube_status_signal.emit(False, tr("yt_glossary_failed_error", error=str(e)))
 
         threading.Thread(target=_worker, daemon=True, name="ManualYTPreprocessThread").start()
 
@@ -5872,11 +5874,19 @@ class ControlPanel(QWidget):
         if getattr(self, "nav_buttons", None):
             tab_total = 0
             for index, btn in enumerate(self.nav_buttons):
-                btn.setFixedSize(nav_tab_width(btn.text(), self.font()), NAV_TAB_HEIGHT)
+                w = nav_tab_width(btn.text(), self.font())
+                btn.setFixedSize(w, NAV_TAB_HEIGHT)
                 if index:
                     tab_total += NAV_TAB_SPACING
-                tab_total += nav_tab_width(btn.text(), self.font())
-            self.setMinimumWidth(max(self.minimumWidth(), control_panel_min_width(self.font()), tab_total + 360))
+                tab_total += w
+            if hasattr(self, "nav_host") and self.nav_host is not None:
+                self.nav_host.setFixedSize(tab_total, NAV_TAB_HEIGHT)
+                self.nav_host.updateGeometry()
+            self.setMinimumWidth(max(self.minimumWidth(), control_panel_min_width(self.font()), tab_total + 380))
+        if hasattr(self, "_refresh_audio_devices"):
+            self._refresh_audio_devices()
+        if hasattr(self, "_populate_models"):
+            self._populate_models()
         if hasattr(self, "combo_target_lang"):
             self.combo_target_lang.setToolTip(tr("target_lang_label"))
         if hasattr(self, "combo_ui_lang"):
@@ -7187,7 +7197,7 @@ class ControlPanel(QWidget):
                 for i, m in enumerate(AVAILABLE_DEEPGRAM_STT_MODELS):
                     m_id = m["id"]
                     self.combo_model.addItem(icon, m_id, m_id)
-                    self.combo_model.setItemData(i, f"{m['name']} · {m['desc']}", Qt.ItemDataRole.ToolTipRole)
+                    self.combo_model.setItemData(i, f"{m['name']} · {get_model_desc(m)}", Qt.ItemDataRole.ToolTipRole)
                     if m_id == cur:
                         cur_idx = i
                 self.combo_model.setCurrentIndex(cur_idx)
@@ -7205,7 +7215,7 @@ class ControlPanel(QWidget):
                 for i, m in enumerate(AVAILABLE_GROQ_STT_MODELS):
                     m_id = m["id"]
                     self.combo_model.addItem(icon, m_id, m_id)
-                    self.combo_model.setItemData(i, f"{m['name']} · {m['desc']}", Qt.ItemDataRole.ToolTipRole)
+                    self.combo_model.setItemData(i, f"{m['name']} · {get_model_desc(m)}", Qt.ItemDataRole.ToolTipRole)
                     if m_id == cur:
                         cur_idx = i
                 self.combo_model.setCurrentIndex(cur_idx)
@@ -7232,7 +7242,7 @@ class ControlPanel(QWidget):
                     is_usable = installed or bundled
                     icon = icon_green if is_usable else icon_red
                     self.combo_model.addItem(icon, m_id, m_id)
-                    self.combo_model.setItemData(i, f"{m['name']} · {m['desc']}", Qt.ItemDataRole.ToolTipRole)
+                    self.combo_model.setItemData(i, f"{m['name']} · {get_model_desc(m)}", Qt.ItemDataRole.ToolTipRole)
                     if m_id == cur:
                         cur_idx = i
                 self.combo_model.setCurrentIndex(cur_idx)
