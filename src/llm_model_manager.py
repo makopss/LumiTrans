@@ -374,7 +374,7 @@ class GGUFDownloadWorker(threading.Thread):
                             else:
                                 size_str = f"{cur_mb:.1f} MB / {total_mb:.1f} MB"
 
-                            msg = f"다운로드 중... {size_str} ({pct}%){speed_str}"
+                            msg = tr("model_download_progress", size=size_str, pct=pct, speed=speed_str)
                             self._last_pct = pct
                             LLMModelManager.set_last_gguf_progress(m_id, pct, msg)
                             worker_self.progress_signal.emit(m_id, pct, msg)
@@ -383,7 +383,7 @@ class GGUFDownloadWorker(threading.Thread):
             cache_dir = os.path.join(c_dir, "huggingface") if c_dir else None
             if self._is_cancelled:
                 LLMModelManager.delete_gguf_model(self.model_info)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
                 return
             path = hf_hub_download(
                 repo_id=repo_id,
@@ -395,7 +395,7 @@ class GGUFDownloadWorker(threading.Thread):
             # 다운로드 도중 취소된 경우 공유 폴더에 복사/등록하지 않고 즉시 파일 삭제 정리
             if self._is_cancelled:
                 LLMModelManager.delete_gguf_model(self.model_info)
-                self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
+                self.finished_signal.emit(m_id, False, tr("model_download_cancelled"))
                 return
 
             real_path = os.path.realpath(path)
@@ -514,7 +514,7 @@ class CUDAPackDownloadWorker(threading.Thread):
 
             resp = requests.get(url, stream=True, timeout=30, headers={"User-Agent": "LumiTrans"})
             if resp.status_code != 200:
-                raise RuntimeError(f"다운로드 서버 응답 오류 (HTTP {resp.status_code})")
+                raise RuntimeError(tr("download_server_error", code=resp.status_code))
 
             total_size = int(resp.headers.get("content-length", 0))
             downloaded = 0
@@ -524,7 +524,7 @@ class CUDAPackDownloadWorker(threading.Thread):
             with open(temp_path, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=chunk_size):
                     if self._is_cancelled:
-                        raise RuntimeError("다운로드가 취소되었습니다.")
+                        raise RuntimeError(tr("model_download_cancelled"))
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
@@ -533,14 +533,14 @@ class CUDAPackDownloadWorker(threading.Thread):
                             current_pct = int(start_pct + ratio * pct_span)
                             mb_done = downloaded / (1024 * 1024)
                             mb_total = total_size / (1024 * 1024)
-                            msg = f"{label} 다운로드 중 ({mb_done:.1f}/{mb_total:.1f} MB, {int(ratio*100)}%)"
+                            msg = tr("cuda_pack_downloading_progress", label=label, done=f"{mb_done:.1f}", total=f"{mb_total:.1f}", pct=int(ratio*100))
                             LLMModelManager.set_last_cuda_progress(current_pct, msg)
                             self.progress_signal.emit(current_pct, msg)
 
             if self._is_cancelled:
-                raise RuntimeError("다운로드가 취소되었습니다.")
+                raise RuntimeError(tr("model_download_cancelled"))
 
-            ext_msg = f"{label} 설치 및 무결성 검증 중..."
+            ext_msg = tr("cuda_pack_extracting", label=label)
             ext_pct = end_pct - 2
             LLMModelManager.set_last_cuda_progress(ext_pct, ext_msg)
             self.progress_signal.emit(ext_pct, ext_msg)
@@ -669,10 +669,10 @@ class CUDAPackDownloadWorker(threading.Thread):
             except Exception:
                 pass
             msg = str(e)
-            if "취소" in msg:
-                self.finished_signal.emit(False, "다운로드가 취소되었습니다.")
+            if "취소" in msg or "cancel" in msg.lower():
+                self.finished_signal.emit(False, tr("model_download_cancelled"))
             else:
-                self.finished_signal.emit(False, f"CUDA 가속 팩 설치 실패: {e}")
+                self.finished_signal.emit(False, tr("cuda_pack_install_failed", error=e))
         finally:
             LLMModelManager.unregister_cuda_worker()
 
@@ -711,7 +711,7 @@ class LLMModelManager:
 
     @classmethod
     def get_last_gguf_progress(cls, model_id: str) -> Tuple[int, str]:
-        return cls._last_gguf_progress.get(model_id, (0, "다운로드 진행 중..."))
+        return cls._last_gguf_progress.get(model_id, (0, tr("download_in_progress")))
 
     @classmethod
     def get_active_ollama_worker(cls, tag: str) -> Optional[Any]:
@@ -736,7 +736,7 @@ class LLMModelManager:
 
     @classmethod
     def get_last_ollama_progress(cls, tag: str) -> Tuple[int, str]:
-        return cls._last_ollama_progress.get(tag, (0, "다운로드 진행 중..."))
+        return cls._last_ollama_progress.get(tag, (0, tr("download_in_progress")))
 
     @classmethod
     def get_active_cuda_worker(cls) -> Optional[Any]:
@@ -760,7 +760,7 @@ class LLMModelManager:
 
     @classmethod
     def get_last_cuda_progress(cls) -> Tuple[int, str]:
-        return cls._last_cuda_progress or (0, "CUDA 가속 팩 다운로드 중...")
+        return cls._last_cuda_progress or (0, tr("cuda_pack_default_progress"))
 
     _cached_alive_result: Optional[Tuple[bool, str]] = None
     _cached_alive_time: float = 0.0

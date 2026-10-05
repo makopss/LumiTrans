@@ -5,6 +5,8 @@ STT 엔진은 "Deepgram (nova-3)", "Groq (Turbo)", "GPU", "CPU (로컬 폴백)" 
 이름을 넘긴다. 오디오 자막창과 화면 번역창이 같은 규칙으로 표시하도록 여기서만 해석한다.
 """
 
+from src.i18n import tr
+
 _STT_KEYWORDS = (
     ("deepgram", "Deepgram"),
     ("groq", "Groq"),
@@ -26,6 +28,7 @@ _TRANS_KEYWORDS = (
     ("groq", "Groq"),
     ("mymemory", "MyMemory"),
     ("원문", "원문"),
+    ("original", "원문"),
     ("google", "Google"),
 )
 
@@ -65,7 +68,7 @@ def stt_badge(raw: str, config) -> tuple:
     low = raw.lower()
     for key, name in _STT_KEYWORDS:
         if key in low:
-            return name, "폴백" in raw
+            return name, "폴백" in raw or "fallback" in low
     return configured_stt_label(config), False
 
 
@@ -79,5 +82,6 @@ def translation_badge(raw: str, config) -> tuple:
     name = next((disp for key, disp in _TRANS_KEYWORDS if key in head), None)
     if name is None:
         return configured, False
-    fallback = "폴백" in raw or name == "원문" or name != configured
-    return name, fallback
+    fallback = "폴백" in raw or "fallback" in raw.lower() or name == "원문" or name != configured
+    display_name = tr("original") if name == "원문" else name
+    return display_name, fallback

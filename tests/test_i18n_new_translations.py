@@ -123,6 +123,59 @@ class TestI18nNewTranslations(unittest.TestCase):
         self.assertEqual(AudioLoopbackCapture.get_known_app_label("spotify.exe"), "Spotify")
         self.assertEqual(AudioLoopbackCapture.get_known_app_label("discord.exe"), "Discord")
 
+    def test_clean_text_preview_badge_localized(self):
+        set_ui_language("ko")
+        self.assertIn("텍스트 전용 모드", tr("clean_text_preview_badge"))
+        self.assertIn("헤더 및 창 프레임 숨김", tr("clean_text_preview_badge"))
+
+        set_ui_language("en")
+        self.assertIn("Clean text mode", tr("clean_text_preview_badge"))
+        self.assertIn("Header and window frame hidden", tr("clean_text_preview_badge"))
+
+    def test_monitor_num_localized(self):
+        set_ui_language("ko")
+        self.assertEqual(tr("monitor_num", n=1), "모니터 1")
+        self.assertEqual(tr("monitor_num", n=2), "모니터 2")
+
+        set_ui_language("en")
+        self.assertEqual(tr("monitor_num", n=1), "Monitor 1")
+        self.assertEqual(tr("monitor_num", n=2), "Monitor 2")
+
+    def test_gguf_and_cuda_download_progress_localized(self):
+        set_ui_language("ko")
+        self.assertIn("다운로드 중...", tr("model_download_progress", size="1.20 GB / 2.40 GB", pct=50, speed=""))
+        self.assertEqual(tr("model_download_cancelled"), "다운로드가 취소되었습니다.")
+        self.assertIn("CUDA 가속 팩 다운로드 중", tr("cuda_pack_default_progress"))
+        self.assertIn("CUDA 가속 팩 설치 실패", tr("cuda_pack_install_failed", error="err"))
+
+        set_ui_language("en")
+        self.assertIn("Downloading...", tr("model_download_progress", size="1.20 GB / 2.40 GB", pct=50, speed=""))
+        self.assertEqual(tr("model_download_cancelled"), "Download was cancelled.")
+        self.assertIn("Downloading CUDA acceleration pack", tr("cuda_pack_default_progress"))
+        self.assertIn("Failed to install CUDA acceleration pack", tr("cuda_pack_install_failed", error="err"))
+
+    def test_engine_badge_original_and_instant_localized(self):
+        from src.engine_badge import translation_badge
+
+        set_ui_language("ko")
+        disp, fallback = translation_badge("원문 유지", {})
+        self.assertEqual(disp, "원문")
+        self.assertTrue(fallback)
+        disp_inst, fallback_inst = translation_badge("즉시·원문 유지", {})
+        self.assertEqual(disp_inst, "원문")
+        self.assertTrue(fallback_inst)
+        self.assertEqual(tr("badge_instant"), "즉시")
+
+        set_ui_language("en")
+        disp, fallback = translation_badge("원문 유지", {})
+        self.assertEqual(disp, "Original")
+        self.assertTrue(fallback)
+        disp_inst, fallback_inst = translation_badge("즉시·원문 유지", {})
+        self.assertEqual(disp_inst, "Original")
+        self.assertTrue(fallback_inst)
+        self.assertEqual(tr("badge_instant"), "Instant")
+
 
 if __name__ == "__main__":
     unittest.main()
+

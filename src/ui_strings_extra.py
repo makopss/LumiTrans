@@ -551,6 +551,19 @@ _T = {
 # Audio Capture tags
 "audio_app_tag": _t2("앱", "App"),
 "audio_pending_tag": _t2("실행 대기", "Pending"),
+
+# Subtitle preview & instant badge
+"clean_text_preview_badge": _t2("✨ 텍스트 전용 모드 (헤더 및 창 프레임 숨김 — 자막 텍스트만 표시)", "✨ Clean text mode (Header and window frame hidden — subtitle text only)"),
+"badge_instant": _t2("즉시", "Instant"),
+
+# Model download & CUDA pack progress
+"model_download_progress": _t2("다운로드 중... {size} ({pct}%){speed}", "Downloading... {size} ({pct}%){speed}"),
+"cuda_pack_downloading_progress": _t2("{label} 다운로드 중 ({done}/{total} MB, {pct}%)", "Downloading {label} ({done}/{total} MB, {pct}%)"),
+"cuda_pack_extracting": _t2("{label} 설치 및 무결성 검증 중...", "Installing and verifying integrity for {label}..."),
+"cuda_pack_default_progress": _t2("CUDA 가속 팩 다운로드 중...", "Downloading CUDA acceleration pack..."),
+"download_in_progress": _t2("다운로드 진행 중...", "Download in progress..."),
+"cuda_pack_install_failed": _t2("CUDA 가속 팩 설치 실패: {error}", "Failed to install CUDA acceleration pack: {error}"),
+"download_server_error": _t2("다운로드 서버 응답 오류 (HTTP {code})", "Download server response error (HTTP {code})"),
 }
 
 EXTRA_ROWS = [_row(key, values) for key, values in _T.items()]

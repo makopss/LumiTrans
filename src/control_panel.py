@@ -478,7 +478,7 @@ class SubtitlePreviewWidget(QWidget):
             info_font = QFont("Malgun Gothic", 8, QFont.Weight.Bold)
             p.setFont(info_font)
             fm_info = QFontMetrics(info_font)
-            info_text = "✨ 텍스트 전용 모드 (헤더 및 창 프레임 숨김 — 자막 텍스트만 표시)"
+            info_text = tr("clean_text_preview_badge")
             info_w = fm_info.horizontalAdvance(info_text) + 24
             info_rect = QRectF((w - info_w) / 2, 7, info_w, 19)
             p.setBrush(QBrush(QColor(14, 24, 38, 220)))
@@ -845,7 +845,7 @@ class MonitorIdentificationOverlay(QWidget):
                          Qt.AlignmentFlag.AlignCenter, str(self.number))
         painter.setFont(QFont('Malgun Gothic', 13, QFont.Weight.Bold))
         painter.drawText(QRectF(panel.x(), panel.y() + 110, panel.width(), 32),
-                         Qt.AlignmentFlag.AlignCenter, f'모니터 {self.number}')
+                         Qt.AlignmentFlag.AlignCenter, tr('monitor_num', n=self.number))
         painter.setFont(QFont('Malgun Gothic', 10))
         painter.drawText(QRectF(panel.x(), panel.y() + 145, panel.width(), 24),
                          Qt.AlignmentFlag.AlignCenter,

@@ -1036,16 +1036,17 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.current_original = original_text
         self.current_translated = translated_text
         if engine_badge:
-            if "즉시" in engine_badge or "instant" in engine_badge.lower():
-                self.live_badge.setText(f"📷 {engine_badge}")
+            is_instant = "즉시" in engine_badge or "instant" in engine_badge.lower()
+            from src.engine_badge import translation_badge, configured_translation_label
+            engine, fallback = translation_badge(engine_badge, self.config)
+            fallback_suffix = f" ({tr('badge_fallback')})" if fallback else ""
+            if is_instant:
+                self.live_badge.setText(f"📷 {tr('badge_instant')} · {engine}{fallback_suffix}")
             else:
-                from src.engine_badge import translation_badge, configured_translation_label
-                engine, fallback = translation_badge(engine_badge, self.config)
-                fallback_suffix = f" ({tr('badge_fallback')})" if fallback else ""
                 self.live_badge.setText(f"OCR + {engine}{fallback_suffix}")
-                self.live_badge.setToolTip(
-                    tr("screen_engine_fallback_tip", orig=configured_translation_label(self.config), engine=engine, badge=engine_badge)
-                    if fallback else tr("screen_engine_tip", engine=engine, badge=engine_badge))
+            self.live_badge.setToolTip(
+                tr("screen_engine_fallback_tip", orig=configured_translation_label(self.config), engine=engine, badge=engine_badge)
+                if fallback else tr("screen_engine_tip", engine=engine, badge=engine_badge))
 
         # 가독성 높은 대화형 줄바꿈 및 화자 하이라이트 적용
         formatted_ko = self.format_korean_dialogue(translated_text)
