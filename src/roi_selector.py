@@ -1,6 +1,7 @@
 from PyQt6.QtCore import Qt, QRect, QPoint, QObject, pyqtSignal
 from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QCursor
+from src.i18n import tr
 
 class SingleScreenOverlay(QWidget):
     """
@@ -356,7 +357,7 @@ class SingleScreenOverlay(QWidget):
 
             painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
             painter.setPen(Qt.GlobalColor.white)
-            painter.drawText(badge_r.adjusted(8, 0, -28, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, f"영역 {idx + 1} ({gw}×{gh})")
+            painter.drawText(badge_r.adjusted(8, 0, -28, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, f"{tr('region_num', n=idx + 1)} ({gw}×{gh})")
 
             # [✕] 삭제 버튼 배지 (선명한 레드)
             painter.setPen(QPen(QColor(255, 120, 120), 1.0))
@@ -384,7 +385,7 @@ class SingleScreenOverlay(QWidget):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(sel_rect)
 
-            badge_text = f" 영역 {sel_count + 1} 생성 중: {lw}×{lh} "
+            badge_text = f" {tr('region_creating', n=sel_count + 1, w=lw, h=lh)} "
             painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
             badge_y = max(0, ly - 26) if ly >= 26 else ly + lh + 4
             drag_badge_r = QRect(lx, badge_y, 190, 24)
@@ -404,9 +405,9 @@ class SingleScreenOverlay(QWidget):
         painter.setPen(QPen(finish_border, 1.8))
         painter.setBrush(QBrush(finish_bg))
         painter.drawRoundedRect(btn_finish, 6, 6)
-        painter.setFont(QFont("Malgun Gothic", 10, QFont.Weight.Bold))
+        painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         painter.setPen(Qt.GlobalColor.white)
-        painter.drawText(btn_finish, Qt.AlignmentFlag.AlignCenter, f"✔ 설정 완료 ({sel_count}개 / Enter)")
+        painter.drawText(btn_finish, Qt.AlignmentFlag.AlignCenter, f"✔ {tr('roi_btn_finish', n=sel_count)}")
 
         # (2) [전체 초기화] 버튼 (고급스러운 딥 크림슨)
         clear_bg = QColor(136, 14, 79, 240)
@@ -414,9 +415,9 @@ class SingleScreenOverlay(QWidget):
         painter.setPen(QPen(clear_border, 1.5))
         painter.setBrush(QBrush(clear_bg))
         painter.drawRoundedRect(btn_clear, 6, 6)
-        painter.setFont(QFont("Malgun Gothic", 10, QFont.Weight.Bold))
+        painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         painter.setPen(Qt.GlobalColor.white)
-        painter.drawText(btn_clear, Qt.AlignmentFlag.AlignCenter, "⟲ 전체 초기화")
+        painter.drawText(btn_clear, Qt.AlignmentFlag.AlignCenter, f"⟲ {tr('roi_btn_reset')}")
 
         # (3) [닫기] 버튼 (고급스러운 딥 슬레이트 그레이)
         cancel_bg = QColor(38, 50, 56, 240)
@@ -424,9 +425,9 @@ class SingleScreenOverlay(QWidget):
         painter.setPen(QPen(cancel_border, 1.5))
         painter.setBrush(QBrush(cancel_bg))
         painter.drawRoundedRect(btn_cancel, 6, 6)
-        painter.setFont(QFont("Malgun Gothic", 10, QFont.Weight.Bold))
+        painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         painter.setPen(Qt.GlobalColor.white)
-        painter.drawText(btn_cancel, Qt.AlignmentFlag.AlignCenter, "✕ 닫기 (ESC)")
+        painter.drawText(btn_cancel, Qt.AlignmentFlag.AlignCenter, f"✕ {tr('roi_btn_close')}")
         painter.setBrush(Qt.BrushStyle.NoBrush)
 
         # (4) 하단 도움말 안내문 (선택된 모니터 번호 및 실제 해상도 명시)
@@ -434,11 +435,9 @@ class SingleScreenOverlay(QWidget):
         phys_w = int(round(self.target_screen.geometry().width() * dpr))
         phys_h = int(round(self.target_screen.geometry().height() * dpr))
         guide_text = (
-            f"🖥️ 모니터 {self.screen_idx + 1} ({phys_w}×{phys_h})  |  "
-            "이동: 박스 드래그  |  크기 조절: 테두리·모서리 핸들 드래그  |  "
-            "추가: 빈 공간 드래그  |  삭제: [✕] 클릭 또는 Del 키"
+            f"🖥️ {tr('monitor_num', n=self.screen_idx + 1)} ({phys_w}×{phys_h})  |  {tr('roi_guide_text')}"
         )
-        painter.setFont(QFont("Malgun Gothic", 10))
+        painter.setFont(QFont("Segoe UI", 10))
         painter.setPen(QColor(225, 225, 225, 230))
         painter.drawText(
             self.rect().adjusted(0, 56, 0, 0),

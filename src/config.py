@@ -381,23 +381,26 @@ def uses_local_tempo_vad(config=None):
 
 
 def tempo_scope_caption(config=None):
+    from src.i18n import tr
     if uses_local_tempo_vad(config):
-        return "로컬·Groq STT의 침묵 대기와 더빙 속도를 맞춥니다."
-    return "Deepgram 분절은 endpointing과 SpeechSegmenter가 담당합니다."
+        return tr("tempo_scope_local")
+    return tr("tempo_scope_deepgram")
 
 
 def tempo_deepgram_notice(config=None):
+    from src.i18n import tr
     if uses_local_tempo_vad(config):
-        return "ⓘ Deepgram 분절에는 적용되지 않습니다."
-    return "ⓘ Deepgram은 자체 분절을 사용하므로 콘텐츠 템포가 적용되지 않습니다."
+        return tr("tempo_notice_deepgram_sub")
+    return tr("tempo_notice_deepgram")
 
 
 def tempo_preset_desc(preset_key, config=None):
+    from src.i18n import tr
     preset = CONTENT_TEMPO_PRESETS.get(preset_key) or CONTENT_TEMPO_PRESETS["smart"]
     desc = preset.get("desc", "")
     if uses_local_tempo_vad(config):
         return desc
-    return f"{desc} (Deepgram 분절은 독립, 더빙만 적용)"
+    return tr("tempo_desc_deepgram_suffix", desc=desc)
 
 def _apply_hardware_and_model_detection(cfg: dict):
     """

@@ -57,7 +57,7 @@ class STTModelCard(QFrame):
         top_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         # 툴팁으로 상세 사양 제공 (마우스 호버 시 확인 가능)
-        self.setToolTip(f"{self.model_info['desc']} · 다운로드: 약 {self.model_info['size_mb']}MB · 권장 VRAM: {self.model_info['vram_mb']}MB")
+        self.setToolTip(f"{self.model_info['desc']} · {tr('stt_download_size')}: ~{self.model_info['size_mb']}MB · {tr('stt_rec_vram')}: {self.model_info['vram_mb']}MB")
 
         # 모델 정보 영역 (모델 이름(ID) + 설치 상태만 심플하게 표시)
         title_row = QHBoxLayout()
@@ -203,15 +203,15 @@ class STTModelCard(QFrame):
         if is_installed:
             size_mb = STTModelManager.get_model_disk_size_mb(self.model_info["id"])
             if is_current:
-                suffix = " (기본 내장)" if is_bundled else ""
-                self.lbl_status.setText(f"● 현재 사용 중{suffix}")
+                suffix = f" ({tr('model_bundled')})" if is_bundled else ""
+                self.lbl_status.setText(f"● {tr('model_in_use')}{suffix}")
                 self.lbl_status.setStyleSheet("background: transparent; border: none; padding: 0px; color: #818CF8; font-weight: bold; font-size: 11px;")
             else:
                 if is_bundled:
-                    self.lbl_status.setText(f"★ 기본 내장 ({size_mb} MB)")
+                    self.lbl_status.setText(f"★ {tr('model_bundled')} ({size_mb} MB)")
                     self.lbl_status.setStyleSheet("background: transparent; border: none; padding: 0px; color: #F59E0B; font-weight: bold; font-size: 11px;")
                 else:
-                    self.lbl_status.setText(f"✓ 설치됨 ({size_mb} MB)")
+                    self.lbl_status.setText(f"✓ {tr('model_installed')} ({size_mb} MB)")
                     self.lbl_status.setStyleSheet("background: transparent; border: none; padding: 0px; color: #34D399; font-weight: bold; font-size: 11px;")
 
             try:
@@ -223,9 +223,9 @@ class STTModelCard(QFrame):
             self.btn_select.setEnabled(can_select)
             self.btn_select.setText(tr("btn_apply"))
             if self.device == "cpu" and not self.model_info.get("cpu_usable", False) and has_cuda:
-                self.btn_select.setToolTip("이 모델을 선택하면 CUDA GPU 가속으로 자동 전환되어 최적 속도로 구동됩니다.")
+                self.btn_select.setToolTip(tr("tip_select_cuda_auto"))
             else:
-                self.btn_select.setToolTip("이 모델을 현재 음성 인식 모델로 적용합니다.")
+                self.btn_select.setToolTip(tr("tip_select_stt_model"))
             self.btn_select.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {COLOR_ACCENT_PURPLE};
@@ -314,7 +314,7 @@ class STTModelCard(QFrame):
         self.progress_container.setVisible(True)
         last_pct, last_msg = STTModelManager.get_last_progress(self.model_info["id"])
         self.progress_bar.setValue(last_pct)
-        self.lbl_progress_status.setText(last_msg if last_pct > 0 else "다운로드를 시작합니다...")
+        self.lbl_progress_status.setText(last_msg if last_pct > 0 else tr("stt_downloading_start"))
 
         try:
             self.worker.progress_signal.disconnect(self._on_download_progress)
@@ -515,7 +515,7 @@ class STTModelDialog(QDialog):
         distil_models = [m for m in AVAILABLE_STT_MODELS if m.get("category") == "distil"]
 
         # 1. OpenAI Whisper 공식 라인업
-        c_layout.addWidget(make_section_header("🏷️ OpenAI Whisper 공식 라인업"))
+        c_layout.addWidget(make_section_header("🏷️ " + tr("stt_section_official")))
         for m in whisper_models:
             card = STTModelCard(m, self.current_model_id, device=self.device)
             card.model_selected_signal.connect(self._on_model_selected)
@@ -524,7 +524,7 @@ class STTModelDialog(QDialog):
             self.cards.append(card)
 
         # 2. 증류(Distilled) Whisper 모델 라인업
-        c_layout.addWidget(make_section_header("⚡ 증류(Distilled) Whisper 모델 라인업"))
+        c_layout.addWidget(make_section_header("⚡ " + tr("stt_section_distil")))
         for m in distil_models:
             card = STTModelCard(m, self.current_model_id, device=self.device)
             card.model_selected_signal.connect(self._on_model_selected)
@@ -591,7 +591,7 @@ class STTModelDialog(QDialog):
             free_gb = free / (1024 ** 3)
             total_gb = total / (1024 ** 3)
             col = "#F59E0B" if free_gb < 20 else "#34D399"
-            self.lbl_stt_free.setText(f"여유 {free_gb:.1f} GB / 전체 {total_gb:.1f} GB")
+            self.lbl_stt_free.setText(tr("disk_space_fmt", free=f"{free_gb:.1f}", total=f"{total_gb:.1f}"))
             self.lbl_stt_free.setStyleSheet(f"font-weight: bold; color: {col}; font-size: 11px;")
         except Exception:
             self.lbl_stt_free.setText(tr("unknown_space"))
@@ -600,10 +600,10 @@ class STTModelDialog(QDialog):
         try:
             target = os.readlink(default_cache)
             target_clean = target.replace("\\\\?\\", "")
-            self.lbl_stt_junction.setText(f"✓ C: 캐시 정션 연동 활성 (-> {target_clean})")
+            self.lbl_stt_junction.setText(tr("cache_junction_active", target=target_clean))
             self.lbl_stt_junction.setStyleSheet("color: #34D399; font-weight: bold; font-size: 11px;")
         except OSError:
-            self.lbl_stt_junction.setText("C: 기본 로컬 디렉터리 (심볼릭 미연결)")
+            self.lbl_stt_junction.setText(tr("cache_default_dir"))
             self.lbl_stt_junction.setStyleSheet("color: #94A3B8; font-size: 11px;")
 
     def _on_open_folder_clicked(self):
@@ -624,7 +624,7 @@ class STTModelDialog(QDialog):
             if STTModelManager.is_model_installed(m["id"]):
                 installed_count += 1
                 total_mb += STTModelManager.get_model_disk_size_mb(m["id"])
-        self.lbl_summary.setText(f"설치된 모델: {installed_count}개 / 전체 점유 디스크: {total_mb:,.1f} MB")
+        self.lbl_summary.setText(tr("stt_installed_summary", count=installed_count, mb=f"{total_mb:,.1f}"))
 
     def _on_model_selected(self, model_id: str):
         self.current_model_id = model_id

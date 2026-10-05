@@ -74,7 +74,7 @@ class UnifiedLLMModelCard(QFrame):
         self.lbl_status = QLabel()
         self.lbl_status.setStyleSheet("font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: bold;")
 
-        desc_text = f"{self.ollama_info['desc']} · 다운로드 크기: 약 {self.gguf_info['size_mb']}MB"
+        desc_text = f"{self.ollama_info['desc']} · {tr('stt_download_size')}: ~{self.gguf_info['size_mb']}MB"
         self.setToolTip(desc_text)
         self.lbl_name.setToolTip(desc_text)
         self.lbl_desc = QLabel(desc_text)
@@ -224,7 +224,7 @@ class UnifiedLLMModelCard(QFrame):
             else:
                 engine_key = "exaone"
             is_current = (self.current_active in [engine_key, f"ollama:{self.ollama_info['tag']}", self.ollama_info['tag']])
-            label_text = "✓ Ollama 설치됨"
+            label_text = tr("model_ollama_installed")
         else:
             installed = LLMModelManager.is_gguf_model_installed(self.gguf_info)
             if "translategemma" in self.gguf_info["id"]:
@@ -236,11 +236,11 @@ class UnifiedLLMModelCard(QFrame):
             else:
                 engine_key = "exaone"
             is_current = (self.current_active in [engine_key, self.gguf_info["id"]])
-            label_text = "✓ 내장 준비됨"
+            label_text = tr("model_embedded_ready")
 
         if installed:
             if is_current:
-                self.lbl_status.setText("● 현재 번역 엔진으로 사용 중")
+                self.lbl_status.setText(tr("model_active_engine"))
                 self.lbl_status.setStyleSheet("background-color: rgba(99,102,241,0.25); color: #818CF8;")
             else:
                 self.lbl_status.setText(label_text)
@@ -784,7 +784,7 @@ class LLMModelDialog(QDialog):
 
         # 3. 하단 안내 및 닫기
         bot_bar = QHBoxLayout()
-        info_tip = "💡 로컬 LLM 모델은 원작의 맥락 이해와 한국어 특화 자연스러운 번역을 제공합니다."
+        info_tip = tr("llm_dialog_tip")
         lbl_tip = QLabel(info_tip)
         lbl_tip.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_SECONDARY};")
         bot_bar.addWidget(lbl_tip)
@@ -855,7 +855,7 @@ class LLMModelDialog(QDialog):
                 total, used, free = shutil.disk_usage(c_dir)
                 free_gb = free / (1024 ** 3)
                 total_gb = total / (1024 ** 3)
-                self.lbl_free_space.setText(f"여유 {free_gb:.1f} GB / 전체 {total_gb:.1f} GB")
+                self.lbl_free_space.setText(tr("disk_space_fmt", free=f"{free_gb:.1f}", total=f"{total_gb:.1f}"))
                 col = "#F59E0B" if free_gb < 20 else "#34D399"
                 self.lbl_free_space.setStyleSheet(f"font-weight: bold; color: {col}; font-size: 11px;")
             except Exception:
@@ -878,7 +878,7 @@ class LLMModelDialog(QDialog):
         if hf_home:
             if not os.environ.get("HF_HOME"):
                 os.environ["HF_HOME"] = hf_home
-            self.lbl_hf_home.setText(f"{hf_home} (활성)")
+            self.lbl_hf_home.setText(f"{hf_home} ({tr('active_tag')})")
             self.lbl_hf_home.setStyleSheet("color: #38BDF8; font-size: 11px;")
         else:
             self.lbl_hf_home.setText(tr("hf_unset"))
@@ -889,7 +889,7 @@ class LLMModelDialog(QDialog):
         if gguf_dir and os.path.exists(gguf_dir):
             try:
                 files = [f for f in os.listdir(gguf_dir) if f.lower().endswith(".gguf")]
-                self.lbl_gguf_dir.setText(f"{gguf_dir} ({len(files)}개 보관)")
+                self.lbl_gguf_dir.setText(tr("gguf_storage_fmt", dir=gguf_dir, count=len(files)))
                 self.lbl_gguf_dir.setStyleSheet("color: #E2E8F0; font-size: 11px;")
             except Exception:
                 self.lbl_gguf_dir.setText(gguf_dir)
@@ -911,10 +911,10 @@ class LLMModelDialog(QDialog):
                 is_linked = False
 
         if is_linked:
-            self.lbl_junction_status.setText(f"✓ C: 캐시 정션 연동 활성 (-> {link_target})")
+            self.lbl_junction_status.setText(tr("cache_junction_active", target=link_target))
             self.lbl_junction_status.setStyleSheet("color: #34D399; font-weight: bold; font-size: 11px;")
         else:
-            self.lbl_junction_status.setText("C: 기본 로컬 디렉터리 (심볼릭 미연결)")
+            self.lbl_junction_status.setText(tr("cache_default_dir"))
             self.lbl_junction_status.setStyleSheet("color: #94A3B8; font-size: 11px;")
 
     def _on_change_folder_clicked(self):
@@ -924,7 +924,7 @@ class LLMModelDialog(QDialog):
         start_dir = current_dir if os.path.exists(current_dir) else "D:\\"
         selected_dir = QFileDialog.getExistingDirectory(
             self,
-            "로컬 AI 공용 모델 저장 폴더 선택",
+            tr("dlg_select_model_folder"),
             start_dir,
             QFileDialog.Option.ShowDirsOnly
         )
@@ -987,16 +987,16 @@ class LLMModelDialog(QDialog):
         llm_blocked = has_gpu and has_cublas and not has_ggml and bool(status.get("llm_issue"))
         if (is_fully_ready or llm_blocked) and not LLMModelManager.get_active_cuda_worker():
             if llm_blocked:
-                status_desc = f"● 음성인식 GPU 가속 활성화됨 · 로컬 LLM은 CPU로 동작 ({status['llm_issue']})"
+                status_desc = tr("cuda_status_stt_gpu_llm_cpu", issue=status.get('llm_issue', ''))
             elif status.get("llm_restart_required"):
-                status_desc = "● GPU 가속 팩 설치됨 · 음성인식은 즉시 GPU 사용 가능, 로컬 LLM은 프로그램 재시작 후 GPU로 전환"
+                status_desc = tr("cuda_status_restart_for_llm")
             else:
-                status_desc = "● NVIDIA CUDA GPU 가속 활성화됨 (음성인식 STT & 로컬 LLM 실시간 GPU 구동)"
+                status_desc = tr("cuda_status_all_active")
             self.lbl_cuda_status.setText(status_desc)
             self.lbl_cuda_title.setToolTip(status_desc)
             self.cuda_card.setToolTip(status_desc)
             self.lbl_cuda_status.setStyleSheet("color: #34D399; font-weight: bold; font-size: 11px; border: none; outline: none; background: transparent;")
-            self.btn_cuda_action.setText("✓ 가속 팩 설치됨")
+            self.btn_cuda_action.setText(tr("accel_pack_installed"))
             self.btn_cuda_action.setEnabled(False)
             self.btn_cuda_action.setStyleSheet("background-color: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 5px; padding: 6px 14px; font-size: 11px; font-weight: bold;")
             self.cuda_card.setStyleSheet(f"""
@@ -1015,7 +1015,7 @@ class LLMModelDialog(QDialog):
             active_cuda = LLMModelManager.get_active_cuda_worker()
             if active_cuda:
                 self.cuda_worker = active_cuda
-                status_desc = "⚡ NVIDIA CUDA 가속 라이브러리 다운로드 진행 중..."
+                status_desc = tr("cuda_status_downloading")
                 self.lbl_cuda_status.setText(status_desc)
                 self.lbl_cuda_status.setStyleSheet("color: #F59E0B; font-weight: bold; font-size: 11px; border: none; outline: none; background: transparent;")
                 self.btn_cuda_action.setText(tr("downloading"))
@@ -1039,18 +1039,18 @@ class LLMModelDialog(QDialog):
                 self.cuda_progress_container.setVisible(False)
                 missing_parts = []
                 if not has_cublas:
-                    missing_parts.append("STT cuBLAS")
+                    missing_parts.append(tr("part_stt_cublas"))
                 if not has_ggml:
-                    missing_parts.append("로컬 LLM 가속기")
+                    missing_parts.append(tr("part_local_llm_accel"))
                 missing_str = ", ".join(missing_parts)
 
                 if has_gpu:
-                    status_desc = f"💡 NVIDIA GPU 감지됨 · 가속 팩 미설치({missing_str}) (초고속 실시간 통역 필수 권장)"
+                    status_desc = tr("cuda_status_pack_missing", parts=missing_str)
                     self.lbl_cuda_status.setText(status_desc)
                     self.lbl_cuda_title.setToolTip(status_desc)
                     self.cuda_card.setToolTip(status_desc)
                     self.lbl_cuda_status.setStyleSheet("color: #FBBF24; font-weight: bold; font-size: 11px; border: none; outline: none; background: transparent;")
-                    self.btn_cuda_action.setText("⚡ GPU 가속 팩 다운로드 (필수)")
+                    self.btn_cuda_action.setText(tr("btn_download_gpu_pack"))
                     self.btn_cuda_action.setEnabled(True)
                     self.btn_cuda_action.setStyleSheet("background-color: #10B981; color: #FFFFFF; border: none; border-radius: 5px; padding: 6px 14px; font-size: 11px; font-weight: bold;")
                     self.cuda_card.setStyleSheet(f"""
@@ -1066,12 +1066,12 @@ class LLMModelDialog(QDialog):
                         }}
                     """)
                 else:
-                    status_desc = "○ CPU 전용 모드로 작동 중 (NVIDIA 그래픽 카드가 없어 GPU 가속을 사용할 수 없습니다)"
+                    status_desc = tr("cuda_status_cpu_only")
                     self.lbl_cuda_status.setText(status_desc)
                     self.lbl_cuda_title.setToolTip(status_desc)
                     self.cuda_card.setToolTip(status_desc)
                     self.lbl_cuda_status.setStyleSheet("color: #94A3B8; font-size: 11px; border: none; outline: none; background: transparent;")
-                    self.btn_cuda_action.setText("NVIDIA GPU 없음")
+                    self.btn_cuda_action.setText(tr("status_no_gpu"))
                     self.btn_cuda_action.setEnabled(False)
                     self.btn_cuda_action.setStyleSheet("background-color: #334155; color: #E2E8F0; border: 1px solid #475569; border-radius: 5px; padding: 6px 14px; font-size: 11px; font-weight: bold;")
                     self.cuda_card.setStyleSheet(f"""
@@ -1106,7 +1106,7 @@ class LLMModelDialog(QDialog):
         self.cuda_progress_container.setVisible(True)
         last_pct, last_msg = LLMModelManager.get_last_cuda_progress()
         self.cuda_progress_bar.setValue(last_pct)
-        self.lbl_cuda_progress.setText(last_msg if last_pct > 0 else "CUDA 가속 팩 서버 연결 중...")
+        self.lbl_cuda_progress.setText(last_msg if last_pct > 0 else tr("cuda_pack_connecting"))
 
         try:
             self.cuda_worker.progress_signal.disconnect(self._on_cuda_download_progress)

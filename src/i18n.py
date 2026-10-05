@@ -100,12 +100,12 @@ def ui_language() -> str:
     return "en"
 
 
-def tr(key: str, **fmt) -> str:
+def tr(_key: str, /, **fmt) -> str:
     lang = ui_language()
     table = CATALOGS.get(lang) or CATALOGS["en"]
-    text = table.get(key)
+    text = table.get(_key)
     if text is None:
-        text = CATALOGS["en"].get(key) or CATALOGS["ko"].get(key) or key
+        text = CATALOGS["en"].get(_key) or CATALOGS["ko"].get(_key) or _key
     if fmt:
         text = text.format(**fmt)
     return text

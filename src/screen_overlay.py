@@ -133,9 +133,9 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.header_layout.setContentsMargins(4, 3, 4, 3)
         self.header_layout.setSpacing(5)
 
-        self.title_label = QLabel("👁️ 화면 번역")
+        self.title_label = QLabel("👁️ " + tr("screen_translation"))
         self.title_label.setFixedHeight(26)
-        self.title_label.setToolTip("실시간 화면 OCR 번역 자막 (드래그하여 이동)")
+        self.title_label.setToolTip(tr("overlay_screen_tip"))
         self.title_label.setStyleSheet("QLabel { color: rgba(120, 220, 255, 0.9); font-size: 11px; font-weight: bold; }")
         self.header_layout.addWidget(self.title_label)
 
@@ -147,16 +147,16 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_pause.setFixedWidth(34)
         if init_paused:
             self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
-            self.btn_pause.setToolTip("화면 번역 일시정지됨 (클릭하여 다시 시작)")
+            self.btn_pause.setToolTip(tr("overlay_pause_on"))
         else:
             self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
-            self.btn_pause.setToolTip("화면 번역 실행 중 (클릭하여 일시정지)")
+            self.btn_pause.setToolTip(tr("overlay_pause_off"))
         self.btn_pause.clicked.connect(self._on_pause_clicked)
         self.header_layout.addWidget(self.btn_pause)
 
         # 2. ROI 영역 지정 버튼
         self.btn_roi = QPushButton("📐")
-        self.btn_roi.setToolTip("화면 번역 영역 재지정 (드래그)")
+        self.btn_roi.setToolTip(tr("overlay_tip_roi"))
         self.btn_roi.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_roi.setFixedHeight(26)
         self.btn_roi.setFixedWidth(34)
@@ -165,7 +165,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 3. 즉시 캡처 번역 버튼
         self.btn_snap = QPushButton("📷")
-        self.btn_snap.setToolTip("현재 지정 영역 1회 즉시 캡처 번역")
+        self.btn_snap.setToolTip(tr("overlay_tip_snap"))
         self.btn_snap.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_snap.setFixedHeight(26)
         self.btn_snap.setFixedWidth(34)
@@ -175,7 +175,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         # 3-0. 전체 화면 즉시 번역 버튼 (⚡)
         cur_hk = self.config.get("inplace_hotkey", "F4")
         self.btn_inplace = QPushButton("⚡")
-        self.btn_inplace.setToolTip(f"전체 화면 번역 실행 (단축키: {cur_hk})")
+        self.btn_inplace.setToolTip(tr("overlay_tip_inplace", key=cur_hk))
         self.btn_inplace.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_inplace.setFixedHeight(26)
         self.btn_inplace.setFixedWidth(34)
@@ -198,7 +198,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 3-1. ROI 자석 밀착 토글 버튼
         self.btn_snap_roi = QPushButton("🧲")
-        self.btn_snap_roi.setToolTip("감시 영역 주변 자동 밀착(위/아래 공간 자동 계산) 켜기/끄기")
+        self.btn_snap_roi.setToolTip(tr("overlay_tip_snap_roi"))
         self.btn_snap_roi.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_snap_roi.setFixedHeight(26)
         self.btn_snap_roi.setFixedWidth(34)
@@ -207,7 +207,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 3-2. 감시 영역 외곽 엣지(테두리) 화면 오버랩 토글 버튼
         self.btn_border = QPushButton("🔲")
-        self.btn_border.setToolTip("감시 영역 외곽 엣지(테두리) 화면 오버랩 표시 켜기/끄기")
+        self.btn_border.setToolTip(tr("overlay_tip_border"))
         self.btn_border.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_border.setFixedHeight(26)
         self.btn_border.setFixedWidth(34)
@@ -216,7 +216,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 3-3. 클린 텍스트 모드 토글 버튼
         self.btn_clean = QPushButton("✨" if not self.clean_text_mode else "✨ON")
-        self.btn_clean.setToolTip("창 헤더와 배경을 숨기고 외곽선 텍스트만 표시 (마우스 오버 시 다시 표시)")
+        self.btn_clean.setToolTip(tr("overlay_tip_clean"))
         self.btn_clean.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clean.setFixedHeight(26)
         self.btn_clean.setFixedWidth(54 if self.clean_text_mode else 34)
@@ -224,7 +224,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.header_layout.addWidget(self.btn_clean)
 
         # 4. 실시간 상태 뱃지
-        self.live_badge = QLabel("대기 중")
+        self.live_badge = QLabel(tr("overlay_waiting"))
         self.live_badge.setFixedHeight(26)
         self.live_badge.setFixedWidth(110)
         self.live_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -271,7 +271,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 6-0. 원문/번역문 표시 토글 버튼 (아이콘: 🔤 / 🌐)
         self.btn_toggle_en = QPushButton("🔤")
-        self.btn_toggle_en.setToolTip("원문 자막 표시: 켜짐 (클릭하여 켜기/끄기)")
+        self.btn_toggle_en.setToolTip(tr("overlay_tip_orig_on"))
         self.btn_toggle_en.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_toggle_en.setFixedHeight(26)
         self.btn_toggle_en.setFixedWidth(34)
@@ -279,7 +279,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.header_layout.addWidget(self.btn_toggle_en)
 
         self.btn_toggle_ko = QPushButton("🌐")
-        self.btn_toggle_ko.setToolTip("번역 자막 표시: 켜짐 (클릭하여 켜기/끄기)")
+        self.btn_toggle_ko.setToolTip(tr("overlay_tip_trans_on"))
         self.btn_toggle_ko.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_toggle_ko.setFixedHeight(26)
         self.btn_toggle_ko.setFixedWidth(34)
@@ -292,7 +292,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         # 5-2. 화자 이름 표시 토글 버튼
         self.btn_speaker = QPushButton("🗣️" if not self.show_speaker else "🗣️ON")
         self.btn_speaker.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
-        self.btn_speaker.setToolTip("화자 이름 표시/숨기기 (예: '진행자: 대사'에서 화자명 표시 여부)")
+        self.btn_speaker.setToolTip(tr("overlay_tip_speaker_on") if self.show_speaker else tr("overlay_tip_speaker_off"))
         self.btn_speaker.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_speaker.setFixedHeight(26)
         self.btn_speaker.setFixedWidth(54 if self.show_speaker else 34)
@@ -302,7 +302,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 6-1. 자막 화면 고정 (소거 방지) 버튼
         self.btn_pin = QPushButton("📌")
-        self.btn_pin.setToolTip("현재 자막 화면에 영구 고정 (자동 소거 타이머 정지)")
+        self.btn_pin.setToolTip(tr("overlay_tip_pin_unpinned"))
         self.btn_pin.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_pin.setFixedHeight(26)
         self.btn_pin.setFixedWidth(34)
@@ -313,7 +313,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 7. 마우스 관통
         self.btn_lock = QPushButton("🔒")
-        self.btn_lock.setToolTip("마우스 클릭 관통 켜기/끄기")
+        self.btn_lock.setToolTip(tr("overlay_tip_lock"))
         self.btn_lock.setFixedHeight(26)
         self.btn_lock.setFixedWidth(54 if self.is_click_through else 34)
         self.btn_lock.clicked.connect(self.toggle_click_through)
@@ -321,7 +321,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 7-1. 설정 (컨트롤 패널 열기) 버튼
         self.btn_settings = QPushButton("⚙️")
-        self.btn_settings.setToolTip("컨트롤 패널 열기")
+        self.btn_settings.setToolTip(tr("overlay_tip_settings"))
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_settings.setFixedHeight(26)
         self.btn_settings.setFixedWidth(34)
@@ -330,7 +330,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 8. 자막창 숨기기 (닫기) 버튼
         self.btn_hide = QPushButton("✕")
-        self.btn_hide.setToolTip("화면 번역 자막창 숨기기 ([자막 설정] 탭에서 언제든 다시 켤 수 있습니다)")
+        self.btn_hide.setToolTip(tr("overlay_tip_hide"))
         self.btn_hide.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_hide.setFixedHeight(26)
         self.btn_hide.setFixedWidth(32)
@@ -375,7 +375,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.label_original.setMinimumSize(0, 0)
         self.label_original.setTextFormat(Qt.TextFormat.RichText)
 
-        self.label_translated = QLabel("화면 영역에 텍스트가 나타나면 실시간으로 번역됩니다.")
+        self.label_translated = QLabel(tr("overlay_screen_placeholder"))
         self.label_translated.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_translated.setWordWrap(True)
         self.label_translated.setMinimumSize(0, 0)
@@ -516,8 +516,8 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         )
         self.btn_toggle_en.setStyleSheet(style_on if en_on else style_off)
         self.btn_toggle_ko.setStyleSheet(style_on if ko_on else style_off)
-        self.btn_toggle_en.setToolTip(f"원문 자막 표시: {'켜짐' if en_on else '꺼짐'} (클릭하여 켜기/끄기)")
-        self.btn_toggle_ko.setToolTip(f"번역 자막 표시: {'켜짐' if ko_on else '꺼짐'} (클릭하여 켜기/끄기)")
+        self.btn_toggle_en.setToolTip(tr("overlay_tip_orig_on") if en_on else tr("overlay_tip_orig_off"))
+        self.btn_toggle_ko.setToolTip(tr("overlay_tip_trans_on") if ko_on else tr("overlay_tip_trans_off"))
 
     def toggle_show_speaker(self):
         if not getattr(self, 'speaker_diarization_enabled', False):
@@ -554,10 +554,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                 "QPushButton, QPushButton:disabled { background-color: rgba(30, 40, 55, 0.35); color: #666; font-weight: normal; "
                 "border-radius: 4px; padding: 0px 2px; font-size: 11px; }"
             )
-            self.btn_speaker.setToolTip(
-                "화자 이름 표시 (비활성화됨)\n"
-                "[음성 번역] 탭의 [화자 관리]에서 '화자 분리'를 켜주세요."
-            )
+            self.btn_speaker.setToolTip(tr("overlay_tip_speaker_disabled"))
         else:
             self.btn_speaker.setEnabled(True)
             self.btn_speaker.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -565,12 +562,12 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                 self.btn_speaker.setText("🗣️ON")
                 self.btn_speaker.setFixedWidth(54)
                 self.btn_speaker.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
-                self.btn_speaker.setToolTip("화자 이름 표시: 켜짐\n자막에 화자 태그([화자 1] 등)를 표시합니다. (클릭하여 숨기기)")
+                self.btn_speaker.setToolTip(tr("overlay_tip_speaker_on"))
             else:
                 self.btn_speaker.setText("🗣️")
                 self.btn_speaker.setFixedWidth(34)
                 self.btn_speaker.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
-                self.btn_speaker.setToolTip("화자 이름 표시: 꺼짐\n자막에서 화자 태그를 숨깁니다. (클릭하여 켜기)")
+                self.btn_speaker.setToolTip(tr("overlay_tip_speaker_off"))
 
     def apply_config(self, apply_geometry=False):
         """설정 변경 사항 적용 (스타일 동기화 시 다른 오버레이의 위치를 덮어쓰지 않도록 기본 apply_geometry=False)"""
@@ -623,19 +620,19 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.label_original.setStyleSheet(self._label_sheet(orig_size, italic=True))
 
         if hasattr(self, 'btn_font_dec'):
-            self.btn_font_dec.setToolTip(f"글자 작게 (현재 {font_size}px)")
+            self.btn_font_dec.setToolTip(tr("overlay_tip_font_dec", size=font_size))
         if hasattr(self, 'btn_font_inc'):
-            self.btn_font_inc.setToolTip(f"글자 크게 (현재 {font_size}px)")
+            self.btn_font_inc.setToolTip(tr("overlay_tip_font_inc", size=font_size))
 
         if "opacity" in roi_specific_cfg:
             pct = int(roi_specific_cfg["opacity"])
         else:
             pct = int(self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75)) * 100)
-        dec_txt = f"배경 더 투명하게 (현재 {pct}% - 완전 투명)" if pct == 0 else f"배경 더 투명하게 (현재 {pct}%)"
+        dec_txt = tr("overlay_tip_op_dec_100", pct=pct) if pct == 0 else tr("overlay_tip_op_dec", pct=pct)
         if hasattr(self, 'btn_op_dec'):
             self.btn_op_dec.setToolTip(dec_txt)
         if hasattr(self, 'btn_op_inc'):
-            self.btn_op_inc.setToolTip(f"배경 더 어둡고 선명하게 (현재 {pct}%)")
+            self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=pct))
 
         if self.config.get("screen_click_through", False):
             self.set_click_through(True)
@@ -1044,10 +1041,11 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             else:
                 from src.engine_badge import translation_badge, configured_translation_label
                 engine, fallback = translation_badge(engine_badge, self.config)
-                self.live_badge.setText(f"OCR + {engine}{' (폴백)' if fallback else ''}")
+                fallback_suffix = f" ({tr('badge_fallback')})" if fallback else ""
+                self.live_badge.setText(f"OCR + {engine}{fallback_suffix}")
                 self.live_badge.setToolTip(
-                    f"번역이 {configured_translation_label(self.config)} 대신 {engine}(으)로 폴백 ({engine_badge})"
-                    if fallback else f"화면 OCR | 번역기: {engine} ({engine_badge})")
+                    tr("screen_engine_fallback_tip", orig=configured_translation_label(self.config), engine=engine, badge=engine_badge)
+                    if fallback else tr("screen_engine_tip", engine=engine, badge=engine_badge))
 
         # 가독성 높은 대화형 줄바꿈 및 화자 하이라이트 적용
         formatted_ko = self.format_korean_dialogue(translated_text)
@@ -1111,11 +1109,11 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         if is_paused:
             self.btn_pause.setText("▶")
             self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
-            self.btn_pause.setToolTip("화면 번역 일시정지됨 (클릭하여 다시 시작)")
+            self.btn_pause.setToolTip(tr("overlay_pause_on"))
         else:
             self.btn_pause.setText("⏸")
             self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
-            self.btn_pause.setToolTip("화면 번역 실행 중 (클릭하여 일시정지)")
+            self.btn_pause.setToolTip(tr("overlay_pause_off"))
 
     def _open_settings(self):
         if hasattr(self, 'ext_open_settings') and self.ext_open_settings:
@@ -1135,7 +1133,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def update_inplace_hotkey_tooltip(self, hotkey_str: str):
         if hasattr(self, 'btn_inplace'):
-            self.btn_inplace.setToolTip(f"전체 화면 번역 실행 (단축키: {hotkey_str})")
+            self.btn_inplace.setToolTip(tr("overlay_tip_inplace", key=hotkey_str))
 
     def _decrease_font(self):
         cur = max(14, self.config.get("font_size", 22) - 2)
@@ -1203,7 +1201,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         if enabled:
             self.is_mouse_hovered = False
             self.idle_timer.start(3500)
-            self.title_label.setText("🔒 화면 관통 활성화됨 (헤더 버튼으로 해제 가능)")
+            self.title_label.setText(tr("overlay_click_through_active"))
             self.title_label.setStyleSheet("QLabel { color: rgba(100, 255, 100, 0.9); font-size: 11px; font-weight: bold; }")
             self.btn_lock.setText("🔓ON")
             self.btn_lock.setFixedWidth(54)
@@ -1211,7 +1209,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             self.size_grip.hide()
             self._set_header_chrome_opacity(0.35)
         else:
-            self.title_label.setText("👁️ 화면 번역")
+            self.title_label.setText("👁️ " + tr("screen_translation"))
             self.title_label.setStyleSheet("QLabel { color: rgba(255, 255, 255, 0.5); font-size: 11px; font-weight: bold; }")
             self.btn_lock.setText("🔒")
             self.btn_lock.setFixedWidth(34)
@@ -1352,7 +1350,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     font-weight: bold;
                 }
             """)
-            self.btn_pin.setToolTip("자막이 영구 고정되었습니다 (클릭 시 고정 해제)")
+            self.btn_pin.setToolTip(tr("overlay_tip_pin_pinned"))
             self.btn_pin.setFixedWidth(54)
         else:
             self.btn_pin.setText("📌")
@@ -1372,7 +1370,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     border: 1px solid rgba(0, 200, 255, 0.5);
                 }
             """)
-            self.btn_pin.setToolTip("현재 자막 화면에 영구 고정 (소거 방지 타이머 정지)")
+            self.btn_pin.setToolTip(tr("overlay_tip_pin_unpinned"))
             self.btn_pin.setFixedWidth(34)
 
     def _on_idle_timeout(self):

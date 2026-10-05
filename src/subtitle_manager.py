@@ -5,6 +5,7 @@ import re
 import threading
 from dataclasses import dataclass, field
 from typing import List, Optional, Union
+from src.i18n import tr
 
 
 def format_srt_time(seconds: float) -> str:
@@ -579,34 +580,34 @@ class SubtitleHistoryManager:
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         src_desc = {
-            "all": "전체 보기 (3단 비교)",
-            "audio": "음성 번역 (원문+번역+더빙)",
-            "screen": "화면 번역 (원문+번역+더빙)",
-            "dubbing": "AI 음성 더빙 완료 항목",
-            "orig_only": "🔤 원문만 (STT / OCR)",
-            "trans_only": "🌐 번역문만",
-            "dub_only": "🎙️ AI 더빙 발화문만"
-        }.get(source_filter or "all", "전체")
+            "all": tr("filter_all_compare"),
+            "audio": tr("filter_voice_trans"),
+            "screen": tr("filter_screen_trans"),
+            "dubbing": tr("filter_dub_voice"),
+            "orig_only": tr("filter_orig_only"),
+            "trans_only": tr("filter_trans_only"),
+            "dub_only": tr("filter_dub_speech_only"),
+        }.get(source_filter or "all", tr("filter_all_compare"))
 
-        kw_desc = f" (검색어: '{keyword}')" if keyword else ""
+        kw_desc = f" ({tr('search_placeholder')}: '{keyword}')" if keyword else ""
         lines = [
             "=" * 64,
-            f"📝 실시간 AI 통역 및 번역 대본 기록 ({now_str})",
-            f"필터 범위: {src_desc}{kw_desc} | 총 대사 수: {len(entries)}개",
+            f"📝 {tr('history_title')} ({now_str})",
+            tr("export_header_info", filter=src_desc, kw=kw_desc, count=len(entries)),
             "=" * 64,
             ""
         ]
 
         source_labels = {
-            "audio": "오디오",
-            "screen": "화면",
-            "dubbing": "더빙"
+            "audio": tr("source_audio"),
+            "screen": tr("source_screen"),
+            "dubbing": tr("source_dubbing"),
         }
 
         for e in entries:
             src_lbl = source_labels.get(e.source, e.source.upper())
             if e.region_idx > 0 and e.source == "screen":
-                src_lbl += f" (영역 {e.region_idx})"
+                src_lbl += f" ({tr('region_num', n=e.region_idx)})"
 
             spk_info = f"[{e.speaker}] " if e.speaker and not e.speaker.lower().startswith("roi") else ""
             eng_info = f" | {e.engine}" if e.engine else ""
@@ -643,15 +644,15 @@ class SubtitleHistoryManager:
                     lines.append(f"[{src_lbl}{spk_info}{eng_info}]")
 
                 if e.clean_orig:
-                    lines.append(f"  [원문]    {e.clean_orig}")
+                    lines.append(f"  [{tr('history_col_orig')}]    {e.clean_orig}")
                 if e.clean_trans:
-                    lines.append(f"  [번역]    {e.clean_trans}")
+                    lines.append(f"  [{tr('history_col_trans')}]    {e.clean_trans}")
                 if e.clean_dub:
                     voice_str = f"[{e.voice} {e.speed}] " if e.voice else ""
-                    lines.append(f"  [AI 더빙 발화] {voice_str}{e.clean_dub}")
+                    lines.append(f"  [{tr('history_col_dub')}] {voice_str}{e.clean_dub}")
                 elif e.source == "dubbing":
                     voice_str = f"[{e.voice} {e.speed}] " if e.voice else ""
-                    lines.append(f"  [AI 더빙 발화] {voice_str}{e.clean_trans}")
+                    lines.append(f"  [{tr('history_col_dub')}] {voice_str}{e.clean_trans}")
                 lines.append("")
 
         content = "\n".join(lines).strip()
@@ -668,11 +669,11 @@ class SubtitleHistoryManager:
 
     @classmethod
     def format_html_table(cls, entries: List[SubtitleEntry], filter_mode: str = "all") -> str:
-        """3개 섹션(① STT 영어 원문 | ② 한국어 번역문 | ③ AI 음성 더빙문) 가로 비교 또는 선택형 단독 뷰 렌더링"""
+        """3개 섹션(① STT 원문 | ② 번역문 | ③ AI 음성 더빙문) 가로 비교 또는 선택형 단독 뷰 렌더링"""
         if not entries:
-            msg = "대화 또는 화면 텍스트가 유입되면 실시간 자막이 여기에 기록됩니다."
+            msg = tr("history_empty_all")
             if filter_mode and filter_mode != "all":
-                msg = "현재 필터 조건에 일치하는 자막 항목이 없습니다."
+                msg = tr("history_empty_filter")
             return f"<div style='color: #78909C; font-size: 12px; text-align: center; padding: 30px;'>{msg}</div>"
 
         # 1. 영문 원문만 단독 보기 모드
@@ -685,8 +686,8 @@ class SubtitleHistoryManager:
                 if e.speaker:
                     col = e.speaker_color or "#00E5FF"
                     spk_badge = f"<span style='color: {col}; font-weight: bold; margin-left: 6px;'>[{e.speaker}]</span>"
-                src_tag = "🖥️ 화면" if e.source == "screen" else "🎙️ 오디오"
-                reg_tag = f" (영역 {e.region_idx})" if e.region_idx else ""
+                src_tag = f"🖥️ {tr('source_screen')}" if e.source == "screen" else f"🎙️ {tr('source_audio')}"
+                reg_tag = f" ({tr('region_num', n=e.region_idx)})" if e.region_idx else ""
                 
                 rows.append(f"""
                 <tr style='background-color: {bg_col};'>
@@ -705,7 +706,7 @@ class SubtitleHistoryManager:
                 <thead>
                     <tr style='background-color: #121A22; border-bottom: 2px solid #00ACC1;'>
                         <th style='color: #00E5FF; font-size: 11px; font-weight: bold; text-align: left; padding: 7px 12px;'>
-                            ① STT / OCR 원문
+                            ① {tr('history_col_orig')}
                         </th>
                     </tr>
                 </thead>
@@ -725,7 +726,7 @@ class SubtitleHistoryManager:
                 if e.speaker:
                     col = e.speaker_color or "#00E5FF"
                     spk_badge = f"<span style='color: {col}; font-weight: bold; margin-left: 6px;'>[{e.speaker}]</span>"
-                src_tag = "🖥️ 화면" if e.source == "screen" else "🎙️ 오디오"
+                src_tag = f"🖥️ {tr('source_screen')}" if e.source == "screen" else f"🎙️ {tr('source_audio')}"
                 eng_tag = f"<span style='color: #78909C; font-size: 10px; margin-left: 6px;'>[{e.engine}]</span>" if e.engine else ""
                 
                 rows.append(f"""
@@ -745,7 +746,7 @@ class SubtitleHistoryManager:
                 <thead>
                     <tr style='background-color: #121A22; border-bottom: 2px solid #00E676;'>
                         <th style='color: #00E676; font-size: 11px; font-weight: bold; text-align: left; padding: 7px 12px;'>
-                            ② 번역문
+                            ② {tr('history_col_trans')}
                         </th>
                     </tr>
                 </thead>
@@ -765,7 +766,7 @@ class SubtitleHistoryManager:
                 if e.speaker:
                     col = e.speaker_color or "#00E5FF"
                     spk_badge = f"<span style='color: {col}; font-weight: bold; margin-left: 6px;'>[{e.speaker}]</span>"
-                voice_short = e.voice.split('-')[2] if '-' in e.voice else (e.voice or "성우")
+                voice_short = e.voice.split('-')[2] if '-' in e.voice else (e.voice or tr("voice_actor"))
                 voice_badge = f"<span style='background-color: #6A1B9A; color: #FFFFFF; font-size: 10px; font-weight: bold; padding: 1px 5px; border-radius: 3px; margin-left: 6px;'>{voice_short} {e.speed}</span>"
                 
                 dub_txt = e.clean_dub or (e.clean_trans if e.source == "dubbing" else "")
@@ -786,7 +787,7 @@ class SubtitleHistoryManager:
                 <thead>
                     <tr style='background-color: #121A22; border-bottom: 2px solid #BA68C8;'>
                         <th style='color: #BA68C8; font-size: 11px; font-weight: bold; text-align: left; padding: 7px 12px;'>
-                            ③ AI 음성 더빙 발화문
+                            ③ {tr('history_col_dub')}
                         </th>
                     </tr>
                 </thead>
@@ -805,11 +806,11 @@ class SubtitleHistoryManager:
         <table width='100%' cellpadding='8' cellspacing='0' style='border-collapse: collapse; font-family: \"Malgun Gothic\", \"맑은 고딕\", \"Segoe UI\", sans-serif;'>
             <thead>
                 <tr style='background-color: #101726; border-bottom: 2px solid #1E2A42;'>
-                    <th width='12%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>시간</th>
-                    <th width='15%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>소스</th>
-                    <th width='28%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>원문</th>
-                    <th width='25%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>번역</th>
-                    <th width='20%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>실제 더빙</th>
+                    <th width='12%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>{tr('history_th_time')}</th>
+                    <th width='15%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>{tr('history_th_source')}</th>
+                    <th width='28%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>{tr('original')}</th>
+                    <th width='25%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>{tr('translation')}</th>
+                    <th width='20%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>{tr('history_th_dub')}</th>
                 </tr>
             </thead>
             <tbody>
@@ -826,14 +827,14 @@ class SubtitleHistoryManager:
 
         # 소스 배지 스타일링
         if e.source == "audio":
-            src_badge = "<span style='background-color: rgba(99,102,241,0.25); color: #818CF8; font-size: 10px; font-weight: bold; padding: 3px 8px; border-radius: 4px;'>● 오디오</span>"
-            sub_lbl = e.speaker or "화자"
+            src_badge = f"<span style='background-color: rgba(99,102,241,0.25); color: #818CF8; font-size: 10px; font-weight: bold; padding: 3px 8px; border-radius: 4px;'>● {tr('source_audio')}</span>"
+            sub_lbl = e.speaker or tr("speaker")
         elif e.source == "screen":
-            src_badge = "<span style='background-color: rgba(16,185,129,0.25); color: #34D399; font-size: 10px; font-weight: bold; padding: 3px 8px; border-radius: 4px;'>● 화면</span>"
-            sub_lbl = e.speaker or f"영역 {e.region_idx+1}"
+            src_badge = f"<span style='background-color: rgba(16,185,129,0.25); color: #34D399; font-size: 10px; font-weight: bold; padding: 3px 8px; border-radius: 4px;'>● {tr('source_screen')}</span>"
+            sub_lbl = e.speaker or tr("region_num", n=e.region_idx+1)
         else:
-            src_badge = "<span style='background-color: rgba(236,72,153,0.25); color: #F472B6; font-size: 10px; font-weight: bold; padding: 3px 8px; border-radius: 4px;'>● 더빙</span>"
-            sub_lbl = e.voice.split('-')[2] if '-' in e.voice else (e.speaker or "내레이션")
+            src_badge = f"<span style='background-color: rgba(236,72,153,0.25); color: #F472B6; font-size: 10px; font-weight: bold; padding: 3px 8px; border-radius: 4px;'>● {tr('source_dubbing')}</span>"
+            sub_lbl = e.voice.split('-')[2] if '-' in e.voice else (e.speaker or tr("narration"))
 
         # 실제 더빙 텍스트
         dub_txt = e.clean_dub or (e.clean_trans if e.source == "dubbing" else "")

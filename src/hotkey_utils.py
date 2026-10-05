@@ -6,6 +6,7 @@ import re
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QPushButton, QApplication
 from PyQt6.QtGui import QKeyEvent, QColor, QFont
+from src.i18n import tr
 
 # Win32 RegisterHotKey Modifiers
 MOD_ALT = 0x0001
@@ -223,10 +224,10 @@ class HotkeyCaptureButton(QPushButton):
 
     def _update_text(self):
         if self.is_recording:
-            self.setText("⌨️ 키 입력 대기 중...")
+            self.setText(tr("hotkey_recording"))
         else:
-            self.setText("⌨️ 단축키 설정")
-            self.setToolTip(f"현재 단축키: {self.current_hotkey} (클릭하여 단축키 변경, Esc: 취소)")
+            self.setText(tr("hotkey_configure"))
+            self.setToolTip(tr("hotkey_tooltip", key=self.current_hotkey))
 
     def set_hotkey(self, hotkey_str: str):
         """외부에서 단축키 값을 설정"""
@@ -313,7 +314,7 @@ class HotkeyCaptureButton(QPushButton):
 
         # Alt+F4는 Windows 창 닫기 단축키이므로 방어
         if "Alt" in parts and key_name == "F4":
-            self.setText("⚠️ Alt+F4는 Windows 창 닫기 전용입니다!")
+            self.setText(tr("hotkey_err_alt_f4"))
             QApplication.beep()
             event.accept()
             return

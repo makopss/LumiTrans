@@ -26,7 +26,7 @@ _ROWS = [
     ("section_dub", "🔊 더빙", "🔊 Dubbing", "🔊 吹き替え", "🔊 配音", "🔊 Doblaje", "🔊 Doublage", "🔊 Synchron", "🔊 Dublagem", "🔊 Дубляж", "🔊 Doppiaggio", "🔊 Lồng tiếng", "🔊 พากย์", "🔊 Sulih suara", "🔊 الدبلجة", "🔊 डबिंग"),
     ("start_translation", "번역 시작", "Start", "開始", "开始", "Iniciar", "Démarrer", "Start", "Iniciar", "Старт", "Avvia", "Bắt đầu", "เริ่ม", "Mulai", "بدء", "शुरू"),
     ("pause", "❚❚ 일시정지", "❚❚ Pause", "❚❚ 一時停止", "❚❚ 暂停", "❚❚ Pausa", "❚❚ Pause", "❚❚ Pause", "❚❚ Pausar", "❚❚ Пауза", "❚❚ Pausa", "❚❚ Tạm dừng", "❚❚ หยุดชั่วคราว", "❚❚ Jeda", "❚❚ إيقاف", "❚❚ रोकें"),
-    ("start_dubbing", "더빙 시작", "Start dubbing", "吹き替え開始", "开始配音", "Iniciar doblaje", "Démarrer le doublage", "Synchron starten", "Iniciar dublagem", "Начать дубляж", "Avvia doppiaggio", "Bắt đầu lồng tiếng", "เริ่มพากย์", "Mulai sulih suara", "بدء الدبلجة", "डबिंग शुरू करें"),
+    ("start_dubbing", "더빙 시작", "Start", "吹き替え開始", "开始配音", "Iniciar doblaje", "Démarrer le doublage", "Synchron starten", "Iniciar dublagem", "Начать дубляж", "Avvia doppiaggio", "Bắt đầu lồng tiếng", "เริ่มพากย์", "Mulai sulih suara", "بدء الدبلجة", "डबिंग शुरू करें"),
     ("pipeline_title", "현재 번역 설정 (클릭 변경 가능)", "Translation setup (click to change)", "翻訳設定（クリックで変更）", "当前翻译设置（点击更改）", "Ajustes de traducción (clic para cambiar)", "Réglage de traduction (cliquer pour changer)", "Übersetzung (klicken zum Ändern)", "Configuração da tradução (clique para mudar)", "Настройка перевода (нажмите)", "Impostazione traduzione (clicca)", "Thiết lập dịch (bấm để đổi)", "ตั้งค่าการแปล (คลิกเพื่อเปลี่ยน)", "Pengaturan terjemahan (klik untuk ubah)", "إعداد الترجمة (انقر للتغيير)", "अनुवाद सेटअप (बदलने के लिए क्लिक करें)"),
     ("status_idle", "시스템 대기 중 (번역 준비 완료)", "Idle (ready to translate)", "待機中（翻訳準備完了）", "待机（可以翻译）", "En espera (listo)", "En attente (prêt)", "Bereit", "Em espera (pronto)", "Ожидание (готово)", "In attesa (pronto)", "Đang chờ (sẵn sàng)", "พร้อมแปล", "Siaga (siap menerjemahkan)", "جاهز للترجمة", "तैयार"),
     ("engine_ready", "● 엔진 준비 완료", "● Engine ready", "● エンジン準備完了", "● 引擎已就绪", "● Motor listo", "● Moteur prêt", "● Engine bereit", "● Motor pronto", "● Движок готов", "● Motore pronto", "● Engine sẵn sàng", "● พร้อมทำงาน", "● Mesin siap", "● المحرك جاهز", "● इंजन तैयार"),
@@ -157,3 +157,8 @@ def catalogs():
 
 CATALOGS = catalogs()
 UI_LANGS = _LANGS
+
+
+def tr(key: str, **fmt):
+    from src.i18n import tr as _tr
+    return _tr(key, **fmt)

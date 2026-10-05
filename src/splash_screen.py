@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt, QTimer, QRectF
 from PyQt6.QtGui import (
     QPixmap, QColor, QPainter, QPainterPath, QLinearGradient, QPen
 )
+from src.i18n import tr
 
 
 class LumiSplashScreen(QWidget):
@@ -69,7 +70,7 @@ class LumiSplashScreen(QWidget):
         layout.addStretch(1)
 
         # 하단: 상태 메시지 & 슬림 네온 프로그레스 바
-        self.lbl_status = QLabel("스튜디오 초기화 중...")
+        self.lbl_status = QLabel(tr("splash_initializing"))
         self.lbl_status.setStyleSheet("""
             color: #F1F5F9;
             font-size: 12px;

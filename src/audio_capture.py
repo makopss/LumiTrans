@@ -9,6 +9,7 @@ import numpy as np
 import soundcard as sc
 from scipy.signal import butter, sosfilt
 from .audio_chunk import CapturedAudio, offer_queue
+from src.i18n import tr
 
 # Soundcard 버퍼 불연속(WASAPI 드롭) 경고 억제 (콘솔 I/O 지연 및 UI 프리징 원천 방지)
 try:
@@ -123,7 +124,7 @@ class AudioLoopbackCapture(threading.Thread):
             {
                 "id": "default",
                 "type": "device",
-                "name": "🔊 [기본] 윈도우 전체 사운드"
+                "name": f"🔊 {tr('audio_default')}"
             }
         ]
 
