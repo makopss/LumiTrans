@@ -4938,10 +4938,12 @@ class ControlPanel(QWidget):
                 api_key = self.config.get("gemini_api_key", "").strip()
                 preprocessor = GeminiPreProcessor(api_key=api_key)
 
+                src_lang = self.config.get("stt_language", "en")
+                tgt_lang = str(self.config.get("target_lang") or self.config.get("target") or "ko").strip().lower().split("-")[0]
                 if has_transcript and len(transcript) > 100:
-                    ctx = preprocessor.analyze_full_script(transcript, title=title)
+                    ctx = preprocessor.analyze_full_script(transcript, title=title, source_lang=src_lang, target_lang=tgt_lang)
                 else:
-                    ctx = preprocessor.analyze_metadata(title, additional_topic=f"채널: {yt_data.get('author', '')}")
+                    ctx = preprocessor.analyze_metadata(title, additional_topic=f"채널: {yt_data.get('author', '')}", source_lang=src_lang, target_lang=tgt_lang)
 
                 if ctx and not ctx.is_empty():
                     # STT 워커 및 번역기에 즉시 사전 주입

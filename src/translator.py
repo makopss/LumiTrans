@@ -618,7 +618,7 @@ class RealtimeTranslator:
         else:
             sys_inst = f"You are a professional {tgt_en} subtitle translator. Translate the given input speech directly into a single concise {tgt_en} subtitle. Output ONLY the translated {tgt_en} text without any greetings, notes, or explanations."
         if self.pre_context and not self.pre_context.is_empty():
-            g_text = self.pre_context.format_for_gemini(target_text=text)
+            g_text = self.pre_context.format_for_gemini(target_text=text, source_lang=self.source, target_lang=self.target)
             if g_text:
                 sys_inst += f"\n\n{g_text}"
 
@@ -714,7 +714,7 @@ class RealtimeTranslator:
                 f"Output only the {tgt_en} translation, without notes or explanations."
             )
             if self.pre_context and not self.pre_context.is_empty():
-                g_text = self.pre_context.format_for_groq(target_text=text)
+                g_text = self.pre_context.format_for_groq(target_text=text, source_lang=self.source, target_lang=self.target)
                 if g_text:
                     sys_content += f"\n\n{g_text}"
 
@@ -790,7 +790,7 @@ class RealtimeTranslator:
             if "hy-mt" in model_tag.lower() or "hymt" in model_tag.lower():
                 glossary_prefix = ""
                 if self.pre_context and not self.pre_context.is_empty():
-                    g_text = self.pre_context.format_for_hymt(target_text=text)
+                    g_text = self.pre_context.format_for_hymt(target_text=text, source_lang=self.source, target_lang=self.target)
                     if g_text:
                         glossary_prefix = f"{g_text}\n\n"
                 if is_src_auto:
@@ -806,14 +806,18 @@ class RealtimeTranslator:
                     g_text = self.pre_context.format_for_exaone(target_text=text, source_lang=self.source, target_lang=self.target)
                     if g_text:
                         exaone_ctx = f"\n\n{g_text}"
+                if self._is_korean_target():
+                    sys_prompt = f"당신은 전문 {tgt_ko} 자막 번역기입니다. 원문 말투를 살려 {tgt_ko} 번역 한 줄만 출력하십시오.{exaone_ctx}"
+                else:
+                    sys_prompt = f"You are a professional {tgt_en} subtitle translator. Translate into concise natural {tgt_en} subtitles.{exaone_ctx}"
                 prompt = (
-                    f"[|system|]당신은 전문 {tgt_ko} 자막 번역기입니다. 원문 말투를 살려 {tgt_ko} 번역 한 줄만 출력하십시오.{exaone_ctx}[|endofturn|]\n"
+                    f"[|system|]{sys_prompt}[|endofturn|]\n"
                     f"[|user|]{text}[|endofturn|]\n[|assistant|]"
                 )
             elif "gemma" in model_tag.lower():
                 glossary_block = ""
                 if self.pre_context and not self.pre_context.is_empty():
-                    g_text = self.pre_context.format_for_translategemma(target_text=text)
+                    g_text = self.pre_context.format_for_translategemma(target_text=text, source_lang=self.source, target_lang=self.target)
                     if g_text:
                         glossary_block = f"{g_text}\n\n"
                 speech_desc = "this speech" if is_src_auto else f"this {src_en} speech"
@@ -1007,16 +1011,28 @@ class RealtimeTranslator:
                 return ""
             llm = self._get_exaone(model_id=model_id)
             is_src_auto = self.is_auto_source
-            src_ko = "원문" if is_src_auto else get_language_name(self.source, native=True)
-            tgt_ko = get_language_name(self.target, native=True)
-            system_prompt = (
-                f"당신은 실시간 전문 {tgt_ko} 자막 번역기입니다. 아래 규칙을 반드시 준수하십시오:\n"
-                f"1. 입력된 {src_ko} 텍스트를 원문의 말투(존댓말·반말·격식)를 살린 자연스러운 {tgt_ko} 자막으로 번역하십시오.\n"
-                "2. 어떠한 경우에도 사과문, 설명, 질문, 되묻기(예: '죄송합니다', '문장이 너무 짧아', '제공된 입력이')를 절대 출력하지 마십시오.\n"
-                f"3. {src_ko}를 그대로 출력하지 마십시오. 오직 100% {tgt_ko}로만 번역하십시오.\n"
-                f"4. 입력 문장이 질문이더라도 절대 답변하지 말고, 그 질문을 {tgt_ko} 의문문으로 번역만 하십시오.\n"
-                f"5. 부가 설명 없이 번역된 {tgt_ko} 자막 한 줄만 단답형으로 출력하십시오."
-            )
+            if self._is_korean_target():
+                src_ko = "원문" if is_src_auto else get_language_name(self.source, native=True)
+                tgt_ko = "한국어"
+                system_prompt = (
+                    f"당신은 실시간 전문 {tgt_ko} 자막 번역기입니다. 아래 규칙을 반드시 준수하십시오:\n"
+                    f"1. 입력된 {src_ko} 텍스트를 원문의 말투(존댓말·반말·격식)를 살린 자연스러운 {tgt_ko} 자막으로 번역하십시오.\n"
+                    "2. 어떠한 경우에도 사과문, 설명, 질문, 되묻기(예: '죄송합니다', '문장이 너무 짧아', '제공된 입력이')를 절대 출력하지 마십시오.\n"
+                    f"3. {src_ko}를 그대로 출력하지 마십시오. 오직 100% {tgt_ko}로만 번역하십시오.\n"
+                    f"4. 입력 문장이 질문이더라도 절대 답변하지 말고, 그 질문을 {tgt_ko} 의문문으로 번역만 하십시오.\n"
+                    f"5. 부가 설명 없이 번역된 {tgt_ko} 자막 한 줄만 단답형으로 출력하십시오."
+                )
+            else:
+                src_en = "original text" if is_src_auto else get_language_name(self.source, native=False)
+                tgt_en = get_language_name(self.target, native=False)
+                system_prompt = (
+                    f"You are a professional real-time {tgt_en} subtitle translator. Strictly follow these rules:\n"
+                    f"1. Translate the input {src_en} into natural, concise {tgt_en} subtitles preserving the original tone.\n"
+                    "2. NEVER output apologies, chat, explanations, notes, or meta comments.\n"
+                    f"3. Output strictly in 100% {tgt_en}.\n"
+                    "4. If the input is a question, translate it as a question; do NOT answer it.\n"
+                    f"5. Output only the single-line translated subtitle."
+                )
             if self.pre_context and not self.pre_context.is_empty():
                 g_text = self.pre_context.format_for_exaone(target_text=text, source_lang=self.source, target_lang=self.target)
                 if g_text:
@@ -1108,7 +1124,7 @@ class RealtimeTranslator:
             llm = self._get_gemma()
             glossary_block = ""
             if self.pre_context and not self.pre_context.is_empty():
-                g_text = self.pre_context.format_for_translategemma(target_text=text)
+                g_text = self.pre_context.format_for_translategemma(target_text=text, source_lang=self.source, target_lang=self.target)
                 if g_text:
                     glossary_block = f"{g_text}\n\n"
 
@@ -1203,7 +1219,7 @@ class RealtimeTranslator:
             tgt_en = get_language_name(self.target, native=False)
             glossary_prefix = ""
             if self.pre_context and not self.pre_context.is_empty():
-                g_text = self.pre_context.format_for_hymt(target_text=text)
+                g_text = self.pre_context.format_for_hymt(target_text=text, source_lang=self.source, target_lang=self.target)
                 if g_text:
                     glossary_prefix = f"{g_text}\n\n"
 

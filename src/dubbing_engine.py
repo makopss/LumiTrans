@@ -6,6 +6,7 @@ import time
 import queue
 import asyncio
 import threading
+from typing import Optional, List, Dict, Tuple
 from contextlib import nullcontext
 from .queue_utils import take_matching
 import edge_tts
@@ -371,16 +372,24 @@ class DubbingEngine:
         m = re.search(r'([+-]?\d+)', str(speed_str))
         return int(m.group(1)) if m else 0
 
-    def calculate_adaptive_speed(self, backlog: int) -> str:
+    def calculate_adaptive_speed(self, backlog: int, target_lang: Optional[str] = None) -> str:
         """
         대사 누락 제로(Zero-Drop)를 보장하며 영상과의 싱크를 빠르게 회복하는 지능형 적응형 가속.
-        - 대기 대사 0~1개: 사용자가 지정한 기본 속도 (예: +0% ~ +100%)
+        - 언어별 음절 밀도(SPS) 가중치 자동 보정 (스페인어, 일본어, 프랑스어, 이탈리아어 등 +5%)
+        - 대기 대사 0~1개: 사용자가 지정한 기본 속도 (또는 언어 보정 속도)
         - 대기 대사 2개: 기본 + 5% (최소 20%)
         - 대기 대사 3~4개: 기본 + 10% (최소 25%)
         - 대기 대사 5개 이상: 기본 + 15% (최소 30%) - 터보 캐치업으로 영상 싱크 즉시 추격
         적체가 해소되면 즉시 사용자의 기본 속도로 자동 복귀합니다.
         """
-        base_val = self._parse_speed_int(self.config.get("dubbing_speed", "+10%"))
+        if target_lang is None:
+            tgt_code = str(self.config.get("target_lang") or self.config.get("target") or "ko").strip().lower().split("-")[0]
+        else:
+            tgt_code = str(target_lang).strip().lower().split("-")[0]
+
+        # 음절 밀도(Syllables Per Second)가 높은 언어는 원문 대비 발화 길이가 15~25% 증가하므로 기본 템포 +5% 상향 보정
+        sps_offset = 5 if tgt_code in ("es", "ja", "fr", "it", "pt") else 0
+        base_val = self._parse_speed_int(self.config.get("dubbing_speed", "+10%")) + sps_offset
         if backlog <= 1:
             target_val = base_val
         elif backlog == 2:

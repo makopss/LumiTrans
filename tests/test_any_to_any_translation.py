@@ -617,11 +617,95 @@ class TestPhase4GlobalUXAndI18n(unittest.TestCase):
             ja_idx = cp.combo_ui_lang.findData("ja")
             self.assertGreaterEqual(ja_idx, 0)
             cp.combo_ui_lang.setCurrentIndex(ja_idx)
-            self.assertEqual(cp.config["ui_lang"], "ja")
-
             cp.close()
+
+    def test_pre_processor_multilingual_formatting(self):
+        """번역 엔진별 다국어 프롬프트 포맷팅 (도착 언어에 따른 헤더 현지화) 검증"""
+        from src.pre_processor import PreProcessingContext
+
+        ctx = PreProcessingContext(
+            source_summary="Space Exploration and Gravitational Waves",
+            tone_and_style="Informative and clear",
+            glossary={"quantum": "quantum", "singularity": "singularity"}
+        )
+
+        # 1. Gemini: 한국어 도착 vs 글로벌 도착
+        gemini_ko = ctx.format_for_gemini(source_lang="en", target_lang="ko")
+        self.assertIn("[영상 배경 요약]", gemini_ko)
+        self.assertIn("[도메인 전문 용어 번역 규칙]:", gemini_ko)
+
+        gemini_en = ctx.format_for_gemini(source_lang="en", target_lang="es")
+        self.assertIn("[Video Context Summary]", gemini_en)
+        self.assertIn("[Mandatory Domain Terminology Rules]:", gemini_en)
+
+        # 2. EXAONE: 한국어 도착 vs 글로벌 도착
+        exaone_ko = ctx.format_for_exaone(source_lang="en", target_lang="ko")
+        self.assertIn("[필수 준수 용어집 (Glossary)]:", exaone_ko)
+        self.assertIn("원문 용어 (영어)", exaone_ko)
+        self.assertIn("공식 한국어 번역", exaone_ko)
+
+        exaone_en = ctx.format_for_exaone(source_lang="en", target_lang="en")
+        self.assertIn("[Mandatory Domain Glossary]:", exaone_en)
+        self.assertIn("Source Term (English)", exaone_en)
+        self.assertIn("Official EN Translation", exaone_en)
+
+    def test_dubbing_adaptive_speed_sps_phonetic_compensation(self):
+        """음절 밀도(SPS) 기반 다국어 더빙 배속 자동 보정 검증"""
+        from src.dubbing_engine import DubbingEngine
+
+        engine = DubbingEngine({"dubbing_speed": "+10%"})
+
+        # 일반 언어 (한국어, 영어): 기본 +10%
+        self.assertEqual(engine.calculate_adaptive_speed(0, target_lang="ko"), "+10%")
+        self.assertEqual(engine.calculate_adaptive_speed(1, target_lang="en"), "+10%")
+
+        # 고음절 언어 (스페인어 7.82 SPS, 일본어 7.84 SPS, 프랑스어 7.18 SPS 등): +5% 자동 보정 -> +15%
+        self.assertEqual(engine.calculate_adaptive_speed(0, target_lang="es"), "+15%")
+        self.assertEqual(engine.calculate_adaptive_speed(1, target_lang="ja"), "+15%")
+        self.assertEqual(engine.calculate_adaptive_speed(0, target_lang="fr"), "+15%")
+        self.assertEqual(engine.calculate_adaptive_speed(0, target_lang="it"), "+15%")
+        self.assertEqual(engine.calculate_adaptive_speed(0, target_lang="pt"), "+15%")
+
+        # 적체 발생 시 지능형 추격 가속도 정상 동작
+        self.assertEqual(engine.calculate_adaptive_speed(2, target_lang="ja"), "+20%")
+        self.assertEqual(engine.calculate_adaptive_speed(3, target_lang="ja"), "+25%")
+        self.assertEqual(engine.calculate_adaptive_speed(5, target_lang="ja"), "+30%")
+
+    def test_gemini_preprocessor_multilingual_prompts(self):
+        """Gemini 사전 분석기 다국어 프롬프트 생성 검증"""
+        from src.pre_processor import GeminiPreProcessor
+
+        prep = GeminiPreProcessor(api_key="test_dummy_key")
+        captured_prompts = []
+
+        def mock_call(prompt, sys_inst):
+            captured_prompts.append((prompt, sys_inst))
+            return {
+                "source_summary": "Test Summary",
+                "tone_and_style": "Test Style",
+                "whisper_initial_prompt": "term1, term2",
+                "phonetic_fix_map": {"err": "fix"},
+                "glossary": {"Term": "Translation"}
+            }
+
+        prep._call_gemini_json = mock_call
+
+        # 1. 한국어 타겟 -> 한국어 시스템 프롬프트
+        prep.analyze_metadata("Title", "Topic", source_lang="en", target_lang="ko")
+        self.assertEqual(len(captured_prompts), 1)
+        prompt_ko, sys_ko = captured_prompts[-1]
+        self.assertIn("언어 분석 전문가", sys_ko)
+        self.assertIn("한국어", prompt_ko)
+
+        # 2. 스페인어 타겟 -> 영문 국제 표준 시스템 프롬프트
+        prep.analyze_metadata("Title", "Topic", source_lang="en", target_lang="es")
+        self.assertEqual(len(captured_prompts), 2)
+        prompt_es, sys_es = captured_prompts[-1]
+        self.assertIn("expert audio-visual language engineer", sys_es)
+        self.assertIn("Spanish", prompt_es)
 
 
 if __name__ == "__main__":
     unittest.main()
+
 

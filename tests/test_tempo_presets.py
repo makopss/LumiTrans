@@ -17,6 +17,10 @@ from src.stt_engine import STTWorker
 
 
 class TestTempoPresets(unittest.TestCase):
+    def setUp(self):
+        from src.i18n import set_ui_language
+        set_ui_language("ko")
+
     def test_presets_structure(self):
         """프리셋 기본 구조 및 6대 프리셋 정의 검증"""
         self.assertIn("content_tempo_preset", DEFAULT_CONFIG)

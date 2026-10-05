@@ -137,22 +137,32 @@ class YouTubeMonitor(threading.Thread):
                 print(f"[YouTubeMonitor] [사전 생성 중] 도메인 사전 & STT 음운 교정 맵 생성 중 (Gemini Flash)...")
             except Exception:
                 pass
-            # 영상 원문 언어 자동 감별 (일본어, 한국어, 중국어, 영어 등)
+            # 영상 원문 언어 자동 감별 (설정 언어 우선, 그 외 스크립트 정규식 분석)
             import re
-            sample_text = f"{title} {transcript[:1000]}"
-            if re.search(r'[\u3040-\u30ff]', sample_text):
-                video_src_lang = "ja"
-            elif re.search(r'[\uac00-\ud7a3]', sample_text):
-                video_src_lang = "ko"
-            elif re.search(r'[\u4e00-\u9fff]', sample_text):
-                video_src_lang = "zh"
+            stt_pref = str(self.config.get("stt_language") or "").strip().lower()
+            if stt_pref and stt_pref not in ("auto", "none"):
+                video_src_lang = stt_pref.split("-")[0]
             else:
-                video_src_lang = "en"
+                sample_text = f"{title} {transcript[:1000]}"
+                if re.search(r'[\u3040-\u30ff]', sample_text):
+                    video_src_lang = "ja"
+                elif re.search(r'[\uac00-\ud7a3]', sample_text):
+                    video_src_lang = "ko"
+                elif re.search(r'[\u4e00-\u9fff]', sample_text):
+                    video_src_lang = "zh"
+                elif re.search(r'[\u0400-\u04ff]', sample_text):
+                    video_src_lang = "ru"
+                elif re.search(r'[\u0600-\u06ff]', sample_text):
+                    video_src_lang = "ar"
+                else:
+                    video_src_lang = "en"
+
+            video_tgt_lang = str(self.config.get("target_lang") or self.config.get("target") or "ko").strip().lower().split("-")[0]
 
             if has_transcript and len(transcript) > 100:
-                ctx = preprocessor.analyze_full_script(transcript, title=title, source_lang=video_src_lang)
+                ctx = preprocessor.analyze_full_script(transcript, title=title, source_lang=video_src_lang, target_lang=video_tgt_lang)
             else:
-                ctx = preprocessor.analyze_metadata(title, additional_topic=f"채널: {yt_data.get('author', '')}", source_lang=video_src_lang)
+                ctx = preprocessor.analyze_metadata(title, additional_topic=f"채널: {yt_data.get('author', '')}", source_lang=video_src_lang, target_lang=video_tgt_lang)
 
             if ctx and not ctx.is_empty():
                 # STT 및 번역기에 즉시 사전 핫스왑 적용

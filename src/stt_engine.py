@@ -1594,8 +1594,13 @@ class STTWorker(threading.Thread):
                     if chunk_text.lower().strip() in HALLUCINATIONS or clean_check in HALLUCINATIONS:
                         continue
 
-                    # 말하는 속도(WPM) 실시간 측정 및 템포 동적 적응
-                    words_in_chunk = len(chunk_text.split())
+                    # 말하는 속도(WPM) 실시간 측정 및 템포 동적 적응 (CJK 문자 띄어쓰기 부재 보정)
+                    is_cjk = bool(re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', chunk_text))
+                    if is_cjk:
+                        cjk_chars = len(re.findall(r'[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7a3a-zA-Z0-9]', chunk_text))
+                        words_in_chunk = max(1, int(cjk_chars / 2.2))
+                    else:
+                        words_in_chunk = len(chunk_text.split())
                     if seg_dur_sec > 0.4 and words_in_chunk > 0:
                         inst_wpm = (words_in_chunk / seg_dur_sec) * 60.0
                         self._update_speech_tempo(inst_wpm, seg_dur_sec)

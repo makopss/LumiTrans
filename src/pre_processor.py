@@ -75,7 +75,7 @@ class PreProcessingContext:
         words = target_text.strip().split()
         return len(words) <= 3
 
-    def format_for_translategemma(self, target_text: Optional[str] = None) -> str:
+    def format_for_translategemma(self, target_text: Optional[str] = None, source_lang: str = "en", target_lang: str = "ko") -> str:
         """TranslateGemma 4B용: 단일 User 턴 내 영문 지시 블록"""
         glossary_items = self._filter_glossary_for_text(target_text) if target_text is not None else self.glossary
         if not glossary_items:
@@ -89,22 +89,28 @@ class PreProcessingContext:
         """EXAONE 3.5용: System 역할 내 Markdown 테이블 형식"""
         blocks = []
         suppress_ctx = self._should_suppress_summary_and_style(target_text)
+        is_tgt_ko = str(target_lang or "ko").strip().lower() == "ko"
+        ctx_label = "[핵심 맥락]" if is_tgt_ko else "[Context]"
+        style_label = "[자막 스타일]" if is_tgt_ko else "[Style]"
         if self.source_summary and not suppress_ctx:
-            blocks.append(f"[핵심 맥락]: {self.source_summary}")
+            blocks.append(f"{ctx_label}: {self.source_summary}")
         if self.tone_and_style and not suppress_ctx:
-            blocks.append(f"[자막 스타일]: {self.tone_and_style}")
+            blocks.append(f"{style_label}: {self.tone_and_style}")
         glossary_items = self._filter_glossary_for_text(target_text) if target_text is not None else self.glossary
         if glossary_items:
             if str(source_lang or "").strip().lower() in ("auto", "none", ""):
-                src_name = "원문"
+                src_name = "원문" if is_tgt_ko else "Source"
             elif source_lang.lower() == "en":
-                src_name = "영어"
+                src_name = "영어" if is_tgt_ko else "English"
             else:
                 src_name = source_lang.upper()
-            tgt_name = "한국어" if target_lang.lower() == "ko" else target_lang.upper()
+            tgt_name = "한국어" if is_tgt_ko else target_lang.upper()
+            glossary_title = "[필수 준수 용어집 (Glossary)]:" if is_tgt_ko else "[Mandatory Domain Glossary]:"
+            term_header = f"원문 용어 ({src_name})" if is_tgt_ko else f"Source Term ({src_name})"
+            trans_header = f"공식 {tgt_name} 번역" if is_tgt_ko else f"Official {tgt_name} Translation"
             table = [
-                "[필수 준수 용어집 (Glossary)]:",
-                f"| 원문 용어 ({src_name}) | 공식 {tgt_name} 번역 |",
+                glossary_title,
+                f"| {term_header} | {trans_header} |",
                 "|---|---|",
             ]
             for term, trans in list(glossary_items.items())[:35]:
@@ -114,11 +120,9 @@ class PreProcessingContext:
             blocks.append("\n".join(table))
         return "\n\n".join(blocks)
 
-    def format_for_hymt(self, target_text: Optional[str] = None) -> str:
+    def format_for_hymt(self, target_text: Optional[str] = None, source_lang: str = "en", target_lang: str = "ko") -> str:
         """Tencent Hy-MT2용: 공식 Reference Translation(참고 번역) 개입 형식"""
         blocks = []
-        # Hy-MT2 1.8B 초경량 MT 모델은 긴 한국어 요약문 주입 시 어텐션 과부하로 요약문 복사 환각이 발생하므로,
-        # 실시간 문장 번역(target_text 제공 시)에는 요약문을 주입하지 않고 선별된 용어집만 주입합니다.
         if self.source_summary and target_text is None:
             blocks.append(f"[Context]: {self.source_summary}")
         glossary_items = self._filter_glossary_for_text(target_text) if target_text is not None else self.glossary
@@ -129,7 +133,7 @@ class PreProcessingContext:
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
 
-    def format_for_groq(self, target_text: Optional[str] = None) -> str:
+    def format_for_groq(self, target_text: Optional[str] = None, source_lang: str = "en", target_lang: str = "ko") -> str:
         """Groq (Qwen / Llama)용: 시스템 프롬프트 주입용 표준 용어집 형식"""
         blocks = []
         suppress_ctx = self._should_suppress_summary_and_style(target_text)
@@ -145,15 +149,19 @@ class PreProcessingContext:
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
 
-    def format_for_gemini(self, target_text: Optional[str] = None) -> str:
-        """Gemini용: 구조화된 가이드라인 형식"""
+    def format_for_gemini(self, target_text: Optional[str] = None, source_lang: str = "en", target_lang: str = "ko") -> str:
+        """Gemini용: 구조화된 가이드라인 형식 (도착 언어 감응형 헤더)"""
         blocks = []
         suppress_ctx = self._should_suppress_summary_and_style(target_text)
+        is_tgt_ko = str(target_lang or "ko").strip().lower() == "ko"
+        ctx_label = "[영상 배경 요약]" if is_tgt_ko else "[Video Context Summary]"
+        rules_label = "[도메인 전문 용어 번역 규칙]:" if is_tgt_ko else "[Mandatory Domain Terminology Rules]:"
+
         if self.source_summary and not suppress_ctx:
-            blocks.append(f"[영상 배경 요약]: {self.source_summary}")
+            blocks.append(f"{ctx_label}: {self.source_summary}")
         glossary_items = self._filter_glossary_for_text(target_text) if target_text is not None else self.glossary
         if glossary_items:
-            lines = ["[도메인 전문 용어 번역 규칙]:"]
+            lines = [rules_label]
             for term, trans in list(glossary_items.items())[:35]:
                 lines.append(f"- {term}: {trans}")
             blocks.append("\n".join(lines))
@@ -239,14 +247,19 @@ class GeminiPreProcessor:
         return None
 
     def analyze_metadata(self, title: str, additional_topic: str = "", source_lang: str = "en", target_lang: str = "ko") -> PreProcessingContext:
-        """영상 제목이나 키워드로부터 사전 생성 (실시간 라이브/간이 모드용)"""
-        src_name = "영어" if source_lang.lower() == "en" else source_lang.upper()
-        tgt_name = "한국어" if target_lang.lower() == "ko" else target_lang.upper()
-        system_instruction = (
-            "당신은 영상 음성인식(STT) 및 자막 번역 파이프라인의 언어 분석 전문가입니다. "
-            "주어진 영상 제목과 정보로부터 STT 오인식 방지 힌트 및 번역 모델용 용어집을 JSON으로 출력하세요."
-        )
-        prompt = f"""영상 정보:
+        """영상 제목이나 키워드로부터 사전 생성 (실시간 라이브/간이 모드용, 다국어 지원)"""
+        from src.translator import get_language_name
+        src_code = str(source_lang or "en").strip().lower().split("-")[0]
+        tgt_code = str(target_lang or "ko").strip().lower().split("-")[0]
+
+        if tgt_code == "ko":
+            src_name = get_language_name(src_code, native=True) if src_code not in ("auto", "none", "") else "원문"
+            tgt_name = "한국어"
+            system_instruction = (
+                "당신은 영상 음성인식(STT) 및 자막 번역 파이프라인의 언어 분석 전문가입니다. "
+                "주어진 영상 제목과 정보로부터 STT 오인식 방지 힌트 및 번역 모델용 용어집을 JSON으로 출력하세요."
+            )
+            prompt = f"""영상 정보:
 제목: {title}
 추가 정보: {additional_topic}
 
@@ -265,6 +278,32 @@ class GeminiPreProcessor:
   "phonetic_fix_map": {{"wrong_word": "CorrectWord"}},
   "glossary": {{"Term": "공식번역어"}}
 }}"""
+        else:
+            src_name = get_language_name(src_code, native=False) if src_code not in ("auto", "none", "") else "source language"
+            tgt_name = get_language_name(tgt_code, native=False)
+            system_instruction = (
+                "You are an expert audio-visual language engineer specialized in speech-to-text (STT) and subtitle translation pipelines. "
+                "Analyze the video information and produce STT recognition hints, phonetic correction mappings, and an official translation glossary as JSON."
+            )
+            prompt = f"""Video Information:
+Title: {title}
+Additional Info: {additional_topic}
+
+Requirements:
+1. "source_summary": 1-sentence concise summary of the core video topic.
+2. "tone_and_style": Natural subtitle tone and style in {tgt_name}.
+3. "whisper_initial_prompt": Key proper nouns and terminology in {src_name} to guide Whisper STT (15~25 comma-separated terms).
+4. "phonetic_fix_map": Common acoustic/phonetic misspellings -> correct words for Whisper (5~15 mappings).
+5. "glossary": Key {src_name} terms -> official {tgt_name} translations that the translation engine must strictly follow (15~30 mappings).
+
+Output strictly in the following JSON schema:
+{{
+  "source_summary": "...",
+  "tone_and_style": "...",
+  "whisper_initial_prompt": "term1, term2, term3",
+  "phonetic_fix_map": {{"wrong_word": "CorrectWord"}},
+  "glossary": {{"SourceTerm": "TargetTranslation"}}
+}}"""
         res = self._call_gemini_json(prompt, system_instruction)
         if not res:
             return PreProcessingContext(initial_prompt_tokens=title, source_summary=title)
@@ -278,17 +317,22 @@ class GeminiPreProcessor:
         )
 
     def analyze_full_script(self, transcript_text: str, title: str = "", source_lang: str = "en", target_lang: str = "ko") -> PreProcessingContext:
-        """자막 스크립트 전문(Ground-Truth)을 분석하여 고정밀 교정 사전 생성"""
-        src_name = "영어" if source_lang.lower() == "en" else source_lang.upper()
-        tgt_name = "한국어" if target_lang.lower() == "ko" else target_lang.upper()
+        """자막 스크립트 전문(Ground-Truth)을 분석하여 고정밀 교정 사전 생성 (다국어 지원)"""
+        from src.translator import get_language_name
+        src_code = str(source_lang or "en").strip().lower().split("-")[0]
+        tgt_code = str(target_lang or "ko").strip().lower().split("-")[0]
+
         sample_text = transcript_text
         if len(sample_text) > 30000:
             sample_text = sample_text[:15000] + "\n...[중략]...\n" + sample_text[-15000:]
 
-        system_instruction = (
-            "당신은 영상 원본 스크립트 전문을 감사하여 실제 발화된 전문용어와 STT 오류 가능성을 추출하는 언어 전문가입니다."
-        )
-        prompt = f"""영상 제목: {title}
+        if tgt_code == "ko":
+            src_name = get_language_name(src_code, native=True) if src_code not in ("auto", "none", "") else "원문"
+            tgt_name = "한국어"
+            system_instruction = (
+                "당신은 영상 원본 스크립트 전문을 감사하여 실제 발화된 전문용어와 STT 오류 가능성을 추출하는 언어 전문가입니다."
+            )
+            prompt = f"""영상 제목: {title}
 영상 스크립트(Ground-Truth):
 {sample_text}
 
@@ -306,6 +350,31 @@ class GeminiPreProcessor:
   "whisper_initial_prompt": "term1, term2",
   "phonetic_fix_map": {{"misheard": "ActualTerm"}},
   "glossary": {{"Term": "{tgt_name}번역"}}
+}}"""
+        else:
+            src_name = get_language_name(src_code, native=False) if src_code not in ("auto", "none", "") else "source language"
+            tgt_name = get_language_name(tgt_code, native=False)
+            system_instruction = (
+                "You are an expert language engineer auditing an official video transcript to extract spoken domain terminology and potential STT misrecognitions."
+            )
+            prompt = f"""Video Title: {title}
+Transcript (Ground-Truth):
+{sample_text}
+
+Requirements:
+1. "source_summary": 1~2 sentence summary of the core video topic.
+2. "tone_and_style": Speaker's communication style and natural subtitle style in {tgt_name}.
+3. "whisper_initial_prompt": Key proper nouns, names, technical terms in {src_name} from the text (20~30 terms, comma-separated).
+4. "phonetic_fix_map": Acoustically ambiguous words likely to be misheard by STT -> correct word mappings (10~25 pairs).
+5. "glossary": Key terminology from text -> official {tgt_name} translations (20~40 pairs).
+
+Output strictly in JSON format:
+{{
+  "source_summary": "...",
+  "tone_and_style": "...",
+  "whisper_initial_prompt": "term1, term2",
+  "phonetic_fix_map": {{"misheard": "ActualTerm"}},
+  "glossary": {{"Term": "{tgt_name} Translation"}}
 }}"""
         res = self._call_gemini_json(prompt, system_instruction)
         if not res:
