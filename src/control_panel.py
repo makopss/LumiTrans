@@ -1898,9 +1898,16 @@ class ControlPanel(QWidget):
 
     def _on_stt_language_quick_selected(self, lang_code: str):
         self.config["stt_language"] = lang_code
+        self.config["source_lang"] = lang_code
         self.save_config_cb(self.config)
         if hasattr(self, 'stt_thread') and self.stt_thread:
             self.stt_thread.update_config(self.config)
+        if hasattr(self, 'combo_source_lang'):
+            idx = self.combo_source_lang.findData(lang_code)
+            if idx >= 0 and self.combo_source_lang.currentIndex() != idx:
+                self.combo_source_lang.blockSignals(True)
+                self.combo_source_lang.setCurrentIndex(idx)
+                self.combo_source_lang.blockSignals(False)
         self._sync_all_pipeline_status()
 
     def _on_stt_model_quick_selected(self, model_id: str, refresh_menu_cb=None):
@@ -2223,6 +2230,26 @@ class ControlPanel(QWidget):
         badge_en.setStyleSheet(f"background-color: #1E293B; color: {COLOR_ACCENT_CYAN}; font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 4px;")
         orig_head.addWidget(lbl_orig_title)
         orig_head.addStretch(1)
+        if is_global():
+            from src.translator import LANGUAGE_NAMES
+            self.combo_source_lang = NoWheelComboBox()
+            self.combo_source_lang.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.combo_source_lang.setFixedHeight(28)
+            self.combo_source_lang.setMinimumWidth(120)
+            self.combo_source_lang.setToolTip(tr("source_lang_label"))
+            current_source = str(self.config.get("source_lang") or self.config.get("stt_language") or "auto").strip().lower().split("-")[0]
+            self.combo_source_lang.addItem(tr("source_lang_auto"), "auto")
+            for code in LANGUAGE_NAMES:
+                self.combo_source_lang.addItem(UI_LANGUAGE_NAMES.get(code, code), code)
+            source_index = self.combo_source_lang.findData(current_source)
+            if source_index < 0:
+                self.combo_source_lang.addItem(current_source.upper(), current_source)
+                source_index = self.combo_source_lang.findData(current_source)
+            self.combo_source_lang.blockSignals(True)
+            self.combo_source_lang.setCurrentIndex(max(0, source_index))
+            self.combo_source_lang.blockSignals(False)
+            self.combo_source_lang.currentIndexChanged.connect(self._on_source_lang_changed)
+            orig_head.addWidget(self.combo_source_lang)
         orig_head.addWidget(badge_en)
         orig_layout.addLayout(orig_head)
 
@@ -5888,8 +5915,35 @@ class ControlPanel(QWidget):
             self._refresh_audio_devices()
         if hasattr(self, "_populate_models"):
             self._populate_models()
+        if hasattr(self, "combo_source_lang"):
+            self.combo_source_lang.setToolTip(tr("source_lang_label"))
+            current_src = self.combo_source_lang.currentData()
+            self.combo_source_lang.blockSignals(True)
+            self.combo_source_lang.clear()
+            self.combo_source_lang.addItem(tr("source_lang_auto"), "auto")
+            from src.translator import LANGUAGE_NAMES
+            for code in LANGUAGE_NAMES:
+                self.combo_source_lang.addItem(UI_LANGUAGE_NAMES.get(code, code), code)
+            src_index = self.combo_source_lang.findData(current_src)
+            if src_index < 0 and current_src:
+                self.combo_source_lang.addItem(str(current_src).upper(), current_src)
+                src_index = self.combo_source_lang.findData(current_src)
+            self.combo_source_lang.setCurrentIndex(max(0, src_index))
+            self.combo_source_lang.blockSignals(False)
         if hasattr(self, "combo_target_lang"):
             self.combo_target_lang.setToolTip(tr("target_lang_label"))
+            current_tgt = self.combo_target_lang.currentData()
+            self.combo_target_lang.blockSignals(True)
+            self.combo_target_lang.clear()
+            from src.translator import LANGUAGE_NAMES
+            for code in LANGUAGE_NAMES:
+                self.combo_target_lang.addItem(UI_LANGUAGE_NAMES.get(code, code), code)
+            tgt_index = self.combo_target_lang.findData(current_tgt)
+            if tgt_index < 0 and current_tgt:
+                self.combo_target_lang.addItem(str(current_tgt).upper(), current_tgt)
+                tgt_index = self.combo_target_lang.findData(current_tgt)
+            self.combo_target_lang.setCurrentIndex(max(0, tgt_index))
+            self.combo_target_lang.blockSignals(False)
         if hasattr(self, "combo_ui_lang"):
             self.combo_ui_lang.setToolTip(tr("ui_lang_label"))
         if hasattr(self, "quick_presets_layout"):
@@ -5944,6 +5998,31 @@ class ControlPanel(QWidget):
         self.save_config_cb(self.config)
         self._apply_ui_language()
 
+    def _on_source_lang_changed(self, index):
+        if index < 0 or not hasattr(self, "combo_source_lang"):
+            return
+        code = self.combo_source_lang.itemData(index)
+        if not code:
+            return
+        self.config["source_lang"] = code
+        self.config["stt_language"] = code
+        self.save_config_cb(self.config)
+        if getattr(self, "stt_thread", None) is not None and hasattr(self.stt_thread, "update_config"):
+            self.stt_thread.update_config(self.config)
+        else:
+            translator = getattr(getattr(self, "stt_thread", None), "translator", None)
+            if translator is not None and hasattr(translator, "update_config"):
+                translator.update_config(self.config)
+        sw_translator = getattr(getattr(self, "screen_worker", None), "translator", None)
+        if sw_translator is not None and hasattr(sw_translator, "update_config"):
+            sw_translator.update_config(self.config)
+        if getattr(self, "overlay", None) is not None and hasattr(self.overlay, "config"):
+            self.overlay.config["source_lang"] = code
+        if getattr(self, "screen_overlay", None) is not None and hasattr(self.screen_overlay, "config"):
+            self.screen_overlay.config["source_lang"] = code
+        if hasattr(self, "_sync_all_pipeline_status"):
+            self._sync_all_pipeline_status()
+
     def _on_target_lang_changed(self, index):
         if index < 0 or not hasattr(self, "combo_target_lang"):
             return
@@ -5955,10 +6034,15 @@ class ControlPanel(QWidget):
         translator = getattr(getattr(self, "stt_thread", None), "translator", None)
         if translator is not None and hasattr(translator, "update_config"):
             translator.update_config(self.config)
+        sw_translator = getattr(getattr(self, "screen_worker", None), "translator", None)
+        if sw_translator is not None and hasattr(sw_translator, "update_config"):
+            sw_translator.update_config(self.config)
         if getattr(self, "overlay", None) is not None and hasattr(self.overlay, "config"):
             self.overlay.config["target_lang"] = code
         if getattr(self, "screen_overlay", None) is not None and hasattr(self.screen_overlay, "config"):
             self.screen_overlay.config["target_lang"] = code
+        if hasattr(self, "_sync_all_pipeline_status"):
+            self._sync_all_pipeline_status()
 
     def _subtitle_export_filename(self, filter_mode, extension, fallback_map):
         from src.product import get_product

@@ -95,7 +95,12 @@ class PreProcessingContext:
             blocks.append(f"[자막 스타일]: {self.tone_and_style}")
         glossary_items = self._filter_glossary_for_text(target_text) if target_text is not None else self.glossary
         if glossary_items:
-            src_name = "영어" if source_lang.lower() == "en" else source_lang.upper()
+            if str(source_lang or "").strip().lower() in ("auto", "none", ""):
+                src_name = "원문"
+            elif source_lang.lower() == "en":
+                src_name = "영어"
+            else:
+                src_name = source_lang.upper()
             tgt_name = "한국어" if target_lang.lower() == "ko" else target_lang.upper()
             table = [
                 "[필수 준수 용어집 (Glossary)]:",

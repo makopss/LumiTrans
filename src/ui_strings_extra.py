@@ -603,6 +603,8 @@ _T = {
 "splash_prep_control_panel": _t2("컨트롤 패널을 만드는 중...", "Creating control panel..."),
 "splash_prep_audio_capture": _t2("오디오 캡처를 준비하는 중...", "Preparing audio capture..."),
 "splash_start_pipeline": _t2("통역 파이프라인을 시작하는 중...", "Starting translation pipeline..."),
+"source_lang_label": ("음성/원문 언어 (출발 언어)", "Source language (speech/original)", "音声・原文言語（出発言語）", "语音/原文语言（源语言）", "Idioma de origen", "Langue source", "Ausgangssprache", "Idioma de origem", "Исходный язык", "Lingua di origine", "Ngôn ngữ nguồn", "ภาษาต้นทาง", "Bahasa sumber", "اللغة المصدر", "स्रोत भाषा"),
+"source_lang_auto": ("🌐 자동 감지", "🌐 Auto detect", "🌐 自動検出", "🌐 自动检测", "🌐 Detección automática", "🌐 Détection auto", "🌐 Automatisch", "🌐 Detecção automática", "🌐 Автоопределение", "🌐 Rilevamento auto", "🌐 Tự động phát hiện", "🌐 ตรวจจับอัตโนมัติ", "🌐 Deteksi otomatis", "🌐 اكتشاف تلقائي", "🌐 स्वतः पहचान"),
 }
 
 EXTRA_ROWS = [_row(key, values) for key, values in _T.items()]
