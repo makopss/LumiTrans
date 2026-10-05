@@ -175,6 +175,85 @@ class TestI18nNewTranslations(unittest.TestCase):
         self.assertTrue(fallback_inst)
         self.assertEqual(tr("badge_instant"), "Instant")
 
+    def test_speaker_names_and_status_localized(self):
+        from src.speaker_identifier import SpeakerIdentifier, localize_speaker_status
+        spk_id = SpeakerIdentifier(config={"speaker_diarization_enabled": True, "speaker_max_count": 4})
+
+        set_ui_language("ko")
+        self.assertEqual(spk_id.get_display_name("화자 1"), "화자 1")
+        self.assertEqual(spk_id.get_display_name("화자 미확정"), "화자 미확정")
+        self.assertEqual(spk_id.get_display_name("화자 확인 중"), "화자 확인 중")
+        self.assertEqual(spk_id.get_display_name("겹친 음성"), "겹친 음성")
+        self.assertEqual(localize_speaker_status("화자 모델 준비 중"), "화자 모델 준비 중")
+        self.assertEqual(localize_speaker_status("화자 교대 분석 작동 중"), "화자 교대 분석 작동 중")
+        self.assertEqual(localize_speaker_status("단일 발화 판정 · 교대 분석 꺼짐"), "단일 발화 판정 · 교대 분석 꺼짐")
+
+        set_ui_language("en")
+        self.assertEqual(spk_id.get_display_name("화자 1"), "Speaker 1")
+        self.assertEqual(spk_id.get_display_name("화자 미확정"), "Unconfirmed Speaker")
+        self.assertEqual(spk_id.get_display_name("화자 확인 중"), "Checking Speaker")
+        self.assertEqual(spk_id.get_display_name("겹친 음성"), "Overlapping Speech")
+        self.assertEqual(localize_speaker_status("화자 모델 준비 중"), "Preparing speaker model")
+        self.assertEqual(localize_speaker_status("화자 교대 분석 작동 중"), "Speaker change analysis active")
+        self.assertEqual(localize_speaker_status("단일 발화 판정 · 교대 분석 꺼짐"), "Single speech · Diarization off")
+
+    def test_stt_default_download_progress_localized(self):
+        from src.stt_model_manager import STTModelManager
+
+        set_ui_language("ko")
+        pct_ko, msg_ko = STTModelManager.get_last_progress("non_existent_model_id")
+        self.assertEqual(pct_ko, 0)
+        self.assertEqual(msg_ko, "다운로드 진행 중...")
+
+        set_ui_language("en")
+        pct_en, msg_en = STTModelManager.get_last_progress("non_existent_model_id")
+        self.assertEqual(pct_en, 0)
+        self.assertEqual(msg_en, "Download in progress...")
+
+    def test_overlay_windows_apply_ui_language(self):
+        from PyQt6.QtWidgets import QApplication
+        from src.overlay_window import SubtitleOverlay
+        from src.screen_overlay import ScreenSubtitleOverlay
+        from src.config import DEFAULT_CONFIG
+        import copy
+
+        app = QApplication.instance() or QApplication([])
+        cfg = copy.deepcopy(DEFAULT_CONFIG)
+
+        set_ui_language("ko")
+        audio_ov = SubtitleOverlay(cfg)
+        screen_ov = ScreenSubtitleOverlay(cfg)
+        try:
+            self.assertEqual(audio_ov.windowTitle(), "음성 번역 자막")
+            self.assertEqual(screen_ov.windowTitle(), "화면 번역 자막")
+
+            set_ui_language("en")
+            audio_ov._apply_ui_language()
+            screen_ov._apply_ui_language()
+
+            self.assertEqual(audio_ov.windowTitle(), "Voice subtitles")
+            self.assertIn("Audio Translation", audio_ov.title_label.text())
+            self.assertIn("Control Panel", audio_ov.btn_settings.toolTip())
+
+            self.assertEqual(screen_ov.windowTitle(), "Screen subtitles")
+            self.assertIn("Screen Translation", screen_ov.title_label.text())
+            self.assertIn("Pin", screen_ov.btn_pin.toolTip())
+
+            set_ui_language("ko")
+            audio_ov._apply_ui_language()
+            screen_ov._apply_ui_language()
+
+            self.assertEqual(audio_ov.windowTitle(), "음성 번역 자막")
+            self.assertIn("음성 번역", audio_ov.title_label.text())
+            self.assertIn("컨트롤 패널", audio_ov.btn_settings.toolTip())
+
+            self.assertEqual(screen_ov.windowTitle(), "화면 번역 자막")
+            self.assertIn("화면 번역", screen_ov.title_label.text())
+            self.assertIn("고정", screen_ov.btn_pin.toolTip())
+        finally:
+            audio_ov.close()
+            screen_ov.close()
+
 
 if __name__ == "__main__":
     unittest.main()

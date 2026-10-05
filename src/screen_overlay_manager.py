@@ -291,6 +291,11 @@ class ScreenOverlayManager(QObject):
         for o in self.overlays:
             o._apply_config(apply_geometry=apply_geometry)
 
+    def _apply_ui_language(self):
+        for o in self.overlays:
+            if hasattr(o, "_apply_ui_language"):
+                o._apply_ui_language()
+
     def update(self):
         for o in self.overlays:
             o.update()

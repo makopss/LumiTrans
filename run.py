@@ -205,6 +205,8 @@ def main():
     # 설정 로드
     splash.set_message("환경 설정을 불러오는 중...", 34)
     config = load_config()
+    from src.i18n import set_ui_language
+    set_ui_language(config.get("ui_lang", "ko"))
 
     # 오디오 큐 생성
     audio_queue = queue.Queue(maxsize=32)

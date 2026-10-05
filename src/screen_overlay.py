@@ -681,6 +681,69 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._apply_two_line_overlay_height()
         self.update()
 
+    def _apply_ui_language(self):
+        self.setWindowTitle(tr("overlay_screen_title"))
+        cur_hk = self.config.get("inplace_hotkey", "F4")
+        if hasattr(self, "title_label") and self.title_label:
+            if not getattr(self, "is_click_through", False):
+                self.title_label.setText("👁️ " + tr("screen_translation"))
+            else:
+                self.title_label.setText(tr("overlay_click_through_active"))
+        if hasattr(self, "btn_pause") and self.btn_pause:
+            paused = getattr(self, "is_paused", False)
+            self.btn_pause.setToolTip(tr("overlay_pause_on") if paused else tr("overlay_pause_off"))
+        if hasattr(self, "btn_roi") and self.btn_roi:
+            self.btn_roi.setToolTip(tr("overlay_tip_roi"))
+        if hasattr(self, "btn_snap") and self.btn_snap:
+            self.btn_snap.setToolTip(tr("overlay_tip_snap"))
+        if hasattr(self, "btn_inplace") and self.btn_inplace:
+            self.btn_inplace.setToolTip(tr("overlay_tip_inplace", key=cur_hk))
+        if hasattr(self, "btn_snap_roi") and self.btn_snap_roi:
+            self.btn_snap_roi.setToolTip(tr("overlay_tip_snap_roi"))
+        if hasattr(self, "btn_border") and self.btn_border:
+            self.btn_border.setToolTip(tr("overlay_tip_border"))
+        if hasattr(self, "btn_clean") and self.btn_clean:
+            self.btn_clean.setToolTip(tr("overlay_tip_clean"))
+        if hasattr(self, "live_badge") and self.live_badge:
+            if self.live_badge.text() in ("대기 중", "Waiting...", "準備中"):
+                self.live_badge.setText(tr("overlay_waiting"))
+        if hasattr(self, "btn_font_dec") and self.btn_font_dec:
+            font_size = self.config.get("screen_font_size", 22)
+            self.btn_font_dec.setToolTip(tr("overlay_tip_font_dec", size=font_size))
+        if hasattr(self, "btn_font_inc") and self.btn_font_inc:
+            font_size = self.config.get("screen_font_size", 22)
+            self.btn_font_inc.setToolTip(tr("overlay_tip_font_inc", size=font_size))
+        idx_key = str(getattr(self, 'assigned_roi_idx', 0))
+        roi_configs = self.config.get("roi_configs", {})
+        roi_specific_cfg = roi_configs.get(idx_key, {}) if isinstance(roi_configs, dict) else {}
+        if "opacity" in roi_specific_cfg:
+            cur_op_pct = int(roi_specific_cfg["opacity"])
+        else:
+            cur_op_pct = int(self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75)) * 100)
+        if hasattr(self, "btn_op_dec") and self.btn_op_dec:
+            self.btn_op_dec.setToolTip(tr("overlay_tip_op_dec_100", pct=cur_op_pct) if cur_op_pct == 0 else tr("overlay_tip_op_dec", pct=cur_op_pct))
+        if hasattr(self, "btn_op_inc") and self.btn_op_inc:
+            self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=cur_op_pct))
+        if hasattr(self, "_update_en_ko_button_styles"):
+            self._update_en_ko_button_styles()
+        if hasattr(self, "_update_speaker_button_style"):
+            self._update_speaker_button_style()
+        if hasattr(self, "_update_clean_button_style"):
+            self._update_clean_button_style()
+        if hasattr(self, "btn_pin") and self.btn_pin:
+            is_pinned = getattr(self, "is_pinned", False)
+            self.btn_pin.setToolTip(tr("overlay_tip_pin_pinned") if is_pinned else tr("overlay_tip_pin_unpinned"))
+        if hasattr(self, "btn_lock") and self.btn_lock:
+            self.btn_lock.setToolTip(tr("overlay_tip_lock"))
+        if hasattr(self, "btn_settings") and self.btn_settings:
+            self.btn_settings.setToolTip(tr("overlay_tip_settings"))
+        if hasattr(self, "btn_hide") and self.btn_hide:
+            self.btn_hide.setToolTip(tr("overlay_tip_hide"))
+        if hasattr(self, "label_translated") and self.label_translated:
+            if not getattr(self, "current_translated", None):
+                self._set_label_html(self.label_translated, tr("overlay_screen_placeholder"), "#FFFFFF")
+        self.update()
+
     def update_duration(self, val: int):
         self.config["screen_subtitle_duration"] = val
         self._apply_config(apply_geometry=False)

@@ -47,7 +47,12 @@ class SpeakerRecognition:
         self._segmentation_signature = signature
 
     def get_status(self):
-        return self._status if self.is_enabled else '화자 분리 꺼짐'
+        raw = self._status if self.is_enabled else '화자 분리 꺼짐'
+        try:
+            from .speaker_identifier import localize_speaker_status
+            return localize_speaker_status(raw)
+        except Exception:
+            return raw
 
     def set_audio_context(self, start_sample=None, session_id=None):
         """Metadata belongs to the next captured chunk, not processing time."""
@@ -118,8 +123,8 @@ class SpeakerRecognition:
         self.last_decision = {'state': state, 'reason': reason}
         # Prevent OCR from assigning the preceding person's name to new speech.
         self.last_active_speaker = None
-        self.last_active_time = 0.0
-        label = {'pending': '화자 확인 중', 'overlap': '겹친 음성'}.get(state, '화자 미확정')
+        from src.i18n import tr
+        label = {'pending': tr('speaker_pending'), 'overlap': tr('speaker_overlap')}.get(state, tr('speaker_unconfirmed'))
         return 0, label, UNKNOWN_COLOR
 
     def _get_fallback_speaker(self):

@@ -551,7 +551,7 @@ class STTWorker(threading.Thread):
         if local < 1:
             return None
         if local > max_n:
-            return 0, '화자 미확정', '#AAB2C0'
+            return 0, tr('speaker_unconfirmed'), '#AAB2C0'
         name = f'화자 {local}'
         return local, name, SPEAKER_COLORS[(local - 1) % len(SPEAKER_COLORS)]
 
@@ -1438,7 +1438,7 @@ class STTWorker(threading.Thread):
                     if spk_info and self.config.get("speaker_diarization_enabled", False):
                         spk_num, spk_name, spk_color = spk_info[:3]
                         raw_name = f"화자 {spk_num}"
-                        latest_display_name = self.speaker_identifier.get_display_name(raw_name) if self.speaker_identifier and spk_num > 0 else spk_name
+                        latest_display_name = self.speaker_identifier.get_display_name(raw_name) if self.speaker_identifier and spk_num > 0 else (self.speaker_identifier.get_display_name(spk_name) if self.speaker_identifier else spk_name)
                         display_orig = f"<span style='color: {spk_color}; font-weight: bold;'>[{latest_display_name}]</span> {normalized_text}"
                         display_trans = f"<span style='color: {spk_color}; font-weight: bold;'>[{latest_display_name}]</span> {translated}"
 
@@ -1651,7 +1651,7 @@ class STTWorker(threading.Thread):
                                     preview_text = accumulated
                                     if cur_spk and self.config.get("speaker_diarization_enabled", False):
                                         _, s_name, s_col = cur_spk[:3]
-                                        latest_name = self.speaker_identifier.get_display_name(f"화자 {cur_spk[0]}") if self.speaker_identifier and cur_spk[0] > 0 else s_name
+                                        latest_name = self.speaker_identifier.get_display_name(f"화자 {cur_spk[0]}") if self.speaker_identifier and cur_spk[0] > 0 else (self.speaker_identifier.get_display_name(s_name) if self.speaker_identifier else s_name)
                                         preview_text = f"<span style='color: {s_col}; font-weight: bold;'>[{latest_name}]</span> {accumulated}"
                                     self.preview_callback(preview_text, f"{stt_name} + {cur_trans}")
 

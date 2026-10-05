@@ -5,6 +5,7 @@ import time
 import threading
 import numpy as np
 from PyQt6.QtCore import QObject
+from src.i18n import tr
 from .speaker_recognition import SpeakerRecognition
 
 def _safe_print(msg: str):
@@ -17,6 +18,22 @@ def _safe_print(msg: str):
             print(msg.encode(enc, errors='replace').decode(enc, errors='replace'))
         except Exception:
             pass
+
+def localize_speaker_status(status_str: str) -> str:
+    if not status_str:
+        return ""
+    mapping = {
+        "화자 모델 준비 중": "speaker_model_prep",
+        "화자 분리 꺼짐": "speaker_off",
+        "화자 음성 모델 준비 중": "speaker_voice_prep",
+        "화자 교대 모델 준비 중": "speaker_segmentation_prep",
+        "화자 교대 분석 작동 중": "speaker_segmentation_active",
+        "단일 발화 판정 · 교대 분석 꺼짐": "speaker_single_speech_mode",
+    }
+    for ko_text, key in mapping.items():
+        if ko_text in status_str:
+            return tr(key)
+    return status_str
 
 # 화자별 고유 테마 색상 (어두운 배경/밝은 배경 모두에서 뛰어난 가독성)
 SPEAKER_COLORS = [
@@ -179,10 +196,21 @@ class SpeakerIdentifier(SpeakerRecognition, QObject):
         self._notify_speaker_updated()
 
     def get_display_name(self, spk_raw_name: str) -> str:
-        """화자 번호/이름에 매핑된 실명 반환 (없으면 원본 반환)"""
+        """화자 번호/이름에 매핑된 실명 반환 (없으면 언어별 기본 화자명 반환)"""
         with self.lock:
             alias = self.speaker_aliases.get(spk_raw_name, "")
-            return alias if alias else spk_raw_name
+            if alias:
+                return alias
+            if spk_raw_name in ("화자 미확정", "Unconfirmed Speaker", "Speaker Unconfirmed"):
+                return tr("speaker_unconfirmed")
+            if spk_raw_name in ("화자 확인 중", "Checking Speaker"):
+                return tr("speaker_pending")
+            if spk_raw_name in ("겹친 음성", "Overlapping Speech"):
+                return tr("speaker_overlap")
+            num = self._extract_speaker_number(spk_raw_name)
+            if num > 0:
+                return tr("speaker_num", n=num)
+            return spk_raw_name
 
     def map_external_speaker(self, deepgram_index, confirmed=False):
         """Deepgram 0-based 화자 ID를 최대 인원 안의 로컬 화자로 옮긴다.
@@ -200,7 +228,7 @@ class SpeakerIdentifier(SpeakerRecognition, QObject):
             return None
 
         local = dg + 1
-        unknown = (0, '화자 미확정', UNKNOWN_COLOR)
+        unknown = (0, tr('speaker_unconfirmed'), UNKNOWN_COLOR)
         is_new = False
         with self.lock:
             if local > self.max_speakers:
@@ -214,7 +242,7 @@ class SpeakerIdentifier(SpeakerRecognition, QObject):
                 self.last_active_time = time.time()
                 if raw_name not in self.speaker_color_map:
                     self.speaker_color_map[raw_name] = SPEAKER_COLORS[(local - 1) % len(SPEAKER_COLORS)]
-            display = self.speaker_aliases.get(raw_name) or raw_name
+            display = self.speaker_aliases.get(raw_name) or self.get_display_name(raw_name)
             color = self.speaker_color_map.get(raw_name, SPEAKER_COLORS[(local - 1) % len(SPEAKER_COLORS)])
         if confirmed and is_new:
             self._notify_speaker_updated()
@@ -331,7 +359,7 @@ class SpeakerIdentifier(SpeakerRecognition, QObject):
                 if num < 1 or num > self.max_speakers:
                     continue
                 alias = self.speaker_aliases.get(raw, "")
-                display = alias if alias else raw
+                display = alias if alias else self.get_display_name(raw)
                 color = self.speaker_color_map.get(raw, SPEAKER_COLORS[(num - 1) % len(SPEAKER_COLORS)])
                 muted = self.speaker_mutes.get(raw, False)
                 speakers.append({
@@ -350,7 +378,7 @@ class SpeakerIdentifier(SpeakerRecognition, QObject):
         with self.lock:
             res = {}
             for i in range(1, self.current_speaker_count + 1):
-                res[f"화자 {i}"] = self.speaker_aliases.get(f"화자 {i}", f"화자 {i}")
+                res[f"화자 {i}"] = self.speaker_aliases.get(f"화자 {i}", self.get_display_name(f"화자 {i}"))
             for k, v in self.speaker_aliases.items():
                 res[k] = v
             return res

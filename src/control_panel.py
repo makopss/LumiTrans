@@ -5565,7 +5565,8 @@ class ControlPanel(QWidget):
             return tr("speaker_live", count=int(self.config.get('speaker_max_count', 2)))
         identifier = getattr(self.stt_thread, 'speaker_identifier', None)
         if identifier and identifier.is_enabled:
-            return f'{tr("engine_local")} · {identifier.get_status()}'
+            from src.speaker_identifier import localize_speaker_status
+            return f'{tr("engine_local")} · {localize_speaker_status(identifier.get_status())}'
         return tr("speaker_wait")
 
     def refresh_speaker_mgmt_ui(self, force: bool = False):
@@ -5615,7 +5616,7 @@ class ControlPanel(QWidget):
 
             num_lbl = QLabel(str(spk.get("num", idx + 1)))
             num_lbl.setFixedWidth(16)
-            name_lbl = QLabel(spk_name)
+            name_lbl = QLabel(spk.get("display_name") or spk_name)
             name_lbl.setStyleSheet(f"font-weight: bold; color: {spk.get('color', COLOR_ACCENT_CYAN)};")
 
             select_cb = QPushButton(tr("select_speaker"))
@@ -5897,14 +5898,23 @@ class ControlPanel(QWidget):
             self._sync_all_pipeline_status()
         if hasattr(self, "_revert_engine_status"):
             self._revert_engine_status()
-        if getattr(self, "overlay", None) is not None and hasattr(self.overlay, "setWindowTitle"):
-            self.overlay.setWindowTitle(tr("overlay_audio_title"))
+        if getattr(self, "overlay", None) is not None:
+            if hasattr(self.overlay, "_apply_ui_language"):
+                self.overlay._apply_ui_language()
+            elif hasattr(self.overlay, "setWindowTitle"):
+                self.overlay.setWindowTitle(tr("overlay_audio_title"))
         screen_overlay = getattr(self, "screen_overlay", None)
         if getattr(self, "screen_overlay", None) is not None:
+            if hasattr(screen_overlay, "_apply_ui_language"):
+                screen_overlay._apply_ui_language()
             overlays = screen_overlay.get_overlays() if hasattr(screen_overlay, "get_overlays") else [screen_overlay]
             for window in overlays:
-                if hasattr(window, "setWindowTitle"):
+                if hasattr(window, "_apply_ui_language"):
+                    window._apply_ui_language()
+                elif hasattr(window, "setWindowTitle"):
                     window.setWindowTitle(tr("overlay_screen_title"))
+        if hasattr(self, "refresh_speaker_mgmt_ui"):
+            self.refresh_speaker_mgmt_ui(force=True)
         if hasattr(self, "screen_dialogue_table"):
             self.screen_dialogue_table.setHorizontalHeaderLabels([tr("original"), tr("translation")])
             self._update_mini_chat()

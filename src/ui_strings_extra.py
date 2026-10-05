@@ -386,6 +386,8 @@ _T = {
 "overlay_waiting": _t2("대기 중", "Waiting"),
 
 # Voice overlay & status keys
+"voice_translation": _t2("음성 번역", "Audio Translation"),
+"screen_translation": _t2("화면 번역", "Screen Translation"),
 "overlay_voice_tip": _t2("실시간 AI 음성 번역 자막 (드래그하여 이동)", "Real-time AI voice translation subtitles (Drag to move)"),
 "overlay_pause_toggle": _t2("번역 일시정지 / 다시 시작", "Pause / Resume translation"),
 "overlay_pause_voice_on": _t2("번역 일시정지됨 (클릭하여 다시 시작)", "Translation paused (Click to resume)"),
@@ -564,6 +566,17 @@ _T = {
 "download_in_progress": _t2("다운로드 진행 중...", "Download in progress..."),
 "cuda_pack_install_failed": _t2("CUDA 가속 팩 설치 실패: {error}", "Failed to install CUDA acceleration pack: {error}"),
 "download_server_error": _t2("다운로드 서버 응답 오류 (HTTP {code})", "Download server response error (HTTP {code})"),
+
+# Speaker name & status translations
+"speaker_num": _t2("화자 {n}", "Speaker {n}"),
+"speaker_unconfirmed": _t2("화자 미확정", "Unconfirmed Speaker"),
+"speaker_pending": _t2("화자 확인 중", "Checking Speaker"),
+"speaker_overlap": _t2("겹친 음성", "Overlapping Speech"),
+"speaker_model_prep": _t2("화자 모델 준비 중", "Preparing speaker model"),
+"speaker_voice_prep": _t2("화자 음성 모델 준비 중", "Preparing voice model"),
+"speaker_segmentation_prep": _t2("화자 교대 모델 준비 중", "Preparing segmentation model"),
+"speaker_segmentation_active": _t2("화자 교대 분석 작동 중", "Speaker change analysis active"),
+"speaker_single_speech_mode": _t2("단일 발화 판정 · 교대 분석 꺼짐", "Single speech · Diarization off"),
 }
 
 EXTRA_ROWS = [_row(key, values) for key, values in _T.items()]

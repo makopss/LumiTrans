@@ -495,7 +495,7 @@ class STTModelManager:
     @classmethod
     def get_last_progress(cls, model_id: str) -> Tuple[int, str]:
         """마지막 수신된 진행률 (percent, msg) 반환"""
-        return cls._last_progress.get(model_id, (0, "다운로드 진행 중..."))
+        return cls._last_progress.get(model_id, (0, tr("download_in_progress")))
 
     @classmethod
     def heal_snapshot_symlinks(cls, snapshot_dir: str) -> int:

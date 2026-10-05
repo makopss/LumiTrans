@@ -874,6 +874,50 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             if not isinstance(getattr(self, 'stroke_effect', None), ThickOutlineEffect) or getattr(self.stroke_effect, 'thickness', 0) != stroke_w:
                 self._apply_text_effect()
 
+    def _apply_ui_language(self):
+        self.setWindowTitle(tr("overlay_audio_title"))
+        if hasattr(self, "title_label") and self.title_label:
+            if not getattr(self, "is_click_through", False):
+                self.title_label.setText("🎤 " + tr("voice_translation"))
+            else:
+                self.title_label.setText(tr("overlay_click_through_active_voice"))
+            self.title_label.setToolTip(tr("overlay_voice_tip"))
+        if hasattr(self, "btn_pause") and self.btn_pause:
+            paused = getattr(self, "_audio_paused", False)
+            self.btn_pause.setToolTip(tr("overlay_pause_voice_on") if paused else tr("overlay_pause_toggle"))
+        if hasattr(self, "combo_engine") and self.combo_engine:
+            self.combo_engine.setToolTip(tr("overlay_tip_engine_combo"))
+        if hasattr(self, "live_badge") and self.live_badge:
+            self.live_badge.setToolTip(tr("overlay_tip_live_badge"))
+            if self.live_badge.text() in ("대기 중", "Waiting...", "準備中"):
+                self.live_badge.setText(tr("overlay_waiting"))
+            else:
+                self.update_live_display()
+        if hasattr(self, "btn_font_dec") and self.btn_font_dec:
+            self.btn_font_dec.setToolTip(tr("overlay_tip_font_dec", size=self.config.get("font_size", 22)))
+        if hasattr(self, "btn_font_inc") and self.btn_font_inc:
+            self.btn_font_inc.setToolTip(tr("overlay_tip_font_inc", size=self.config.get("font_size", 22)))
+        cur_op_pct = int(self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75)) * 100)
+        if hasattr(self, "btn_op_dec") and self.btn_op_dec:
+            self.btn_op_dec.setToolTip(tr("overlay_tip_op_dec_100", pct=cur_op_pct) if cur_op_pct == 0 else tr("overlay_tip_op_dec", pct=cur_op_pct))
+        if hasattr(self, "btn_op_inc") and self.btn_op_inc:
+            self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=cur_op_pct))
+        if hasattr(self, "_update_en_ko_button_styles"):
+            self._update_en_ko_button_styles()
+        if hasattr(self, "_update_clean_button_style"):
+            self._update_clean_button_style()
+        if hasattr(self, "_update_speaker_button_style"):
+            self._update_speaker_button_style()
+        if hasattr(self, "btn_settings") and self.btn_settings:
+            self.btn_settings.setToolTip(tr("overlay_tip_settings_detail"))
+        if hasattr(self, "btn_lock") and self.btn_lock:
+            self.btn_lock.setToolTip(tr("overlay_tip_lock_voice"))
+        if hasattr(self, "btn_hide") and self.btn_hide:
+            self.btn_hide.setToolTip(tr("overlay_tip_hide_voice"))
+        if hasattr(self, "label_translated") and self.label_translated:
+            if not getattr(self, "current_translated", None):
+                self._set_label_html(self.label_translated, tr("overlay_voice_placeholder"), "#FFFFFF")
+
         self.update()
 
     def toggle_live_badge_dimmed(self):
