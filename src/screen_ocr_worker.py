@@ -120,30 +120,26 @@ clean_ocr_english_text = clean_ocr_text
 
 
 def extract_speaker_and_dialogue(text: str) -> tuple[str, str]:
-    """텍스트에서 화자 이름(예: 'Alex:', '알렉스:', '[진행자]')과 순수 대사 본문을 분리합니다."""
+    """텍스트에서 화자 이름(예: 'Alex:', '알렉스:', '田中:', '[진행자]')과 순수 대사 본문을 분리합니다."""
     if not text:
         return "", ""
     t = text.strip()
 
     # 1. [화자명] 형태
-    m_bracket = re.match(r'^(?:<[^>]+>)*\s*\[([A-Za-z가-힣0-9\s]{1,20})\]\s*(?:<\/[^>]+>)*\s*[:：\-]?\s*(.+)$', t, re.DOTALL)
+    m_bracket = re.match(r'^(?:<[^>]+>)*\s*[\[【]([^\W_]{1,20}(?:\s+[^\W_]{1,20}){0,2})[\]】]\s*(?:<\/[^>]+>)*\s*[:：\-]?\s*(.+)$', t, re.DOTALL)
     if m_bracket:
         spk = m_bracket.group(1).strip()
         body = m_bracket.group(2).strip()
         if len(spk.split()) <= 3 and body:
             return spk, body
 
-    patterns = [
-        r'^[【\[\<\(]([A-Za-z0-9_\-\s]{2,24})[】\]\>\)]\s*[:：]?\s*(.*)$',
-        r'^([A-Za-z0-9_\-\s]{2,20})\s*[:：]\s+(.*)$'
-    ]
-
-    for p in patterns:
-        m = re.match(p, t)
-        if m:
-            speaker = m.group(1).strip()
-            dialogue = m.group(2).strip()
-            return speaker, dialogue
+    # 2. 화자명: 또는 화자명 - 형태
+    m_colon = re.match(r'^(?:<[^>]+>)*\s*([^\W_]{1,15}(?:\s+[^\W_]{1,15}){0,2})\s*(?:<\/[^>]+>)*\s*[:：\-]\s*(.+)$', t, re.DOTALL)
+    if m_colon:
+        spk = m_colon.group(1).strip()
+        body = m_colon.group(2).strip()
+        if body:
+            return spk, body
 
     return "", t
 

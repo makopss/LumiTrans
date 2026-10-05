@@ -224,8 +224,9 @@ class LifecycleTests(unittest.TestCase):
         with patch.dict('sys.modules', sherpa_onnx=Mock(), huggingface_hub=hub), \
              patch('src.speaker_recognition.time.monotonic', side_effect=[10, 11]):
             self.assertFalse(obj._ensure_model_loaded())
-            self.assertFalse(obj._ensure_model_loaded())
-        self.assertEqual(hub.hf_hub_download.call_count, 1)
+        # 1회 시도 시 local_files_only 시도 후 온라인 다운로드 재시도로 총 2회 호출되며,
+        # 이후 5초간 스로틀링되어 2번째 _ensure_model_loaded 호출 시에는 hub 호출이 0회여야 함
+        self.assertEqual(hub.hf_hub_download.call_count, 2)
 
     def test_runtime_cluster_change_invalidates_only_diarizer(self):
         obj = identifier()

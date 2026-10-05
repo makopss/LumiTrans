@@ -6020,6 +6020,9 @@ class ControlPanel(QWidget):
             self.overlay.config["source_lang"] = code
         if getattr(self, "screen_overlay", None) is not None and hasattr(self.screen_overlay, "config"):
             self.screen_overlay.config["source_lang"] = code
+        d_engine = getattr(self, "dubbing_engine", None)
+        if d_engine is not None and hasattr(d_engine, "update_config"):
+            d_engine.update_config(self.config)
         if hasattr(self, "_sync_all_pipeline_status"):
             self._sync_all_pipeline_status()
         self._check_multilingual_model_compatibility()
@@ -6042,6 +6045,11 @@ class ControlPanel(QWidget):
             self.overlay.config["target_lang"] = code
         if getattr(self, "screen_overlay", None) is not None and hasattr(self.screen_overlay, "config"):
             self.screen_overlay.config["target_lang"] = code
+        d_engine = getattr(self, "dubbing_engine", None)
+        if d_engine is not None and hasattr(d_engine, "update_config"):
+            d_engine.update_config(self.config)
+            if hasattr(d_engine, "clear_queue"):
+                d_engine.clear_queue()
         if hasattr(self, "_sync_all_pipeline_status"):
             self._sync_all_pipeline_status()
         self._check_multilingual_model_compatibility()

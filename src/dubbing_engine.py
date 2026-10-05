@@ -25,7 +25,198 @@ def _safe_print(msg: str):
         except Exception:
             pass
 
-# 한국어 지원 Edge-TTS 보이스 목록
+# 다국어 도착 언어(Target Language)별 Edge-TTS 표준 보이스 매트릭스
+# (남성 대표, 여성 대표, 보조 남성, 보조 여성)
+LANGUAGE_VOICE_MATRIX = {
+    "ko": {
+        "male_default": "ko-KR-InJoonNeural",
+        "female_default": "ko-KR-SunHiNeural",
+        "male_alt": "ko-KR-BongJinNeural",
+        "female_alt": "ko-KR-SeoHyeonNeural",
+        "names": {
+            "ko-KR-InJoonNeural": "인준 (남성 대표)",
+            "ko-KR-SunHiNeural": "선희 (여성 대표)",
+            "ko-KR-BongJinNeural": "봉진 (남성 보조)",
+            "ko-KR-SeoHyeonNeural": "서현 (여성 보조)",
+            "ko-KR-HyunsuMultilingualNeural": "현수 (남성 다국어)",
+        }
+    },
+    "en": {
+        "male_default": "en-US-GuyNeural",
+        "female_default": "en-US-JennyNeural",
+        "male_alt": "en-US-ChristopherNeural",
+        "female_alt": "en-US-AriaNeural",
+        "names": {
+            "en-US-GuyNeural": "Guy (Male Primary)",
+            "en-US-JennyNeural": "Jenny (Female Primary)",
+            "en-US-ChristopherNeural": "Christopher (Male Alt)",
+            "en-US-AriaNeural": "Aria (Female Alt)",
+        }
+    },
+    "ja": {
+        "male_default": "ja-JP-KeitaNeural",
+        "female_default": "ja-JP-NanamiNeural",
+        "male_alt": "ja-JP-DaichiNeural",
+        "female_alt": "ja-JP-AoiNeural",
+        "names": {
+            "ja-JP-KeitaNeural": "Keita (男性)",
+            "ja-JP-NanamiNeural": "Nanami (女性)",
+            "ja-JP-DaichiNeural": "Daichi (男性サブ)",
+            "ja-JP-AoiNeural": "Aoi (女性サブ)",
+        }
+    },
+    "zh": {
+        "male_default": "zh-CN-YunxiNeural",
+        "female_default": "zh-CN-XiaoxiaoNeural",
+        "male_alt": "zh-CN-YunjianNeural",
+        "female_alt": "zh-CN-XiaoyiNeural",
+        "names": {
+            "zh-CN-YunxiNeural": "云希 Yunxi (男声)",
+            "zh-CN-XiaoxiaoNeural": "晓晓 Xiaoxiao (女声)",
+            "zh-CN-YunjianNeural": "云健 Yunjian (男声副)",
+            "zh-CN-XiaoyiNeural": "晓伊 Xiaoyi (女声副)",
+        }
+    },
+    "es": {
+        "male_default": "es-ES-AlvaroNeural",
+        "female_default": "es-ES-ElviraNeural",
+        "male_alt": "es-MX-JorgeNeural",
+        "female_alt": "es-MX-DaliaNeural",
+        "names": {
+            "es-ES-AlvaroNeural": "Alvaro (Masculino)",
+            "es-ES-ElviraNeural": "Elvira (Femenino)",
+            "es-MX-JorgeNeural": "Jorge (Masculino México)",
+            "es-MX-DaliaNeural": "Dalia (Femenino México)",
+        }
+    },
+    "fr": {
+        "male_default": "fr-FR-HenriNeural",
+        "female_default": "fr-FR-DeniseNeural",
+        "male_alt": "fr-FR-AlainNeural",
+        "female_alt": "fr-FR-BrigitteNeural",
+        "names": {
+            "fr-FR-HenriNeural": "Henri (Masculin)",
+            "fr-FR-DeniseNeural": "Denise (Féminin)",
+            "fr-FR-AlainNeural": "Alain (Masculin alt)",
+            "fr-FR-BrigitteNeural": "Brigitte (Féminin alt)",
+        }
+    },
+    "de": {
+        "male_default": "de-DE-KillianNeural",
+        "female_default": "de-DE-KatjaNeural",
+        "male_alt": "de-DE-ConradNeural",
+        "female_alt": "de-DE-AmalaNeural",
+        "names": {
+            "de-DE-KillianNeural": "Killian (Männlich)",
+            "de-DE-KatjaNeural": "Katja (Weiblich)",
+            "de-DE-ConradNeural": "Conrad (Männlich alt)",
+            "de-DE-AmalaNeural": "Amala (Weiblich alt)",
+        }
+    },
+    "pt": {
+        "male_default": "pt-BR-AntonioNeural",
+        "female_default": "pt-BR-FranciscaNeural",
+        "male_alt": "pt-PT-DuarteNeural",
+        "female_alt": "pt-BR-BrendaNeural",
+        "names": {
+            "pt-BR-AntonioNeural": "Antonio (Masculino)",
+            "pt-BR-FranciscaNeural": "Francisca (Feminino)",
+            "pt-PT-DuarteNeural": "Duarte (Portugal)",
+            "pt-BR-BrendaNeural": "Brenda (Feminino)",
+        }
+    },
+    "ru": {
+        "male_default": "ru-RU-DmitryNeural",
+        "female_default": "ru-RU-SvetlanaNeural",
+        "male_alt": "ru-RU-DmitryNeural",
+        "female_alt": "ru-RU-DariyaNeural",
+        "names": {
+            "ru-RU-DmitryNeural": "Дмитрий (Мужской)",
+            "ru-RU-SvetlanaNeural": "Светлана (Женский)",
+            "ru-RU-DariyaNeural": "Дарья (Женский)",
+        }
+    },
+    "it": {
+        "male_default": "it-IT-DiegoNeural",
+        "female_default": "it-IT-ElsaNeural",
+        "male_alt": "it-IT-GiuseppeNeural",
+        "female_alt": "it-IT-IsabellaNeural",
+        "names": {
+            "it-IT-DiegoNeural": "Diego (Maschile)",
+            "it-IT-ElsaNeural": "Elsa (Femminile)",
+            "it-IT-GiuseppeNeural": "Giuseppe (Maschile)",
+            "it-IT-IsabellaNeural": "Isabella (Femminile)",
+        }
+    },
+    "vi": {
+        "male_default": "vi-VN-NamMinhNeural",
+        "female_default": "vi-VN-HoaiMyNeural",
+        "male_alt": "vi-VN-NamMinhNeural",
+        "female_alt": "vi-VN-HoaiMyNeural",
+        "names": {
+            "vi-VN-NamMinhNeural": "Nam Minh (Nam)",
+            "vi-VN-HoaiMyNeural": "Hoài My (Nữ)",
+        }
+    },
+    "th": {
+        "male_default": "th-TH-NiwatNeural",
+        "female_default": "th-TH-PremwadeeNeural",
+        "male_alt": "th-TH-NiwatNeural",
+        "female_alt": "th-TH-AcharaNeural",
+        "names": {
+            "th-TH-NiwatNeural": "Niwat (ชาย)",
+            "th-TH-PremwadeeNeural": "Premwadee (หญิง)",
+            "th-TH-AcharaNeural": "Achara (หญิง)",
+        }
+    },
+    "id": {
+        "male_default": "id-ID-ArdiNeural",
+        "female_default": "id-ID-GadisNeural",
+        "male_alt": "id-ID-ArdiNeural",
+        "female_alt": "id-ID-GadisNeural",
+        "names": {
+            "id-ID-ArdiNeural": "Ardi (Pria)",
+            "id-ID-GadisNeural": "Gadis (Wanita)",
+        }
+    },
+    "ar": {
+        "male_default": "ar-SA-HamedNeural",
+        "female_default": "ar-SA-ZariyahNeural",
+        "male_alt": "ar-SA-HamedNeural",
+        "female_alt": "ar-SA-ZariyahNeural",
+        "names": {
+            "ar-SA-HamedNeural": "حامد Hamed (ذكر)",
+            "ar-SA-ZariyahNeural": "زارية Zariyah (أنثى)",
+        }
+    },
+    "hi": {
+        "male_default": "hi-IN-MadhurNeural",
+        "female_default": "hi-IN-SwaraNeural",
+        "male_alt": "hi-IN-MadhurNeural",
+        "female_alt": "hi-IN-SwaraNeural",
+        "names": {
+            "hi-IN-MadhurNeural": "मधुर Madhur (पुरुष)",
+            "hi-IN-SwaraNeural": "स्वरा Swara (महिला)",
+        }
+    },
+}
+
+def get_voice_matrix_for_target(target_lang: str = "ko") -> dict:
+    """도착 언어(Target Language) 코드에 해당하는 음성 매트릭스 정보 반환"""
+    code = str(target_lang or "ko").strip().lower().split("-")[0]
+    return LANGUAGE_VOICE_MATRIX.get(code, LANGUAGE_VOICE_MATRIX["ko"])
+
+def get_available_voices(target_lang: str = "ko") -> list[tuple[str, str]]:
+    """도착 언어에 맞춘 선택 가능 보이스 목록 반환 (auto 포함)"""
+    code = str(target_lang or "ko").strip().lower().split("-")[0]
+    matrix = get_voice_matrix_for_target(code)
+    auto_desc = "자동 (이름/패턴 분석)" if code == "ko" else "Auto (Analyze context)"
+    items = [("auto", auto_desc)]
+    for voice_id, label in matrix.get("names", {}).items():
+        items.append((voice_id, label))
+    return items
+
+# 한국어 기본 보이스 (하위 호환성 유지)
 VOICE_FEMALE_DEFAULT = "ko-KR-SunHiNeural"          # 선희 (차분하고 자연스러운 여성)
 VOICE_MALE_DEFAULT = "ko-KR-InJoonNeural"           # 인준 (또렷하고 신뢰감 있는 남성)
 VOICE_MALE_ALT = "ko-KR-HyunsuMultilingualNeural"   # 현수 (젊고 개성 있는 남성)
@@ -37,15 +228,25 @@ AVAILABLE_VOICES = [
     (VOICE_MALE_ALT, "현수 (남성 다국어)"),
 ]
 
-# 성별/캐릭터 지능형 추론 정규표현식
+# 성별/캐릭터 지능형 추론 정규표현식 (한국어/영어/일본어/중국어/유럽어 통합)
 RE_MALE_KEYWORDS = re.compile(
-    r'\b(mr|sir|boy|guy|man|men|fella|dude|brother|father|son|soldier)\b|'
-    r'(아저씨|남성|남자|소년|군인|형|동생|아버지|아들)',
+    r'\b(mr|sir|boy|guy|man|men|fella|dude|brother|father|son|soldier|he|him|his)\b|'
+    r'\b(señor|chico|hombre|hermano|padre|hijo|soldado|él)\b|'
+    r'\b(monsieur|garçon|homme|frère|père|fils|soldat|lui)\b|'
+    r'\b(herr|junge|mann|bruder|vater|sohn|soldat|er)\b|'
+    r'(아저씨|남성|남자|소년|군인|형|동생|아버지|아들|그|오빠)|'
+    r'(おじさん|男性|男|少年|軍人|兄|弟|父|息子|彼)|'
+    r'(先生|男士|男孩|男人|兄弟|父亲|儿子|士兵|哥哥|弟弟|他)',
     re.IGNORECASE
 )
 RE_FEMALE_KEYWORDS = re.compile(
-    r'\b(ms|mrs|miss|woman|women|lady|girl|sister|mother|daughter)\b|'
-    r'(여성|여자|소녀|아가씨|누나|언니|어머니|엄마|딸|부인)',
+    r'\b(ms|mrs|miss|woman|women|lady|girl|sister|mother|daughter|she|her)\b|'
+    r'\b(señora|señorita|chica|mujer|hermana|madre|hija|ella)\b|'
+    r'\b(madame|mademoiselle|fille|femme|soeur|mère|elle)\b|'
+    r'\b(frau|mädchen|dame|schwester|mutter|tochter|sie)\b|'
+    r'(여성|여자|소녀|아가씨|누나|언니|어머니|엄마|딸|부인|그녀|이모|고모)|'
+    r'(女性|女|少女|お姉さん|母|娘|彼女|奥さん)|'
+    r'(女士|小姐|女人|女孩|姐妹|母亲|女儿|姐姐|妹妹|她)',
     re.IGNORECASE
 )
 
@@ -409,7 +610,7 @@ class DubbingEngine:
         t = text.strip()
 
         # 1. [화자명] 형태
-        m_bracket = re.match(r'^(?:<[^>]+>)*\s*\[([A-Za-z가-힣0-9\s]{1,20})\]\s*(?:<\/[^>]+>)*\s*[:：\-]?\s*(.+)$', t, re.DOTALL)
+        m_bracket = re.match(r'^(?:<[^>]+>)*\s*[\[【]([^\W_]{1,20}(?:\s+[^\W_]{1,20}){0,2})[\]】]\s*(?:<\/[^>]+>)*\s*[:：\-]?\s*(.+)$', t, re.DOTALL)
         if m_bracket:
             spk = m_bracket.group(1).strip()
             body = m_bracket.group(2).strip()
@@ -417,7 +618,7 @@ class DubbingEngine:
                 return spk, body
 
         # 2. 화자명: 또는 화자명 - 형태
-        m_colon = re.match(r'^(?:<[^>]+>)*\s*([A-Za-z가-힣0-9]{1,15}(?:\s+[A-Za-z가-힣0-9]{1,15}){0,2})\s*(?:<\/[^>]+>)*\s*[:：\-]\s*(.+)$', t, re.DOTALL)
+        m_colon = re.match(r'^(?:<[^>]+>)*\s*([^\W_]{1,15}(?:\s+[^\W_]{1,15}){0,2})\s*(?:<\/[^>]+>)*\s*[:：\-]\s*(.+)$', t, re.DOTALL)
         if m_colon:
             spk = m_colon.group(1).strip()
             body = m_colon.group(2).strip()
@@ -530,37 +731,48 @@ class DubbingEngine:
 
         return True
 
-    def _clean_korean_text(self, text: str) -> str:
-        """HTML 태그 제거, 화자 콜론 접두사 제거 및 TTS 발음 방해 특수문자 정제"""
+    def _clean_dialogue_text(self, text: str) -> str:
+        """HTML 태그 제거, 화자 콜론 접두사 제거 및 TTS 발음 방해 특수문자 정제 (다국어 공통)"""
         text = re.sub(r'<[^>]+>', '', text)  # HTML 태그 제거
         text = re.sub(r'\[.*?\]', '', text)  # [화자명] 제거
         text = re.sub(r'[\(\{\<].*?[\)\}\>]', '', text) # 괄호 속 내용 제거
-        # 혹시 남아있을 수 있는 화자 콜론 접두사("알렉스:", "Alex:") 확실히 제거
-        text = re.sub(r'^[A-Za-z가-힣0-9]{1,15}(?:\s+[A-Za-z가-힣0-9]{1,15}){0,2}\s*[:：\-]\s*', '', text)
+        # 화자 콜론 접두사("알렉스:", "Alex:", "田中:", "Maya:") 제거
+        text = re.sub(r'^[^\W_]{1,15}(?:\s+[^\W_]{1,15}){0,2}\s*[:：\-]\s*', '', text)
         text = re.sub(r'[:\-–—/\\_~*#]', ' ', text) # 발음 방해 기호 정리
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
+    _clean_korean_text = _clean_dialogue_text
+
     def resolve_voice_and_pitch(self, spk_raw: str, spk_display: str, orig_text: str) -> tuple[str, str]:
         """
-        화자 실명 및 원문 텍스트 패턴을 분석하여 최적의 Edge-TTS 음성과 피치(Hz) 반환.
-        반환 예: ('ko-KR-InJoonNeural', '-5Hz')
+        화자 실명 및 원문 텍스트 패턴, 그리고 도착 언어(target_lang)를 분석하여
+        해당 국가 언어에 최적화된 Edge-TTS 음성과 피치(Hz) 반환.
+        반환 예: ('ko-KR-InJoonNeural', '-5Hz'), ('en-US-GuyNeural', '-10Hz')
         """
+        target_lang = str(self.config.get("target_lang") or self.config.get("target") or "ko").strip().lower().split("-")[0]
+        voice_info = get_voice_matrix_for_target(target_lang)
+        default_male = voice_info["male_default"]
+        default_female = voice_info["female_default"]
+        alt_male = voice_info.get("male_alt", default_male)
+        alt_female = voice_info.get("female_alt", default_female)
+
         spk_voices = self.config.get("speaker_voices", {})
         if not spk_raw:
-            # No acoustic identity: do not infer a person's voice from dialogue.
-            return VOICE_MALE_DEFAULT, "+0Hz"
+            return default_male, "+0Hz"
         assigned_voice = spk_voices.get(spk_raw) or spk_voices.get(spk_display)
 
-        # 1. 수동 지정된 보이스가 있고 'auto'가 아니면 그대로 사용
+        # 1. 수동 지정된 보이스가 있고 'auto'가 아니면 검사
         if assigned_voice and assigned_voice != "auto":
-            return assigned_voice, "+0Hz"
+            assigned_prefix = assigned_voice.split("-")[0].lower()
+            if assigned_prefix == target_lang:
+                return assigned_voice, "+0Hz"
 
-        # 2. 지능형 자동 추론 (화자명 + 영문 원문 대사 패턴 매칭)
+        # 2. 지능형 자동 추론 (화자명 + 영문/다국어 원문 대사 패턴 매칭)
         context_str = f"{spk_raw} {spk_display} {orig_text}"
 
-        # 화자 번호 추출 (예: '화자 1' -> 1)
-        m_num = re.search(r'\d+', spk_raw)
+        # 화자 번호 추출 (예: '화자 1', 'Speaker 2' -> 1, 2)
+        m_num = re.search(r'\d+', str(spk_raw) + " " + str(spk_display))
         spk_num = int(m_num.group()) if m_num else 1
 
         is_male = False
@@ -571,7 +783,7 @@ class DubbingEngine:
         elif RE_MALE_KEYWORDS.search(context_str):
             is_male = True
         else:
-            # 패턴 매칭이 없으면 화자 번호 홀짝 기반 (1번: 남성, 2번: 여성 등)
+            # 패턴 매칭이 없으면 화자 번호 홀짝 기반 (1번: 남성1, 2번: 여성1, 3번: 남성2, 4번: 여성2)
             if spk_num % 2 == 1:
                 is_male = True
             else:
@@ -581,11 +793,13 @@ class DubbingEngine:
         pitch_offsets = ["-10Hz", "+0Hz", "+8Hz", "-5Hz", "+12Hz"]
         pitch = pitch_offsets[(spk_num - 1) % len(pitch_offsets)]
 
+        # 화자 번호 기반 1차/2차 보이스 배분 (1, 2번: 대표 보이스, 3, 4번: 보조 보이스 교대)
+        is_primary = (spk_num % 4) in (1, 2)
         if is_female:
-            return VOICE_FEMALE_DEFAULT, pitch
+            voice = default_female if is_primary else alt_female
+            return voice, pitch
         else:
-            # 남성 보이스 분배 (기본: 인준, 번호가 크면 현수)
-            voice = VOICE_MALE_DEFAULT if spk_num in (1, 3, 5, 7) else VOICE_MALE_ALT
+            voice = default_male if is_primary else alt_male
             return voice, pitch
 
     def _synth_loop(self):

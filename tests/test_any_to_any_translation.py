@@ -327,5 +327,149 @@ class TestControlPanelAnyToAny(unittest.TestCase):
         self.assertEqual(detect_script("你好世界", default_lang="en"), "zh")
 
 
+class TestMultilingualDubbing(unittest.TestCase):
+
+    def test_language_voice_matrix_coverage(self):
+        """15개 전 언어 Edge-TTS 음성 매트릭스 등록 및 필수 키 무결성 검증"""
+        from src.dubbing_engine import LANGUAGE_VOICE_MATRIX, get_voice_matrix_for_target, get_available_voices
+
+        expected_langs = ["ko", "en", "ja", "zh", "es", "fr", "de", "pt", "ru", "it", "vi", "th", "id", "ar", "hi"]
+        for lang in expected_langs:
+            self.assertIn(lang, LANGUAGE_VOICE_MATRIX)
+            entry = LANGUAGE_VOICE_MATRIX[lang]
+            self.assertIn("male_default", entry)
+            self.assertIn("female_default", entry)
+            self.assertIn("male_alt", entry)
+            self.assertIn("female_alt", entry)
+            self.assertIn("names", entry)
+            self.assertGreaterEqual(len(entry["names"]), 2)
+
+        # get_voice_matrix_for_target
+        en_matrix = get_voice_matrix_for_target("en")
+        self.assertEqual(en_matrix["male_default"], "en-US-GuyNeural")
+        self.assertEqual(en_matrix["female_default"], "en-US-JennyNeural")
+
+        ja_matrix = get_voice_matrix_for_target("ja")
+        self.assertEqual(ja_matrix["male_default"], "ja-JP-KeitaNeural")
+        self.assertEqual(ja_matrix["female_default"], "ja-JP-NanamiNeural")
+
+        # Unknown fallback
+        fallback = get_voice_matrix_for_target("unknown_lang")
+        self.assertEqual(fallback["male_default"], "ko-KR-InJoonNeural")
+
+        # get_available_voices
+        voices_es = get_available_voices("es")
+        self.assertTrue(any(v[0] == "auto" for v in voices_es))
+        self.assertTrue(any("Alvaro" in v[1] for v in voices_es))
+
+    def test_dubbing_engine_dynamic_voice_resolution(self):
+        """도착 언어(Target Language)별 화자 성별 및 번호 기반 보이스/피치 라우팅 검증"""
+        from src.dubbing_engine import DubbingEngine
+
+        engine = DubbingEngine({"dubbing_enabled": False, "target_lang": "en"})
+
+        # English routing:
+        # Speaker 1 -> male default GuyNeural, pitch offset -10Hz
+        v1, p1 = engine.resolve_voice_and_pitch("Speaker 1", "Speaker 1", "Hello there")
+        self.assertEqual(v1, "en-US-GuyNeural")
+        self.assertEqual(p1, "-10Hz")
+
+        # Speaker 2 -> female default JennyNeural, pitch offset +0Hz
+        v2, p2 = engine.resolve_voice_and_pitch("Speaker 2", "Speaker 2", "Nice to meet you")
+        self.assertEqual(v2, "en-US-JennyNeural")
+        self.assertEqual(p2, "+0Hz")
+
+        # Speaker 3 -> male alt ChristopherNeural, pitch offset +8Hz
+        v3, p3 = engine.resolve_voice_and_pitch("Speaker 3", "Speaker 3", "Look out!")
+        self.assertEqual(v3, "en-US-ChristopherNeural")
+        self.assertEqual(p3, "+8Hz")
+
+        # Speaker 4 -> female alt AriaNeural, pitch offset -5Hz
+        v4, p4 = engine.resolve_voice_and_pitch("Speaker 4", "Speaker 4", "I understand")
+        self.assertEqual(v4, "en-US-AriaNeural")
+        self.assertEqual(p4, "-5Hz")
+
+        # Context heuristics: female keyword in text
+        v_fem, _ = engine.resolve_voice_and_pitch("Speaker 1", "Speaker 1", "She is a young lady")
+        self.assertEqual(v_fem, "en-US-JennyNeural")
+
+        # Dynamic language change to Japanese
+        engine.update_config({"target_lang": "ja"})
+        v_ja1, _ = engine.resolve_voice_and_pitch("Speaker 1", "Speaker 1", "こんにちは")
+        self.assertEqual(v_ja1, "ja-JP-KeitaNeural")
+        v_ja2, _ = engine.resolve_voice_and_pitch("Speaker 2", "Speaker 2", "はじめまして")
+        self.assertEqual(v_ja2, "ja-JP-NanamiNeural")
+
+        # Dynamic language change to Spanish
+        engine.update_config({"target_lang": "es"})
+        v_es1, _ = engine.resolve_voice_and_pitch("Speaker 1", "Speaker 1", "Hola amigo")
+        self.assertEqual(v_es1, "es-ES-AlvaroNeural")
+
+        # Manual voice override matching vs mismatching target_lang
+        engine.update_config({
+            "target_lang": "ja",
+            "speaker_voices": {"Speaker 1": "ja-JP-DaichiNeural", "Speaker 2": "ko-KR-SunHiNeural"}
+        })
+        # Matching locale prefix ("ja") -> used directly
+        v_override_match, _ = engine.resolve_voice_and_pitch("Speaker 1", "Speaker 1", "こんにちは")
+        self.assertEqual(v_override_match, "ja-JP-DaichiNeural")
+        # Mismatched locale prefix ("ko" when target is "ja") -> auto adapts to Japanese native voice
+        v_override_mismatch, _ = engine.resolve_voice_and_pitch("Speaker 2", "Speaker 2", "はい")
+        self.assertEqual(v_override_mismatch, "ja-JP-NanamiNeural")
+
+        engine.stop()
+
+    def test_dubbing_dialogue_cleaning_multilingual(self):
+        """다국어 화자명 접두사 및 자막 노이즈 정제 검증"""
+        from src.dubbing_engine import DubbingEngine
+
+        engine = DubbingEngine({"dubbing_enabled": False})
+
+        # Multi-script prefixes
+        self.assertEqual(engine._clean_dialogue_text("Alex: Welcome everyone"), "Welcome everyone")
+        self.assertEqual(engine._clean_dialogue_text("알렉스: 어서오세요"), "어서오세요")
+        self.assertEqual(engine._clean_dialogue_text("田中: こんにちは"), "こんにちは")
+        self.assertEqual(engine._clean_dialogue_text("Алекс: Здравствуйте"), "Здравствуйте")
+        self.assertEqual(engine._clean_dialogue_text("<b>Bold text</b> [gasp] (whisper)"), "Bold text")
+
+        engine.stop()
+
+    def test_control_panel_target_lang_dubbing_sync(self):
+        """제어 패널에서 도착 언어 변경 시 더빙 엔진 설정 갱신 및 큐 플러시 검증"""
+        import os
+        from PyQt6.QtWidgets import QApplication
+        from src.control_panel import ControlPanel
+
+        app = QApplication.instance() or QApplication([])
+
+        mock_dubbing = MagicMock()
+        mock_save = MagicMock()
+        cfg = {"source_lang": "auto", "target_lang": "ko", "ui_lang": "ko"}
+
+        with patch.dict(os.environ, {"WISE_PRODUCT": "global", "QT_QPA_PLATFORM": "offscreen"}), \
+             patch("src.audio_capture.AudioLoopbackCapture.get_available_capture_sources", return_value=[]), \
+             patch("soundcard.all_speakers", return_value=[]), \
+             patch("src.process_volume.AudioDuckingManager", autospec=True):
+            cp = ControlPanel(
+                cfg,
+                overlay=None,
+                audio_thread=None,
+                stt_thread=None,
+                save_config_cb=mock_save,
+                dubbing_engine=mock_dubbing
+            )
+
+            # Trigger target language change to 'ja'
+            idx = cp.combo_target_lang.findData("ja")
+            self.assertGreaterEqual(idx, 0)
+            cp.combo_target_lang.setCurrentIndex(idx)
+            self.assertEqual(cp.config["target_lang"], "ja")
+            mock_dubbing.update_config.assert_called()
+            mock_dubbing.clear_queue.assert_called()
+
+            cp.close()
+
+
 if __name__ == "__main__":
     unittest.main()
+
