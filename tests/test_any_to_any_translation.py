@@ -470,6 +470,158 @@ class TestMultilingualDubbing(unittest.TestCase):
             cp.close()
 
 
+class TestPhase4GlobalUXAndI18n(unittest.TestCase):
+
+    def test_multilingual_smart_line_breaking(self):
+        """다국어 자막(일·중·유럽어 등) 문장 분절 및 스마트 줄바꿈 검증"""
+        from src.subtitle_manager import smart_break_sentences, break_subtitle_text
+
+        # 1. 일본어: 공백이 없어도 마침표(。) 뒤에서 자연스럽게 2줄 분할
+        ja_text = "こんにちは。よろしくお願いします。"
+        ja_res = smart_break_sentences(ja_text, linebreak="<br>")
+        self.assertEqual(ja_res, "こんにちは。<br>よろしくお願いします。")
+
+        # 2. 중국어: 공백이 없어도 마침표(。) 뒤에서 자연스럽게 2줄 분할 (실질적 복수 문장)
+        zh_text = "今天天气很好。明天也会很晴朗。"
+        zh_res = smart_break_sentences(zh_text, linebreak="<br>")
+        self.assertEqual(zh_res, "今天天气很好。<br>明天也会很晴朗。")
+
+        # 3. 스페인어: 실질적 복수 문장 분할
+        es_text = "El clima está muy agradable hoy. Mañana también estará soleado."
+        es_res = smart_break_sentences(es_text, linebreak="<br>")
+        self.assertEqual(es_res, "El clima está muy agradable hoy.<br>Mañana también estará soleado.")
+
+        # 4. 러시아어: 실질적 복수 문장 분할
+        ru_text = "Сегодня прекрасная погода. Завтра тоже будет солнечно."
+        ru_res = smart_break_sentences(ru_text, linebreak="<br>")
+        self.assertEqual(ru_res, "Сегодня прекрасная погода.<br>Завтра тоже будет солнечно.")
+
+        # 5. 독일어: 인사말 뒤 분할
+        de_text = "Guten Tag! Wie geht es Ihnen?"
+        de_res = smart_break_sentences(de_text, linebreak="<br>")
+        self.assertEqual(de_res, "Guten Tag!<br>Wie geht es Ihnen?")
+
+        # 6. 짧은 맞장구/인사말 1줄 보존
+        self.assertNotIn("<br>", smart_break_sentences("はい。そうです。", linebreak="<br>"))
+        self.assertNotIn("<br>", smart_break_sentences("你好。很高兴认识你。", linebreak="<br>"))
+        self.assertNotIn("<br>", smart_break_sentences("¡Hola! ¿Cómo estás hoy?", linebreak="<br>"))
+        self.assertNotIn("<br>", smart_break_sentences("Привет! Как ваши дела?", linebreak="<br>"))
+        self.assertNotIn("<br>", smart_break_sentences("Oui. C'est vrai.", linebreak="<br>"))
+
+        # 7. 단일 장문 쉼표 기준 균형 분할 (CJK 22자 초과 / 영문 48자 초과 시)
+        ja_long = "明日の朝までにこの仕事を絶対に終わらせなければならない、準備を急ごう。"
+        ja_long_res = smart_break_sentences(ja_long, linebreak="<br>")
+        self.assertIn("<br>", ja_long_res)
+        self.assertTrue(ja_long_res.startswith("明日の朝までにこの仕事を絶対に終わらせなければならない、<br>"))
+
+        en_long = "We need to finish this urgent report before the meeting starts, so please hurry up."
+        en_long_res = smart_break_sentences(en_long, linebreak="<br>")
+        self.assertIn("<br>", en_long_res)
+
+        # 8. break_subtitle_text 다국어 일원화 호출 검증
+        self.assertEqual(break_subtitle_text(ja_text, target_lang="ja", linebreak="<br>"), ja_res)
+
+    def test_15_ui_languages_activated(self):
+        """15개 언어 UI 카탈로그 및 셀렉터 등록 무결성 검증"""
+        from src.i18n import SUPPORTED_UI_LANGUAGES, UI_LANGUAGE_NAMES, supported_ui_languages
+        from src.ui_strings import CATALOGS, UI_LANGS
+
+        expected = ["ko", "en", "ja", "zh", "es", "fr", "de", "pt", "ru", "it", "vi", "th", "id", "ar", "hi"]
+
+        # 1. 15개 언어 모두 등록되어 있는지 확인
+        self.assertEqual(len(SUPPORTED_UI_LANGUAGES), 15)
+        for code in expected:
+            self.assertIn(code, SUPPORTED_UI_LANGUAGES)
+            self.assertIn(code, UI_LANGUAGE_NAMES)
+            self.assertIn(code, supported_ui_languages())
+            self.assertIn(code, CATALOGS)
+
+        # 2. 모든 언어 카탈로그가 영어 카탈로그와 동일한 수의 키를 갖는지 확인
+        en_keys = set(CATALOGS["en"].keys())
+        for code in expected:
+            self.assertEqual(set(CATALOGS[code].keys()), en_keys, f"언어 '{code}'의 키 누락 또는 불일치")
+
+    def test_detect_system_ui_language(self):
+        """Windows OS 로케일 감지 및 다국어 반환 검증"""
+        from src.i18n import detect_system_ui_language
+
+        # Mocking Windows GetUserDefaultLocaleName
+        mock_buf = MagicMock()
+        with patch("ctypes.windll.kernel32.GetUserDefaultLocaleName", return_value=1), \
+             patch("ctypes.create_unicode_buffer") as mock_create:
+
+            def set_mock_loc(loc_str):
+                m = MagicMock()
+                m.value = loc_str
+                mock_create.return_value = m
+
+            # 일본어 OS
+            set_mock_loc("ja-JP")
+            self.assertEqual(detect_system_ui_language(), "ja")
+
+            # 스페인어 OS
+            set_mock_loc("es-ES")
+            self.assertEqual(detect_system_ui_language(), "es")
+
+            # 독일어 OS
+            set_mock_loc("de-DE")
+            self.assertEqual(detect_system_ui_language(), "de")
+
+            # 프랑스어 OS
+            set_mock_loc("fr-FR")
+            self.assertEqual(detect_system_ui_language(), "fr")
+
+            # 한국어 OS
+            set_mock_loc("ko-KR")
+            self.assertEqual(detect_system_ui_language(), "ko")
+
+            # 중국어 OS
+            set_mock_loc("zh-CN")
+            self.assertEqual(detect_system_ui_language(), "zh")
+
+            # 알 수 없는 언어 (글로벌 모드 기본값: en)
+            set_mock_loc("xx-YY")
+            with patch("src.product.is_global", return_value=True):
+                self.assertEqual(detect_system_ui_language(), "en")
+
+    def test_control_panel_15_ui_language_combo(self):
+        """글로벌 에디션 제어 패널 상단에 15개 UI 언어가 모두 표시되는지 검증"""
+        import os
+        from PyQt6.QtWidgets import QApplication
+        from src.control_panel import ControlPanel
+        from src.i18n import UI_LANGUAGE_NAMES
+
+        app = QApplication.instance() or QApplication([])
+        cfg = {"ui_lang": "en", "source_lang": "auto", "target_lang": "en"}
+
+        with patch.dict(os.environ, {"WISE_PRODUCT": "global", "QT_QPA_PLATFORM": "offscreen"}), \
+             patch("src.audio_capture.AudioLoopbackCapture.get_available_capture_sources", return_value=[]), \
+             patch("soundcard.all_speakers", return_value=[]), \
+             patch("src.process_volume.AudioDuckingManager", autospec=True):
+            cp = ControlPanel(
+                cfg,
+                overlay=None,
+                audio_thread=None,
+                stt_thread=None,
+                save_config_cb=lambda c: None,
+            )
+
+            self.assertTrue(hasattr(cp, "combo_ui_lang"))
+            self.assertEqual(cp.combo_ui_lang.count(), 15)
+
+            items = [cp.combo_ui_lang.itemData(i) for i in range(cp.combo_ui_lang.count())]
+            for code in UI_LANGUAGE_NAMES:
+                self.assertIn(code, items)
+
+            # Switch UI to Japanese
+            ja_idx = cp.combo_ui_lang.findData("ja")
+            self.assertGreaterEqual(ja_idx, 0)
+            cp.combo_ui_lang.setCurrentIndex(ja_idx)
+            self.assertEqual(cp.config["ui_lang"], "ja")
+
+            cp.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 

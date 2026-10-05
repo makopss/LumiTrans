@@ -25,11 +25,6 @@ GLOBAL_PRESET_COPY = {
     },
 }
 
-SUPPORTED_UI_LANGUAGES = {
-    "ko": "한국어",
-    "en": "English",
-}
-
 UI_LANGUAGE_NAMES = {
     "ko": "한국어",
     "en": "English",
@@ -48,32 +43,43 @@ UI_LANGUAGE_NAMES = {
     "hi": "हिन्दी",
 }
 
+SUPPORTED_UI_LANGUAGES = UI_LANGUAGE_NAMES
+
 _forced_lang = None
 
 
 def detect_system_ui_language() -> str:
-    """Windows OS 언어를 감지하여 'ko' 또는 'en'을 반환한다."""
+    """Windows OS 언어를 감지하여 일치하는 15개국 언어 코드를 반환한다 (기본값 'en', 한국어 OS는 'ko')."""
+    raw_loc = ""
     try:
         import ctypes
         buf = ctypes.create_unicode_buffer(85)
         if ctypes.windll.kernel32.GetUserDefaultLocaleName(buf, 85) > 0:
-            loc = buf.value.lower()
-            if loc.startswith("ko"):
-                return "ko"
+            raw_loc = buf.value.lower()
     except Exception:
         pass
-    try:
-        import locale
-        loc = (locale.getlocale()[0] or "").lower()
-        if loc.startswith("ko") or loc.startswith("korean"):
-            return "ko"
-    except Exception:
-        pass
+    if not raw_loc:
+        try:
+            import locale
+            raw_loc = (locale.getlocale()[0] or "").lower()
+        except Exception:
+            pass
+
+    if raw_loc:
+        code = raw_loc.split("-")[0].split("_")[0]
+        if code in CATALOGS:
+            return code
+        if code.startswith("zh"):
+            return "zh"
+
+    from src.product import is_global as _check_global
+    if not _check_global():
+        return "ko"
     return "en"
 
 
 def supported_ui_languages():
-    return ("ko", "en")
+    return tuple(UI_LANGUAGE_NAMES.keys())
 
 
 def normalize_ui_language(code: str) -> str:

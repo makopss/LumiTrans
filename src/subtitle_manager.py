@@ -76,17 +76,18 @@ def plain_dialogue_text(text: str, speaker: str = "") -> str:
 _TAG_PLACEHOLDER = re.compile(r'\x00T(\d+)\x00')
 _HTML_TAG = re.compile(r'<[^>]+>')
 _SENTENCE_SPLIT_RE = re.compile(
-    r'(?<![.。\d])([.?!。？！]|(?:\.{2,}|。{2,}|…))([\"\'”’\)」』]*)(?:\s+|(?=[가-힣A-Za-z“\"\'(]))'
+    r'(?<![.。\d])([.?!。？！]|(?:\.{2,}|。{2,}|…))([\"\'”’\)」』]*)(?:\s+|(?=[^\W_“\"\'(「『]))'
 )
 _ABBREVIATIONS = {
     'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'sr.', 'jr.', 'vs.',
-    'etc.', 'e.g.', 'i.e.', 'st.', 'u.s.', 'co.', 'ltd.', 'inc.'
+    'etc.', 'e.g.', 'i.e.', 'st.', 'u.s.', 'co.', 'ltd.', 'inc.',
+    'sra.', 'srta.', 'm.', 'mme.', 'mlle.', 'hr.', 'fr.', 'dott.'
 }
 
 
 def smart_break_sentences(text: str, linebreak: str = "<br>", max_lines: int = 2) -> str:
-    """한글 및 영문 자막에서 짧은 맞장구나 단문(응., 네., Yes. 등)이 과도하게 줄바꿈되지 않도록
-    의미 단위와 문장 길이를 고려하여 지능적으로 줄을 나눈다 (최대 max_lines 줄 보장).
+    """한글, 영문 및 다국어(일·중·유럽어 등) 자막에서 짧은 맞장구나 단문이 과도하게 줄바꿈되지 않도록
+    언어별 의미 단위와 문장 길이를 고려하여 지능적으로 줄을 나눈다 (최대 max_lines 줄 보장).
     """
     if not text:
         return text
@@ -99,7 +100,7 @@ def smart_break_sentences(text: str, linebreak: str = "<br>", max_lines: int = 2
 
     protected = _HTML_TAG.sub(_protect, text)
 
-    # 2. 문장 부호 뒤 분할 후보 추출 (약어 및 소수점 보호)
+    # 2. 문장 부호 뒤 분할 후보 추출 (약어 및 소수점 보호, 다국어 문자 대응)
     splits = []
     last_idx = 0
     for m in _SENTENCE_SPLIT_RE.finditer(protected):
@@ -125,6 +126,28 @@ def smart_break_sentences(text: str, linebreak: str = "<br>", max_lines: int = 2
         return placeholders[int(match.group(1))]
 
     if len(splits) <= 1:
+        # 단일 장문인 경우 쉼표/구두점을 기준으로 균형 잡힌 2줄 분할 시도
+        single_text = splits[0] if splits else protected
+        cjk_count = len(re.findall(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', single_text))
+        threshold = 22 if cjk_count >= 6 else 48
+        if len(single_text) > threshold and max_lines >= 2:
+            mid = len(single_text) // 2
+            best_idx = -1
+            min_dist = float('inf')
+            min_head = 6 if cjk_count >= 6 else 10
+            min_tail = 5 if cjk_count >= 6 else 10
+            for m in re.finditer(r'([,，、;—]\s*|\s+-\s+)', single_text):
+                pos = m.end()
+                dist = abs(pos - mid)
+                if dist < min_dist and pos >= min_head and (len(single_text) - pos) >= min_tail:
+                    min_dist = dist
+                    best_idx = pos
+            if best_idx > 0:
+                p1 = single_text[:best_idx].strip()
+                p2 = single_text[best_idx:].strip()
+                if p1 and p2:
+                    joined = linebreak.join([p1, p2])
+                    return _TAG_PLACEHOLDER.sub(_restore, joined)
         return _TAG_PLACEHOLDER.sub(_restore, protected)
 
     # 3. 스마트 라인 조립
@@ -134,12 +157,15 @@ def smart_break_sentences(text: str, linebreak: str = "<br>", max_lines: int = 2
 
     def line_metrics(tokens):
         raw = " ".join(tokens)
-        clean = re.sub(r'\x00T\d+\x00|[^\w가-힣]', '', raw)
+        clean = re.sub(r'\x00T\d+\x00|[^\w]', '', raw)
         words = [w for w in raw.split() if not _TAG_PLACEHOLDER.fullmatch(w)]
-        return len(clean), len(words)
+        return len(clean), len(words), raw
 
-    def is_substantial(chars, words):
-        # 순수 글자 7자 이상이거나 3단어 이상이면 독립된 문장 분량으로 인정
+    def is_substantial(chars, words, raw_text=""):
+        # CJK(한자, 가나, 한글)는 4자 이상이면 온전한 절/문장 분량으로 인정
+        cjk_count = len(re.findall(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', raw_text))
+        if cjk_count >= 4:
+            return True
         return chars >= 7 or words >= 3
 
     for seg in splits:
@@ -147,13 +173,13 @@ def smart_break_sentences(text: str, linebreak: str = "<br>", max_lines: int = 2
             current_line.append(seg)
             continue
 
-        cur_chars, cur_words = line_metrics(current_line)
-        seg_chars, seg_words = line_metrics([seg])
+        cur_chars, cur_words, cur_raw = line_metrics(current_line)
+        seg_chars, seg_words, seg_raw = line_metrics([seg])
 
         can_break = (
             len(lines) + 1 < max_lines and
-            is_substantial(cur_chars, cur_words) and
-            is_substantial(seg_chars, seg_words)
+            is_substantial(cur_chars, cur_words, cur_raw) and
+            is_substantial(seg_chars, seg_words, seg_raw)
         )
 
         if can_break:
@@ -176,19 +202,19 @@ def break_korean_sentences(text: str, linebreak: str = "<br>") -> str:
 
 
 def break_plain_sentences(text: str, linebreak: str = "<br>", max_lines: int = 2) -> str:
-    """한국어가 아닌 자막은 마침표·물음표·느낌표 뒤에서만 줄을 나눈다."""
+    """비한국어 자막: 다국어 구두점(.!?。？！) 뒤에서 분할하고, 단일 장문은 쉼표에서 분할"""
     if not text:
         return text
-    parts = [part.strip() for part in re.split(r'(?<=[.!?])\s+', text.strip()) if part.strip()]
+    parts = [part.strip() for part in re.split(r'(?<=[.!?。？！])(?:\s+|(?=[^\W_]))', text.strip()) if part.strip()]
     if len(parts) <= 1:
-        return text
+        return smart_break_sentences(text, linebreak=linebreak, max_lines=max_lines)
     if len(parts) > max_lines:
         parts = parts[: max_lines - 1] + [" ".join(parts[max_lines - 1 :])]
     return linebreak.join(parts)
 
 
 def break_subtitle_text(text: str, target_lang: str = "ko", linebreak: str = "<br>") -> str:
-    """도착 언어가 한국어일 때만 한국어 줄바꿈을 쓴다."""
+    """도착 언어가 한국어일 때는 한국어 스마트 줄바꿈, 타 언어는 다국어 구두점/어절 줄바꿈 적용"""
     code = str(target_lang or "ko").strip().lower().split("-")[0]
     if code == "ko":
         return break_korean_sentences(text, linebreak=linebreak)
