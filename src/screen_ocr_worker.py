@@ -23,9 +23,28 @@ _COMMON_LONG_WORDS = {
     'absolutely', 'everything', 'anywhere', 'nowhere', 'somewhere', 'sometimes'
 }
 
-def clean_ocr_english_text(text: str) -> str:
+def is_valid_ocr_text(text: str) -> bool:
     """
-    영문 OCR 결과 지능형 정제:
+    OCR 텍스트가 의미 있는 발화/자막인지 검증:
+    - CJK(한자/가나/한글): 1~2자 이상이면 의미 있는 단어/표현 (예: 'はい', '敵', '전투')
+    - 라틴/키릴/태국/아랍/데바나가리 등 음소/알파벳 문자: 2자 이상
+    - 단순 기호, 점, 특수문자 잔해는 필터링
+    """
+    if not text or not text.strip():
+        return False
+    clean = text.strip()
+    cjk_letters = re.findall(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', clean)
+    if len(cjk_letters) >= 2:
+        return True
+    if len(cjk_letters) == 1 and len(clean) <= 2:
+        return True
+    letters = re.findall(r'[^\W\d_]', clean)
+    return len(letters) >= 2
+
+
+def clean_ocr_text(text: str) -> str:
+    """
+    다국어 및 영문 OCR 결과 지능형 정제:
     - 엉겨 붙은 영단어 띄어쓰기 분리 (wordninja) 및 경계 글자 자동 결합
     - 마침표(.)로 오인식된 쉼표(,) 보정 ('Now. this' -> 'Now, this')
     - 접속사/전환어 앞 마침표를 쉼표로 연결하여 문장 토막남 방지
@@ -42,7 +61,7 @@ def clean_ocr_english_text(text: str) -> str:
     text = re.sub(r'[·•■◆★~`^|]', ' ', text)
 
     # 2. 문장부호 뒤 띄어쓰기 보정 (예: 'Maya:Hello' -> 'Maya: Hello', 'again.to' -> 'again. to')
-    text = re.sub(r'([.,?!:;])([a-zA-Z])', r'\1 \2', text)
+    text = re.sub(r'([.,?!:;])([^\W\d_])', r'\1 \2', text)
 
     # 3. CamelCase 분리 (예: 'AlexChen' -> 'Alex Chen', 'inBerlin' -> 'in Berlin')
     text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
@@ -96,6 +115,9 @@ def clean_ocr_english_text(text: str) -> str:
     text = re.sub(r'\blam\b', 'I am', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
+
+clean_ocr_english_text = clean_ocr_text
+
 
 def extract_speaker_and_dialogue(text: str) -> tuple[str, str]:
     """텍스트에서 화자 이름(예: 'Alex:', '알렉스:', '[진행자]')과 순수 대사 본문을 분리합니다."""
@@ -287,10 +309,10 @@ class ScreenOCRWorker(threading.Thread):
             state["last_text"] = ""
             return
         sorted_lines = sorted(result, key=lambda r: (r[0][0][1] // 15, r[0][0][0]))
-        text = clean_ocr_english_text(" ".join(r[1].strip() for r in sorted_lines if r[1]))
+        text = clean_ocr_text(" ".join(r[1].strip() for r in sorted_lines if r[1]))
         if len(text) > 400:
             text = text[:400] + "..."
-        if len("".join(re.findall(r"[a-zA-Z]{2,}", text))) < 3:
+        if not is_valid_ocr_text(text):
             return
         # Preserve numbers, negation and names. Whitespace/case alone is harmless.
         normalized = " ".join(text.casefold().split())

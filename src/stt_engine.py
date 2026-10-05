@@ -1332,15 +1332,27 @@ class STTWorker(threading.Thread):
                     chunk_text = ""
 
                 # 자동 언어 감지 결과 피드백:
-                # 만약 Whisper가 영문 등으로 오판독했으나 실제 전사문에 일본어 가나가 포함되어 있다면 명백한 일본어임
+                # Whisper 오인식 보정 및 텍스트 문자 체계(Script) 기반 정밀 판정
                 detected_lang = getattr(info, "language", None)
-                if chunk_text and re.search(r'[\u3040-\u30ff]', chunk_text):
-                    detected_lang = "ja"
-                elif chunk_text and re.search(r'[\uac00-\ud7a3]', chunk_text):
-                    detected_lang = "ko"
+                if chunk_text:
+                    if re.search(r'[\u3040-\u30ff]', chunk_text):
+                        detected_lang = "ja"
+                    elif re.search(r'[\uac00-\ud7af\u1100-\u11ff]', chunk_text):
+                        detected_lang = "ko"
+                    elif re.search(r'[\u0400-\u04ff]', chunk_text):
+                        detected_lang = detected_lang if detected_lang in ("ru", "uk", "bg", "be", "sr") else "ru"
+                    elif re.search(r'[\u0600-\u06ff]', chunk_text):
+                        detected_lang = detected_lang if detected_lang in ("ar", "fa", "ur") else "ar"
+                    elif re.search(r'[\u0e00-\u0e7f]', chunk_text):
+                        detected_lang = "th"
+                    elif re.search(r'[\u0900-\u097f]', chunk_text):
+                        detected_lang = "hi"
+                    elif re.search(r'[\u4e00-\u9fff]', chunk_text) and detected_lang in ("zh", "yue", "en", None):
+                        detected_lang = "zh"
 
                 if detected_lang and getattr(self, "translator", None):
-                    if lang_param is None and getattr(self.translator, "source", "") != detected_lang:
+                    is_auto = getattr(self.translator, "is_auto_source", False) or lang_param is None
+                    if is_auto and getattr(self.translator, "source", "") != detected_lang:
                         self.translator.source = detected_lang
 
                 if chunk_text:

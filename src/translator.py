@@ -413,11 +413,38 @@ class RealtimeTranslator:
                             print(f"[번역 엔진 상호 폴백] Groq -> Gemini Flash 전환 성공: '{text[:20]}...'")
 
             elif engine in ("exaone", "exaone7b", "gemma", "hymt"):
+                from src.llm_model_manager import LLMModelManager
+
+                # 한-영 전용(Bilingual) 로컬 모델의 다국어 언어쌍 요청 시 지능형 라우팅/폴백
+                if LLMModelManager.is_bilingual_only(engine) and not LLMModelManager.is_language_pair_supported(engine, self.source, self.target):
+                    installed_multi = LLMModelManager.is_multilingual_model_installed(self.config.get("custom_model_dir"))
+                    if installed_multi == "hymt":
+                        print(f"[다국어 자동 라우팅] EXAONE은 한·영 전용 모델이므로 ({self.source}->{self.target}) 번역을 위해 Hy-MT2로 안전하게 자동 전환합니다.")
+                        result = self._translate_hymt(text)
+                        if result:
+                            used_engine = "Hy-MT2 1.8B (EXAONE 다국어 대체)"
+                    elif installed_multi == "gemma":
+                        print(f"[다국어 자동 라우팅] EXAONE은 한·영 전용 모델이므로 ({self.source}->{self.target}) 번역을 위해 TranslateGemma로 안전하게 자동 전환합니다.")
+                        result = self._translate_gemma(text)
+                        if result:
+                            used_engine = "TranslateGemma (EXAONE 다국어 대체)"
+
+                    if not result:
+                        print(f"[다국어 자동 라우팅] EXAONE은 한·영 전용 모델이므로 ({self.source}->{self.target}) 번역을 위해 Google로 안전하게 자동 전환합니다.")
+                        result = self._translate_google_mobile(text)
+                        if result:
+                            used_engine = "Google (EXAONE 다국어 대체)"
+                        else:
+                            groq_key = self.config.get("groq_api_key", "").strip()
+                            if groq_key:
+                                result = self._translate_groq(text, groq_key)
+                                if result:
+                                    used_engine = "Groq Qwen (EXAONE 다국어 대체)"
+
                 backend = self.config.get("llm_backend", "embedded")
 
                 # 올라마 설치 여부 검사: 올라마 백엔드 지정 시에만 유효성을 확인하여 불필요한 네트워크/프로세스 지연 방지
-                if backend == "ollama":
-                    from src.llm_model_manager import LLMModelManager
+                if not result and backend == "ollama":
                     from unittest.mock import Mock
                     is_mocked = isinstance(getattr(self, '_translate_ollama', None), Mock) or isinstance(getattr(getattr(self, 'session', None), 'post', None), Mock)
                     ollama_available = LLMModelManager.is_ollama_installed() or is_mocked
@@ -427,7 +454,7 @@ class RealtimeTranslator:
                         self.config["llm_backend"] = "embedded"
 
                 # 1. 사용자가 명시적으로 ollama 백엔드를 지정했고, 실제 올라마가 설치되어 있으며 쿨다운 상태가 아닐 때만 Ollama 우선 호출
-                if backend == "ollama" and time.monotonic() >= self._ollama_cooldown_until:
+                if not result and backend == "ollama" and time.monotonic() >= self._ollama_cooldown_until:
                     tag = {"exaone": "exaone3.5:2.4b",
                            "exaone7b": "exaone3.5:7.8b",
                            "gemma": "translategemma:4b",
@@ -466,7 +493,23 @@ class RealtimeTranslator:
 
             elif engine.startswith("ollama"):
                 tag = engine.split(":", 1)[1] if ":" in engine else self.config.get("selected_llm_model", "exaone3.5:2.4b")
-                if time.monotonic() >= self._ollama_cooldown_until:
+                from src.llm_model_manager import LLMModelManager
+                if LLMModelManager.is_bilingual_only(tag) and not LLMModelManager.is_language_pair_supported(tag, self.source, self.target):
+                    installed_multi = LLMModelManager.is_multilingual_model_installed(self.config.get("custom_model_dir"))
+                    if installed_multi == "hymt":
+                        result = self._translate_hymt(text)
+                        if result:
+                            used_engine = "Hy-MT2 1.8B (Ollama EXAONE 다국어 대체)"
+                    elif installed_multi == "gemma":
+                        result = self._translate_gemma(text)
+                        if result:
+                            used_engine = "TranslateGemma (Ollama EXAONE 다국어 대체)"
+                    if not result:
+                        result = self._translate_google_mobile(text)
+                        if result:
+                            used_engine = "Google (Ollama EXAONE 다국어 대체)"
+
+                if not result and time.monotonic() >= self._ollama_cooldown_until:
                     result = self._translate_ollama(text, tag)
                     if result:
                         used_engine = f"Ollama ({tag})"
@@ -958,6 +1001,10 @@ class RealtimeTranslator:
 
     def _translate_exaone(self, text: str, model_id: str = None) -> str:
         try:
+            from src.llm_model_manager import LLMModelManager
+            if not LLMModelManager.is_language_pair_supported("exaone", self.source, self.target):
+                print(f"[EXAONE 가드레일] EXAONE은 한·영 전용 모델이므로 ({self.source}->{self.target}) 번역을 수행하지 않고 폴백합니다.")
+                return ""
             llm = self._get_exaone(model_id=model_id)
             is_src_auto = self.is_auto_source
             src_ko = "원문" if is_src_auto else get_language_name(self.source, native=True)

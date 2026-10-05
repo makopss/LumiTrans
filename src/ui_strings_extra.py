@@ -605,6 +605,10 @@ _T = {
 "splash_start_pipeline": _t2("통역 파이프라인을 시작하는 중...", "Starting translation pipeline..."),
 "source_lang_label": ("음성/원문 언어 (출발 언어)", "Source language (speech/original)", "音声・原文言語（出発言語）", "语音/原文语言（源语言）", "Idioma de origen", "Langue source", "Ausgangssprache", "Idioma de origem", "Исходный язык", "Lingua di origine", "Ngôn ngữ nguồn", "ภาษาต้นทาง", "Bahasa sumber", "اللغة المصدر", "स्रोत भाषा"),
 "source_lang_auto": ("🌐 자동 감지", "🌐 Auto detect", "🌐 自動検出", "🌐 自动检测", "🌐 Detección automática", "🌐 Détection auto", "🌐 Automatisch", "🌐 Detecção automática", "🌐 Автоопределение", "🌐 Rilevamento auto", "🌐 Tự động phát hiện", "🌐 ตรวจจับอัตโนมัติ", "🌐 Deteksi otomatis", "🌐 اكتشاف تلقائي", "🌐 स्वतः पहचान"),
+"warn_exaone_bilingual_only": _t2("⚠️ EXAONE은 한·영 전용 모델입니다. 선택하신 언어 번역은 다국어 모델(Hy-MT2/TranslateGemma) 또는 Google 번역으로 자동 대체됩니다.", "⚠️ EXAONE is a Korean-English bilingual model. Translation for this language pair will automatically cascade to a multilingual model (Hy-MT2/TranslateGemma) or Google."),
+"warn_stt_english_only": _t2("💡 현재 선택된 STT 모델은 영어 전용입니다. 다른 언어 인식을 위해서는 다국어 모델(Whisper Small, Large-v3 Turbo 등)을 권장합니다.", "💡 The active STT model is English-only. For other languages, a multilingual model (e.g. Whisper Small, Large-v3 Turbo) is recommended."),
+"engine_bilingual_tag": _t2("(한·영 전용)", "(Bilingual KO·EN)"),
+"engine_multilingual_tag": _t2("(🌐 다국어)", "(🌐 Multilingual)"),
 }
 
 EXTRA_ROWS = [_row(key, values) for key, values in _T.items()]

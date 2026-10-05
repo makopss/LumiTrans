@@ -181,6 +181,24 @@ RECOMMENDED_GGUF_MODELS = [
     },
 ]
 
+# LLM 모델별 지원 언어 정의 (Bilingual vs Multilingual)
+# LG EXAONE은 한-영 특화 모델(영어, 한국어 양방향만 공식 지원)
+# TranslateGemma, Hy-MT2는 다국어 번역 특화 모델 (30~55개 이상 다국어 지원)
+LLM_SUPPORTED_LANGUAGES = {
+    "exaone": {"en", "ko"},
+    "exaone7b": {"en", "ko"},
+    "exaone3.5:2.4b": {"en", "ko"},
+    "exaone3.5:7.8b": {"en", "ko"},
+    "exaone-3.5-2.4b": {"en", "ko"},
+    "exaone-3.5-7.8b": {"en", "ko"},
+    "gemma": None,
+    "translategemma:4b": None,
+    "translategemma-4b": None,
+    "hymt": None,
+    "tencent/hy-mt2:1.8b": None,
+    "hymt-2-1.8b": None,
+}
+
 
 class OllamaPullSignals(QObject):
     progress_signal = pyqtSignal(str, int, str)   # tag, percent, status
@@ -1200,4 +1218,58 @@ class LLMModelManager:
             except Exception as e:
                 print(f"[LLMModelManager] 로컬 LLM CUDA 라이브러리 삭제 실패 (사용 중이면 재시작 후 다시 시도): {e}")
         return deleted
+
+    # -------------------------------------------------------------
+    # 4. 언어 지원 및 다국어 지능형 라우팅 메서드
+    # -------------------------------------------------------------
+    @classmethod
+    def is_bilingual_only(cls, engine_or_tag: str) -> bool:
+        """엔진 또는 태그가 한-영 전용(Bilingual) 모델인지 여부 반환"""
+        if not engine_or_tag:
+            return False
+        key = str(engine_or_tag).lower().strip()
+        return "exaone" in key
+
+    @classmethod
+    def is_language_pair_supported(cls, engine_or_tag: str, source: str, target: str) -> bool:
+        """
+        해당 LLM이 지정된 출발어/도착어 언어쌍을 지원하는지 검사.
+        - LG EXAONE: 한국어와 영어 간 양방향(en <-> ko)만 공식 지원
+        - TranslateGemma, Hy-MT2: 다국어(30~55개 언어) 전면 지원
+        """
+        if not engine_or_tag:
+            return True
+        key = str(engine_or_tag).lower().strip()
+        if cls.is_bilingual_only(key):
+            src = (source or "en").strip().lower().split("-")[0]
+            tgt = (target or "ko").strip().lower().split("-")[0]
+            if src != "auto" and src not in ("en", "ko"):
+                return False
+            if tgt not in ("en", "ko"):
+                return False
+            return True
+        return True
+
+    @classmethod
+    def is_multilingual_model_installed(cls, custom_dir: Optional[str] = None) -> Optional[str]:
+        """
+        설치된 로컬 다국어 모델(hymt 또는 gemma)이 있는지 검사하여 사용 가능한 엔진 ID('hymt' 또는 'gemma') 반환.
+        우선순위: 초경량 고속 전문 번역 Hy-MT2 -> 최고 품질 TranslateGemma
+        """
+        # 1. Hy-MT2 검사 (GGUF 또는 Ollama)
+        hymt_gguf = next((m for m in RECOMMENDED_GGUF_MODELS if m.get("id") == "hymt-2-1.8b"), None)
+        if hymt_gguf and cls.is_gguf_model_installed(hymt_gguf, custom_dir=custom_dir):
+            return "hymt"
+        if cls.is_ollama_model_installed("tencent/hy-mt2:1.8b"):
+            return "hymt"
+
+        # 2. TranslateGemma 검사 (GGUF 또는 Ollama)
+        gemma_gguf = next((m for m in RECOMMENDED_GGUF_MODELS if "translategemma" in m.get("id", "").lower()), None)
+        if gemma_gguf and cls.is_gguf_model_installed(gemma_gguf, custom_dir=custom_dir):
+            return "gemma"
+        if cls.is_ollama_model_installed("translategemma:4b"):
+            return "gemma"
+
+        return None
+
 

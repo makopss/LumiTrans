@@ -1985,10 +1985,10 @@ class ControlPanel(QWidget):
             ("groq", "Groq Qwen 27B"),
         ]
         local_engines = [
-            ("gemma", "TranslateGemma 4B"),
-            ("exaone", "EXAONE 3.5 2.4B"),
-            ("exaone7b", "EXAONE 3.5 7.8B"),
-            ("hymt", "Hy-MT2 1.8B"),
+            ("gemma", f"TranslateGemma 4B {tr('engine_multilingual_tag')}"),
+            ("exaone", f"EXAONE 3.5 2.4B {tr('engine_bilingual_tag')}"),
+            ("exaone7b", f"EXAONE 3.5 7.8B {tr('engine_bilingual_tag')}"),
+            ("hymt", f"Hy-MT2 1.8B {tr('engine_multilingual_tag')}"),
         ]
 
         act_h1 = menu.addAction(tr("online_cloud"))
@@ -6022,6 +6022,7 @@ class ControlPanel(QWidget):
             self.screen_overlay.config["source_lang"] = code
         if hasattr(self, "_sync_all_pipeline_status"):
             self._sync_all_pipeline_status()
+        self._check_multilingual_model_compatibility()
 
     def _on_target_lang_changed(self, index):
         if index < 0 or not hasattr(self, "combo_target_lang"):
@@ -6043,6 +6044,29 @@ class ControlPanel(QWidget):
             self.screen_overlay.config["target_lang"] = code
         if hasattr(self, "_sync_all_pipeline_status"):
             self._sync_all_pipeline_status()
+        self._check_multilingual_model_compatibility()
+
+    def _check_multilingual_model_compatibility(self):
+        """출발어/도착어 변경 시 로컬 LLM 및 STT 모델 호환성 점검 및 안내"""
+        src = str(self.config.get("source_lang", "auto")).strip().lower()
+        tgt = str(self.config.get("target_lang", "ko")).strip().lower()
+        eng = str(self.config.get("translation_engine", "google")).strip().lower()
+
+        from src.llm_model_manager import LLMModelManager
+        # 1. EXAONE 계열 한-영 전용 모델 호환성 경고
+        if LLMModelManager.is_bilingual_only(eng) and not LLMModelManager.is_language_pair_supported(eng, src, tgt):
+            msg = tr("warn_exaone_bilingual_only")
+            if hasattr(self, "update_engine_status"):
+                self.update_engine_status("ready", msg)
+
+        # 2. 로컬 STT 영어 전용 모델 경고 (출발어가 명시적 비영어일 때)
+        if src not in ("auto", "en", "") and self.config.get("stt_provider", "local") == "local":
+            from src.stt_model_manager import STTModelManager
+            model_sz = self.config.get("model_size", "distil-small.en")
+            if not STTModelManager.is_multilingual_model(model_sz, "local"):
+                msg = tr("warn_stt_english_only")
+                if hasattr(self, "update_engine_status"):
+                    self.update_engine_status("ready", msg)
 
     def _subtitle_export_filename(self, filter_mode, extension, fallback_map):
         from src.product import get_product

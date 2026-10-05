@@ -232,6 +232,100 @@ class TestControlPanelAnyToAny(unittest.TestCase):
 
             cp.close()
 
+    def test_screen_ocr_multilingual_filter(self):
+        """화면 OCR 다국어 텍스트 필터링 및 정제 검증"""
+        from src.screen_ocr_worker import is_valid_ocr_text, clean_ocr_text
+
+        # 1. 다국어 유효 텍스트 판별 (일본어, 중국어, 한국어, 러시아어, 태국어, 아랍어 등)
+        self.assertTrue(is_valid_ocr_text("こんにちは、元気ですか？"))
+        self.assertTrue(is_valid_ocr_text("敵")) # 단일 CJK 문자
+        self.assertTrue(is_valid_ocr_text("はい"))
+        self.assertTrue(is_valid_ocr_text("这是一个游戏字幕"))
+        self.assertTrue(is_valid_ocr_text("전투를 시작합니다"))
+        self.assertTrue(is_valid_ocr_text("Привет, мир!"))
+        self.assertTrue(is_valid_ocr_text("สวัสดีครับ"))
+        self.assertTrue(is_valid_ocr_text("Hello there"))
+
+        # 2. 노이즈 및 단순 기호 필터링
+        self.assertFalse(is_valid_ocr_text(""))
+        self.assertFalse(is_valid_ocr_text("..."))
+        self.assertFalse(is_valid_ocr_text("!#?"))
+        self.assertFalse(is_valid_ocr_text("12345"))
+        self.assertFalse(is_valid_ocr_text("a"))
+
+        # 3. clean_ocr_text 정제 검증
+        self.assertEqual(clean_ocr_text("Maya:Hello"), "Maya: Hello")
+        self.assertEqual(clean_ocr_text("Wait!Come here"), "Wait! Come here")
+
+    def test_exaone_bilingual_guard_and_smart_cascade(self):
+        """EXAONE 한-영 전용 모델의 다국어 언어쌍 요청 시 지능형 캐스케이드 검증"""
+        from src.llm_model_manager import LLMModelManager
+
+        # 1. 모델 언어쌍 지원 여부
+        self.assertTrue(LLMModelManager.is_bilingual_only("exaone"))
+        self.assertTrue(LLMModelManager.is_bilingual_only("exaone7b"))
+        self.assertFalse(LLMModelManager.is_bilingual_only("hymt"))
+        self.assertFalse(LLMModelManager.is_bilingual_only("gemma"))
+
+        self.assertTrue(LLMModelManager.is_language_pair_supported("exaone", "en", "ko"))
+        self.assertTrue(LLMModelManager.is_language_pair_supported("exaone", "ko", "en"))
+        self.assertTrue(LLMModelManager.is_language_pair_supported("exaone", "auto", "ko"))
+        self.assertFalse(LLMModelManager.is_language_pair_supported("exaone", "ja", "ko"))
+        self.assertFalse(LLMModelManager.is_language_pair_supported("exaone", "en", "es"))
+        self.assertFalse(LLMModelManager.is_language_pair_supported("exaone", "fr", "de"))
+
+        # 2. RealtimeTranslator에서 EXAONE 선택 상태에서 ja -> ko 번역 시 Hy-MT2로 자동 전환
+        t = RealtimeTranslator(config={"translation_engine": "exaone", "source_lang": "ja", "target_lang": "ko"})
+        
+        with patch.object(LLMModelManager, "is_multilingual_model_installed", return_value="hymt"), \
+             patch.object(t, "_translate_hymt", return_value="안녕하세요") as mock_hymt:
+            translated, engine = t.translate("こんにちは")
+            self.assertEqual(translated, "안녕하세요")
+            self.assertIn("Hy-MT2", engine)
+            self.assertIn("EXAONE 다국어 대체", engine)
+            mock_hymt.assert_called_once_with("こんにちは")
+
+        # 3. 로컬 다국어 모델이 없을 경우 Google로 자동 폴백
+        t.cache.clear()
+        with patch.object(LLMModelManager, "is_multilingual_model_installed", return_value=None), \
+             patch.object(t, "_translate_google_mobile", return_value="구글 번역 결과") as mock_google:
+            translated, engine = t.translate("さようなら")
+            self.assertEqual(translated, "구글 번역 결과")
+            self.assertIn("Google", engine)
+            self.assertIn("EXAONE 다국어 대체", engine)
+            mock_google.assert_called_once()
+
+    def test_stt_script_heuristics(self):
+        """STT 결과 텍스트 문자 체계(Script) 기반 정밀 언어 감지 검증"""
+        import re
+
+        def detect_script(chunk_text: str, default_lang: str = None) -> str:
+            detected_lang = default_lang
+            if chunk_text:
+                if re.search(r'[\u3040-\u30ff]', chunk_text):
+                    detected_lang = "ja"
+                elif re.search(r'[\uac00-\ud7af\u1100-\u11ff]', chunk_text):
+                    detected_lang = "ko"
+                elif re.search(r'[\u0400-\u04ff]', chunk_text):
+                    detected_lang = detected_lang if detected_lang in ("ru", "uk", "bg", "be", "sr") else "ru"
+                elif re.search(r'[\u0600-\u06ff]', chunk_text):
+                    detected_lang = detected_lang if detected_lang in ("ar", "fa", "ur") else "ar"
+                elif re.search(r'[\u0e00-\u0e7f]', chunk_text):
+                    detected_lang = "th"
+                elif re.search(r'[\u0900-\u097f]', chunk_text):
+                    detected_lang = "hi"
+                elif re.search(r'[\u4e00-\u9fff]', chunk_text) and detected_lang in ("zh", "yue", "en", None):
+                    detected_lang = "zh"
+            return detected_lang
+
+        self.assertEqual(detect_script("こんにちは", default_lang="en"), "ja")
+        self.assertEqual(detect_script("안녕하세요", default_lang="en"), "ko")
+        self.assertEqual(detect_script("Привет мир", default_lang="en"), "ru")
+        self.assertEqual(detect_script("สวัสดีครับ", default_lang="en"), "th")
+        self.assertEqual(detect_script("مرحبا", default_lang="en"), "ar")
+        self.assertEqual(detect_script("नमस्ते", default_lang="en"), "hi")
+        self.assertEqual(detect_script("你好世界", default_lang="en"), "zh")
+
 
 if __name__ == "__main__":
     unittest.main()
