@@ -427,13 +427,13 @@ class GGUFDownloadWorker(threading.Thread):
                 LLMModelManager.delete_gguf_model(self.model_info)
                 self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
             else:
-                self.finished_signal.emit(m_id, False, f"다운로드 실패: {e}")
+                self.finished_signal.emit(m_id, False, str(e))
         except Exception as e:
             if self._is_cancelled or "cancel" in str(e).lower():
                 LLMModelManager.delete_gguf_model(self.model_info)
                 self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
             else:
-                self.finished_signal.emit(m_id, False, f"다운로드 실패: {e}")
+                self.finished_signal.emit(m_id, False, str(e))
         finally:
             LLMModelManager.unregister_gguf_worker(m_id)
 
@@ -1108,7 +1108,8 @@ class LLMModelManager:
     @classmethod
     def llm_gpu_unavailable_reason(cls) -> str:
         from src.cuda_utils import llama_cuda_issue
-        return llama_cuda_issue("cu13") or "로컬 LLM GPU 가속 라이브러리가 설치되어 있지 않습니다."
+        from src.i18n import tr
+        return llama_cuda_issue("cu13") or tr("msg_no_cuda_lib")
 
     @classmethod
     def query_nvidia_compute_capability(cls):

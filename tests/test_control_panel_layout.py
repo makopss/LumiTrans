@@ -629,7 +629,8 @@ class TestControlPanelLayout(unittest.TestCase):
         self.assertGreater(self.panel.preset_container_widget.sizeHint().height(), self.panel.preset_scroll.height())
         self.assertGreater(self.panel.preset_scroll.verticalScrollBar().maximum(), 0)
 
-    def test_builtin_presets_ssot_and_hymt(self):
+    @patch("src.cuda_utils.is_nvidia_gpu_present", return_value=True)
+    def test_builtin_presets_ssot_and_hymt(self, _mock_gpu):
         """BUILTIN_PRESETS SSOT 단일화 및 Hy-MT2/저사양(CPU)/글로벌 다국어 연동 검증"""
         from src.config import BUILTIN_PRESETS, DEFAULT_CONFIG
 

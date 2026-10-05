@@ -1,5 +1,6 @@
 # Personal configuration and credentials (ship config.example.json instead)
 /config.json
+/config.global.json
 /.env
 /.env.*
 !/.env.example

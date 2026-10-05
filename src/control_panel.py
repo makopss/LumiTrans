@@ -30,7 +30,9 @@ from src.subtitle_manager import (
     SubtitleHistoryManager, SubtitleEntry, format_display_time,
     recent_screen_dialogues, clean_html_tags,
 )
-from src.config import BUILTIN_PRESETS, CONTENT_TEMPO_PRESETS, tempo_preset_desc, tempo_scope_caption, tempo_deepgram_notice, uses_local_tempo_vad
+from src.config import active_builtin_presets, CONTENT_TEMPO_PRESETS, tempo_preset_desc, tempo_scope_caption, tempo_deepgram_notice, uses_local_tempo_vad
+from src.i18n import ask, bind, is_cancel_message, refresh_texts, set_ui_language, tell, tr, ui_language, UI_LANGUAGE_NAMES
+from src.product import is_global
 from src.ui_theme import (
     GLOBAL_QSS, ModernToggle, SegmentLevelMeter, CardWidget,
     COLOR_BG_DARK, COLOR_PANEL_BG, COLOR_CARD_BG, COLOR_CARD_HOVER, COLOR_CARD_INNER,
@@ -194,7 +196,13 @@ CONTROL_PANEL_MIN_HEIGHT = 800
 
 def _header_metric_font(base_font: QFont | None, point_size: float, weight: QFont.Weight) -> QFont:
     font = QFont(base_font) if base_font is not None else QFont()
-    font.setFamily("Malgun Gothic")
+    if is_global() and ui_language() != "ko":
+        font.setFamilies([
+            "Segoe UI", "Malgun Gothic", "Yu Gothic UI", "Microsoft YaHei UI",
+            "Leelawadee UI", "Nirmala UI", "Segoe UI Historic",
+        ])
+    else:
+        font.setFamily("Malgun Gothic")
     font.setPointSizeF(point_size)
     font.setWeight(weight)
     return font
@@ -311,7 +319,7 @@ class ApiKeyDialog(QDialog):
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.config = config
-        self.setWindowTitle("AI API 키 관리")
+        self.setWindowTitle(tr("api_title"))
         self.setFixedSize(480, 360)
 
         self.setStyleSheet(f"""
@@ -352,10 +360,7 @@ class ApiKeyDialog(QDialog):
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        info = QLabel(
-            "💡 아래 서비스들은 모두 <b>무료 티어</b>를 제공합니다.<br>"
-            "API 키를 입력하면 즉시 해당 고급 엔진이 활성화됩니다."
-        )
+        info = QLabel(tr("dlg_api_info"))
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setWordWrap(True)
         info.setStyleSheet(f"color: {COLOR_ACCENT_MINT}; font-size: 11px;")
@@ -482,23 +487,22 @@ class SubtitlePreviewWidget(QWidget):
             p.drawText(info_rect, Qt.AlignmentFlag.AlignCenter, info_text)
 
         audio_orig = "[Speaker 1] We should leave before sunset." if self.show_speaker else "We should leave before sunset."
-        audio_trans = "[화자 1] 해가 지기 전에 떠나야 해요." if self.show_speaker else "해가 지기 전에 떠나야 해요."
-
+        audio_trans = tr("sample_line")
         screen_orig = "Carter: We should leave before sunset." if self.show_speaker else "We should leave before sunset."
-        screen_trans = "카터: 해가 지기 전에 떠나야 해요." if self.show_speaker else "해가 지기 전에 떠나야 해요."
+        screen_trans = tr("sample_line")
 
         # 2. 음성 자막 박스 렌더링 (상단부)
         self._draw_sample_box(p, cx=w // 2, cy=int(h * 0.32),
-                              tag="🎙 음성 번역", tag_color="#00E5FF",
-                              badge_text="DeepL 준비", badge_dot_color="#00E5FF",
+                              tag=tr("section_audio"), tag_color="#00E5FF",
+                              badge_text=tr("badge_ready"), badge_dot_color="#00E5FF",
                               orig=audio_orig,
                               trans=audio_trans,
                               is_clean_text=self.clean_text_mode)
 
         # 3. 화면 자막 박스 렌더링 (하단부)
         self._draw_sample_box(p, cx=w // 2, cy=int(h * 0.74),
-                              tag="🖥 화면 번역", tag_color="#A78BFA",
-                              badge_text="OCR 감시 중", badge_dot_color="#69F0AE",
+                              tag=tr("section_screen"), tag_color="#A78BFA",
+                              badge_text=tr("status_watching"), badge_dot_color="#69F0AE",
                               orig=screen_orig,
                               trans=screen_trans,
                               is_clean_text=self.clean_text_mode)
@@ -721,7 +725,7 @@ class ReadabilityPreviewWidget(QWidget):
         scale = 0.60
         fsize = max(11, int(self.font_size * scale))
         orig_txt = "We should leave before sunset."
-        trans_txt = "해가 지기 전에 떠나야 해요."
+        trans_txt = tr("sample_line")
 
         orig_font = QFont("Malgun Gothic", max(9, fsize - 4))
         if self.letter_spacing > 0:
@@ -930,8 +934,7 @@ class ScreenCanvasPreviewWidget(QWidget):
             p.drawRoundedRect(guide_box, 8, 8)
             p.setFont(QFont("Malgun Gothic", 10, QFont.Weight.Bold))
             p.setPen(QColor("#ECEFF1"))
-            p.drawText(guide_box, Qt.AlignmentFlag.AlignCenter,
-                       "📐 이 모니터에 번역 영역이 없습니다. '영역 추가/편집'에서 지정하세요")
+            p.drawText(guide_box, Qt.AlignmentFlag.AlignCenter, tr("no_region_preview"))
             return
 
         colors = ["#8B5CF6", "#10B981", "#38BDF8", "#F59E0B", "#EC4899"]
@@ -997,6 +1000,10 @@ class ControlPanel(QWidget):
     def __init__(self, config, overlay, audio_thread, stt_thread, save_config_cb, screen_worker=None, screen_overlay=None, inplace_manager=None, roi_border_manager=None, dubbing_engine=None):
         super().__init__()
         self.config = config
+        if is_global():
+            set_ui_language(self.config.get("ui_lang") or "en")
+        else:
+            set_ui_language("ko")
         self.overlay = overlay
         self.audio_thread = audio_thread
         self.stt_thread = stt_thread
@@ -1071,7 +1078,7 @@ class ControlPanel(QWidget):
         self._custom_preset_page = 0
 
         # 기본 윈도우 설정 및 다크 테마 속성 강제 (Windows 기본 흰색 번쩍임 방지)
-        self.setWindowTitle("루미트랜스 (LumiTrans) - AI 실시간 음성 & 화면 번역 스튜디오")
+        self.setWindowTitle(tr("window_title"))
         self.setObjectName("ControlPanel")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setAutoFillBackground(True)
@@ -1107,9 +1114,11 @@ class ControlPanel(QWidget):
 
         # 하위 호환성 (테스트 및 레거시 버튼 연동)
         self._is_audio_active = False
-        self.btn_toggle = QPushButton("▶ 오디오 통역 시작")
+        self.btn_toggle = QPushButton()
+        self._i18n(self.btn_toggle, "audio_start")
         self.btn_toggle.clicked.connect(self.toggle_translation)
-        self.btn_toggle_screen = QPushButton("▶ 화면 실시간 번역 시작")
+        self.btn_toggle_screen = QPushButton()
+        self._i18n(self.btn_toggle_screen, "screen_start")
         self.btn_toggle_screen.clicked.connect(self.toggle_screen_translation)
 
         # UI 초기화 및 빌드
@@ -1169,6 +1178,7 @@ class ControlPanel(QWidget):
 
         init_screen = self.config.get("auto_start_screen", False) and self.config.get("screen_translate_enabled", False)
         self.set_screen_active_state(init_screen)
+        self._apply_ui_language()
         self._sync_all_pipeline_status()
         self.refresh_speaker_mgmt_ui(force=True)
         self._init_default_demo_data()
@@ -1289,10 +1299,12 @@ class ControlPanel(QWidget):
 
         title_vbox = QVBoxLayout()
         title_vbox.setSpacing(1)
-        title_lbl = QLabel(BRAND_TITLE)
+        title_lbl = QLabel()
+        self._brand_title = self._i18n(title_lbl, "brand_title")
         title_lbl.setStyleSheet(f"font-size: 16px; font-weight: 800; color: {COLOR_TEXT_PRIMARY}; letter-spacing: 0.5px;")
         title_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        slogan_lbl = QLabel(BRAND_SLOGAN)
+        slogan_lbl = QLabel()
+        self._i18n(slogan_lbl, "brand_slogan")
         slogan_lbl.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_SECONDARY};")
         slogan_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         slogan_lbl.setWordWrap(False)
@@ -1304,6 +1316,23 @@ class ControlPanel(QWidget):
         h_layout.addLayout(brand_layout)
 
         h_layout.addStretch(1)
+        if is_global():
+            self.combo_ui_lang = NoWheelComboBox()
+            self.combo_ui_lang.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.combo_ui_lang.setFixedHeight(32)
+            self.combo_ui_lang.setMinimumWidth(132)
+            self.combo_ui_lang.setToolTip(tr("ui_lang_label"))
+            current_ui = str(self.config.get("ui_lang") or "en").strip().lower().split("-")[0]
+            for code, label in UI_LANGUAGE_NAMES.items():
+                self.combo_ui_lang.addItem(label, code)
+            ui_index = self.combo_ui_lang.findData(current_ui)
+            if ui_index < 0:
+                ui_index = self.combo_ui_lang.findData("en")
+            self.combo_ui_lang.blockSignals(True)
+            self.combo_ui_lang.setCurrentIndex(max(0, ui_index))
+            self.combo_ui_lang.blockSignals(False)
+            self.combo_ui_lang.currentIndexChanged.connect(self._on_ui_lang_changed)
+            h_layout.addWidget(self.combo_ui_lang)
 
         # 탭 버튼은 아이콘+글자가 잘리지 않는 고정 폭. 창 최소폭이 헤더를 보호한다.
         nav_host = QWidget()
@@ -1313,8 +1342,11 @@ class ControlPanel(QWidget):
         nav_layout.setSpacing(NAV_TAB_SPACING)
 
         self.nav_buttons = []
-        for text, idx in NAV_TAB_SPECS:
-            btn = QPushButton(text)
+        nav_keys = ("nav_audio", "nav_screen", "nav_history", "nav_subtitles", "nav_settings")
+        for (text, idx), key in zip(NAV_TAB_SPECS, nav_keys):
+            btn = QPushButton()
+            self._i18n(btn, key)
+            text = btn.text()
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setFixedSize(nav_tab_width(text, self.font()), NAV_TAB_HEIGHT)
@@ -1370,10 +1402,12 @@ class ControlPanel(QWidget):
         # 1) 음성 번역 유닛
         u1_layout = QVBoxLayout()
         u1_layout.setSpacing(3)
-        lbl_u1 = QLabel("🎙️ 음성 번역")
+        lbl_u1 = QLabel()
+        self._i18n(lbl_u1, "section_audio")
         lbl_u1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_u1.setStyleSheet("font-weight: bold; font-size: 11.5px; color: #ECEFF1;")
-        self.btn_bottom_audio = QPushButton("번역 시작")
+        self.btn_bottom_audio = QPushButton()
+        self._i18n(self.btn_bottom_audio, "start_translation")
         self.btn_bottom_audio.setCheckable(True)
         self.btn_bottom_audio.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_bottom_audio.setFixedHeight(36)
@@ -1402,10 +1436,12 @@ class ControlPanel(QWidget):
         # 2) 화면 번역 유닛
         u2_layout = QVBoxLayout()
         u2_layout.setSpacing(3)
-        lbl_u2 = QLabel("🖥️ 화면 번역")
+        lbl_u2 = QLabel()
+        self._i18n(lbl_u2, "section_screen")
         lbl_u2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_u2.setStyleSheet("font-weight: bold; font-size: 11.5px; color: #ECEFF1;")
-        self.btn_bottom_screen = QPushButton("번역 시작")
+        self.btn_bottom_screen = QPushButton()
+        self._i18n(self.btn_bottom_screen, "start_translation")
         self.btn_bottom_screen.setCheckable(True)
         self.btn_bottom_screen.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_bottom_screen.setFixedHeight(36)
@@ -1434,10 +1470,12 @@ class ControlPanel(QWidget):
         # 3) AI 음성 더빙 유닛
         u3_layout = QVBoxLayout()
         u3_layout.setSpacing(3)
-        lbl_u3 = QLabel("🔊 더빙")
+        lbl_u3 = QLabel()
+        self._i18n(lbl_u3, "section_dub")
         lbl_u3.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_u3.setStyleSheet("font-weight: bold; font-size: 11.5px; color: #ECEFF1;")
-        self.btn_bottom_dubbing = QPushButton("더빙 시작")
+        self.btn_bottom_dubbing = QPushButton()
+        self._i18n(self.btn_bottom_dubbing, "start_dubbing")
         self.btn_bottom_dubbing.setCheckable(True)
         self.btn_bottom_dubbing.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_bottom_dubbing.setFixedHeight(36)
@@ -1481,7 +1519,8 @@ class ControlPanel(QWidget):
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(10)
-        lbl_pipe_title = QLabel("현재 번역 설정 (클릭 변경 가능)")
+        lbl_pipe_title = QLabel()
+        self._i18n(lbl_pipe_title, "pipeline_title")
         lbl_pipe_title.setStyleSheet("color: #ECEFF1; font-size: 12px; font-weight: bold;")
         title_row.addWidget(lbl_pipe_title)
         title_row.addStretch(1)
@@ -1564,7 +1603,8 @@ class ControlPanel(QWidget):
         status_box.setSpacing(0)
 
         # 1행 (상단): 실시간 상태 상세 텍스트 로그 (상단 수평 정렬)
-        self.lbl_status_detail = QLabel("시스템 대기 중 (번역 준비 완료)")
+        self.lbl_status_detail = QLabel()
+        self._i18n(self.lbl_status_detail, "status_idle")
         self.lbl_status_detail.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px;")
         self.lbl_status_detail.setTextFormat(Qt.TextFormat.PlainText)
         self.lbl_status_detail.setMinimumWidth(220)
@@ -1580,7 +1620,8 @@ class ControlPanel(QWidget):
         badge_row.setSpacing(0)
         badge_row.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
-        self.lbl_ready_badge = QLabel("● 엔진 준비 완료")
+        self.lbl_ready_badge = QLabel()
+        self._i18n(self.lbl_ready_badge, "engine_ready")
         self.lbl_ready_badge.setStyleSheet(f"""
             QLabel {{
                 color: {COLOR_ACCENT_MINT};
@@ -1841,11 +1882,11 @@ class ControlPanel(QWidget):
             dot = "🟢" if can_select else "🔴"
             act_l = menu.addAction(f"{prefix}{l_label}\t{dot}")
             if can_select:
-                act_l.setToolTip("현재 활성화됨" if cur_lang == l_code else "준비됨")
+                act_l.setToolTip(tr("tip_active") if cur_lang == l_code else tr("tip_ready"))
                 act_l.triggered.connect(lambda _, lc=l_code: self._on_stt_language_quick_selected(lc))
             else:
                 act_l.setEnabled(False)
-                act_l.setToolTip(f"현재 모델({cur_model})은 영어 전용입니다.\n다국어 지원 STT 모델(Large-v3 Turbo, Medium 등)에서 활성화됩니다.")
+                act_l.setToolTip(tr("tip_english_only"))
             lang_action_items.append((l_code, l_label, act_l))
 
         self._popup_menu_above(menu, self.chip_stt_model)
@@ -1863,13 +1904,13 @@ class ControlPanel(QWidget):
 
         if cur_p == "deepgram":
             if not bool(self.config.get("deepgram_api_key", "").strip()):
-                QMessageBox.information(self, "API 키 등록 필요", "Deepgram API 키가 필요합니다.\nAPI 설정 창에서 키를 먼저 등록해 주십시오.")
+                tell(self, "msg_need_key_title", "msg_need_deepgram")
                 self.open_api_key_dialog()
                 return
             self.config["deepgram_model"] = model_id
         elif cur_p == "groq":
             if not bool(self.config.get("groq_api_key", "").strip()):
-                QMessageBox.information(self, "API 키 등록 필요", "Groq API 키가 필요합니다.\nAPI 설정 창에서 키를 먼저 등록해 주십시오.")
+                tell(self, "msg_need_key_title", "msg_need_groq")
                 self.open_api_key_dialog()
                 return
             self.config["groq_model"] = model_id
@@ -1878,12 +1919,11 @@ class ControlPanel(QWidget):
             is_installed = STTModelManager.is_model_installed(model_id) or STTModelManager.is_bundled_model(model_id)
             if not is_installed:
                 # 미설치 모델 선택 시: 백그라운드 다운로드가 아닌 모델 관리창으로 유도
-                ret = QMessageBox.question(
+                ret = ask(
                     self,
-                    "📦 STT 모델 다운로드 필요",
-                    f"선택하신 '{model_id}' 모델이 아직 설치되지 않았습니다.\n\n"
-                    "STT 모델 관리창을 열어 모델을 다운로드하시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    "msg_model_missing_title",
+                    "msg_model_missing",
+                    name=model_id,
                 )
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_stt_model_manager(target_model_id=model_id)
@@ -1899,13 +1939,7 @@ class ControlPanel(QWidget):
                         self.stt_thread.device = "cuda"
                         self.stt_thread.compute_type = "float16"
                 else:
-                    ret = QMessageBox.question(
-                        self,
-                        "⚠️ CPU 성능 안내",
-                        f"선택하신 '{model_id}' 모델은 CPU 환경에서 실시간 음성인식 지연이 발생할 수 있습니다.\n\n"
-                        "그래도 이 모델을 선택하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_cpu_slow_title", "msg_cpu_slow", name=model_id)
                     if ret != QMessageBox.StandardButton.Yes:
                         return
             self.config["model_size"] = model_id
@@ -1945,7 +1979,7 @@ class ControlPanel(QWidget):
             ("hymt", "Hy-MT2 1.8B"),
         ]
 
-        act_h1 = menu.addAction("☁️ 온라인 클라우드 번역")
+        act_h1 = menu.addAction(tr("online_cloud"))
         act_h1.setEnabled(False)
         for k, label in cloud_engines:
             prefix = "✓ " if cur_eng == k else "   "
@@ -1956,7 +1990,7 @@ class ControlPanel(QWidget):
             act.triggered.connect(lambda _, key=k: self.set_engine_by_key(key))
 
         menu.addSeparator()
-        act_h2 = menu.addAction("🖥️ 로컬 AI 번역")
+        act_h2 = menu.addAction(tr("dlg_local_models"))
         act_h2.setEnabled(False)
         for k, label in local_engines:
             matched = (cur_eng == k) or (k == "exaone" and cur_eng in ["exaone", "exaone-3.5-2.4b"]) or (k == "exaone7b" and cur_eng in ["exaone7b", "exaone-3.5-7.8b"]) or (k == "gemma" and "gemma" in str(cur_eng).lower()) or (k == "hymt" and "hymt" in str(cur_eng).lower())
@@ -1977,9 +2011,8 @@ class ControlPanel(QWidget):
 
         for k, p in CONTENT_TEMPO_PRESETS.items():
             prefix = "✓ " if cur_tempo == k else "   "
-            short = p.get("short_name", "")
-            act = menu.addAction(f"{prefix}{short}")
-            act.setToolTip(p.get("desc", ""))
+            act = menu.addAction(f"{prefix}{tr(f'tempo_{k}')}")
+            act.setToolTip(tr(f"tempo_{k}_desc"))
             act.triggered.connect(lambda _, key=k: self._apply_tempo_preset_key(key, source="pipe"))
 
         self._popup_menu_above(menu, self.chip_tempo)
@@ -2000,47 +2033,47 @@ class ControlPanel(QWidget):
 
         styles = {
             "ready": {
-                "badge": "● 엔진 준비 완료",
+                "badge": tr("badge_ready"),
                 "color": COLOR_ACCENT_MINT,
                 "bg": "rgba(16, 185, 129, 0.14)",
                 "border": "rgba(16, 185, 129, 0.35)",
-                "default_detail": "시스템 대기 중 (번역 준비 완료)"
+                "default_detail": tr("status_idle"),
             },
             "loading": {
-                "badge": "⏳ 모델 로드 중...",
+                "badge": tr("badge_loading"),
                 "color": "#F59E0B",
                 "bg": "rgba(245, 158, 11, 0.16)",
                 "border": "rgba(245, 158, 11, 0.4)",
-                "default_detail": "AI 모델을 메모리에 로드하는 중입니다..."
+                "default_detail": tr("detail_loading"),
             },
             "translating": {
-                "badge": "⚡ 실시간 번역 중",
+                "badge": tr("badge_translating"),
                 "color": COLOR_ACCENT_CYAN,
                 "bg": "rgba(6, 182, 212, 0.16)",
                 "border": "rgba(6, 182, 212, 0.4)",
-                "default_detail": "번역 엔진 처리 중..."
+                "default_detail": tr("detail_translating"),
             },
             "recognizing": {
-                "badge": "🎙️ 음성 인식 중",
+                "badge": tr("badge_recognizing"),
                 "color": COLOR_ACCENT_PURPLE,
                 "bg": "rgba(129, 140, 248, 0.16)",
                 "border": "rgba(129, 140, 248, 0.4)",
-                "default_detail": "오디오 발화 스트림 감지 중..."
+                "default_detail": tr("detail_recognizing"),
             },
             "paused": {
-                "badge": "⏸️ 번역 일시정지",
+                "badge": tr("badge_paused"),
                 "color": "#94A3B8",
                 "bg": "rgba(148, 163, 184, 0.12)",
                 "border": "rgba(148, 163, 184, 0.25)",
-                "default_detail": "번역이 일시정지되었습니다."
+                "default_detail": tr("detail_paused"),
             },
             "error": {
-                "badge": "⚠️ 확인 필요",
+                "badge": tr("badge_error"),
                 "color": "#EF4444",
                 "bg": "rgba(239, 68, 68, 0.16)",
                 "border": "rgba(239, 68, 68, 0.4)",
-                "default_detail": "설정 또는 API 키를 확인하세요."
-            }
+                "default_detail": tr("detail_error"),
+            },
         }
 
         cfg = styles.get(state, styles["ready"])
@@ -2075,11 +2108,11 @@ class ControlPanel(QWidget):
 
     def _revert_engine_status(self):
         if getattr(self, '_is_audio_active', False):
-            self.update_engine_status("ready", "실시간 오디오 통역 청취 중")
+            self.update_engine_status("ready", tr("status_listening"))
         elif getattr(self, '_is_screen_active', False):
-            self.update_engine_status("ready", "화면 실시간 감시 중")
+            self.update_engine_status("ready", tr("status_watching"))
         else:
-            self.update_engine_status("ready", "시스템 대기 중 (번역 준비 완료)")
+            self.update_engine_status("ready", tr("status_idle"))
 
     def _on_audio_preview_received(self, text: str, ptype: str = ""):
         if not self.is_active:
@@ -2087,7 +2120,7 @@ class ControlPanel(QWidget):
         if text:
             clean = text.strip()
             if clean:
-                self.update_engine_status("recognizing", f"음성 감지: {clean}")
+                self.update_engine_status("recognizing", tr("status_heard", text=clean))
 
     # ----------------------------------------------------------------------
     # 3. 탭 1: 음성 번역 빌더 (컨셉 01-audio.png 완벽 일치)
@@ -2107,13 +2140,15 @@ class ControlPanel(QWidget):
         # 1) 오디오 입력 소스
         src_vbox = QVBoxLayout()
         src_vbox.setSpacing(3)
-        src_title = QLabel("오디오 입력 소스")
+        src_title = QLabel()
+        self._i18n(src_title, "audio_source")
         src_title.setStyleSheet("font-weight: bold; font-size: 12px; color: #ECEFF1;")
         src_row = QHBoxLayout()
         self.combo_audio_cap_dev = NoWheelComboBox()
         self.combo_audio_cap_dev.addItem("🔊 [기본] 윈도우 기본 사운드", "default")
         self.combo_audio_cap_dev.about_to_show_popup.connect(lambda: self._populate_audio_devices(silent=False))
-        self.btn_refresh_sources = QPushButton("소스 새로고침")
+        self.btn_refresh_sources = QPushButton()
+        self._i18n(self.btn_refresh_sources, "refresh_sources")
         self.btn_refresh_sources.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
         self.btn_refresh_sources.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_refresh_sources.clicked.connect(lambda: self._populate_audio_devices(silent=False))
@@ -2126,7 +2161,8 @@ class ControlPanel(QWidget):
         # 2) 입력 음량
         vol_vbox = QVBoxLayout()
         vol_vbox.setSpacing(4)
-        vol_title = QLabel("입력 음량")
+        vol_title = QLabel()
+        self._i18n(vol_title, "input_volume")
         vol_title.setStyleSheet("font-weight: bold; font-size: 12px; color: #ECEFF1;")
         vol_row = QHBoxLayout()
         mic_icon = QLabel("🎙️")
@@ -2141,7 +2177,8 @@ class ControlPanel(QWidget):
         # 3) 콘텐츠 템포
         tempo_vbox = QVBoxLayout()
         tempo_vbox.setSpacing(3)
-        tempo_title = QLabel("콘텐츠 템포")
+        tempo_title = QLabel()
+        self._i18n(tempo_title, "content_tempo")
         tempo_title.setStyleSheet("font-weight: bold; font-size: 12px; color: #ECEFF1;")
         self.lbl_tempo_title_audio = tempo_title
         self.combo_tempo_preset = NoWheelComboBox()
@@ -2173,9 +2210,11 @@ class ControlPanel(QWidget):
         orig_layout.setSpacing(6)
 
         orig_head = QHBoxLayout()
-        lbl_orig_title = QLabel("원문")
+        lbl_orig_title = QLabel()
+        self._i18n(lbl_orig_title, "original")
         lbl_orig_title.setStyleSheet("font-weight: bold; font-size: 13px; color: #ECEFF1;")
-        badge_en = QLabel("원문")
+        badge_en = QLabel()
+        self._i18n(badge_en, "original")
         badge_en.setStyleSheet(f"background-color: #1E293B; color: {COLOR_ACCENT_CYAN}; font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 4px;")
         orig_head.addWidget(lbl_orig_title)
         orig_head.addStretch(1)
@@ -2200,19 +2239,41 @@ class ControlPanel(QWidget):
         trans_layout.setSpacing(6)
 
         trans_head = QHBoxLayout()
-        lbl_trans_title = QLabel("번역")
+        lbl_trans_title = QLabel()
+        self._i18n(lbl_trans_title, "translation")
         lbl_trans_title.setStyleSheet(f"font-weight: bold; font-size: 13px; color: {COLOR_ACCENT_PINK};")
-        badge_ko = QLabel("번역")
+        badge_ko = QLabel()
+        self._i18n(badge_ko, "translation")
         badge_ko.setStyleSheet(f"background-color: rgba(236,72,153,0.18); color: {COLOR_ACCENT_PINK}; font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 4px;")
         trans_head.addWidget(lbl_trans_title)
         trans_head.addStretch(1)
+        if is_global():
+            from src.translator import LANGUAGE_NAMES
+            self.combo_target_lang = NoWheelComboBox()
+            self.combo_target_lang.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.combo_target_lang.setFixedHeight(28)
+            self.combo_target_lang.setMinimumWidth(120)
+            self.combo_target_lang.setToolTip(tr("target_lang_label"))
+            current_target = str(self.config.get("target_lang") or "en").strip().lower().split("-")[0]
+            for code in LANGUAGE_NAMES:
+                self.combo_target_lang.addItem(UI_LANGUAGE_NAMES.get(code, code), code)
+            target_index = self.combo_target_lang.findData(current_target)
+            if target_index < 0:
+                self.combo_target_lang.addItem(current_target.upper(), current_target)
+                target_index = self.combo_target_lang.findData(current_target)
+            self.combo_target_lang.blockSignals(True)
+            self.combo_target_lang.setCurrentIndex(max(0, target_index))
+            self.combo_target_lang.blockSignals(False)
+            self.combo_target_lang.currentIndexChanged.connect(self._on_target_lang_changed)
+            trans_head.addWidget(self.combo_target_lang)
         trans_head.addWidget(badge_ko)
         trans_layout.addLayout(trans_head)
 
         trans_body = QHBoxLayout()
         trans_spk = QLabel("🔊")
         trans_spk.setStyleSheet(f"font-size: 18px; color: {COLOR_ACCENT_PINK};")
-        self.lbl_live_trans = QLabel("해가 지기 전에 떠나야 해요.")
+        self.lbl_live_trans = QLabel()
+        self._i18n(self.lbl_live_trans, "sample_line")
         self.lbl_live_trans.setStyleSheet("font-size: 16px; font-weight: 700; color: #FFFFFF;")
         self.lbl_live_trans.setWordWrap(True)
         trans_body.addWidget(trans_spk)
@@ -2235,12 +2296,14 @@ class ControlPanel(QWidget):
 
         spk_header = QHBoxLayout()
         spk_header.setSpacing(10)
-        spk_title = QLabel("화자 관리")
+        spk_title = QLabel()
+        self._i18n(spk_title, "speaker_mgmt")
         spk_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ECEFF1;")
         spk_header.addWidget(spk_title)
         spk_header.addStretch(1)
 
-        self.lbl_speaker_status = QLabel("화자 분리 상태 확인 중")
+        self.lbl_speaker_status = QLabel()
+        self._i18n(self.lbl_speaker_status, "speaker_checking")
         self.lbl_speaker_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.lbl_speaker_status.setToolTip("사용 중인 화자 분석 방식의 현재 상태입니다. 화자 분리가 꺼지면 '화자 분리 꺼짐'으로 표시됩니다.")
         self.lbl_speaker_status.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px;")
@@ -2251,7 +2314,8 @@ class ControlPanel(QWidget):
         spk_controls = QHBoxLayout()
         self.speaker_controls_layout = spk_controls
         spk_controls.setSpacing(10)
-        lbl_diar = QLabel("화자 분리")
+        lbl_diar = QLabel()
+        self._i18n(lbl_diar, "diarization")
         lbl_diar.setStyleSheet("font-size: 12px; font-weight: 600;")
         diar_tip = "실시간 다중 화자 음색을 감별하여 발화자별([화자 1], [화자 2])로 자막 및 더빙을 분리합니다."
         lbl_diar.setToolTip(diar_tip)
@@ -2261,7 +2325,8 @@ class ControlPanel(QWidget):
         self.toggle_speaker_diarization.toggled.connect(self.on_speaker_diarization_toggled)
         self.cb_speaker_diarization = self.toggle_speaker_diarization  # 하위 호환 별칭
 
-        lbl_max_spk = QLabel("최대 인원")
+        lbl_max_spk = QLabel()
+        self._i18n(lbl_max_spk, "max_speakers")
         lbl_max_spk.setStyleSheet("font-size: 12px; font-weight: 600;")
         self.combo_speaker_max_count = NoWheelComboBox()
         self.combo_speaker_max_count.addItem("2명 (대화/인터뷰)", 2)
@@ -2275,7 +2340,8 @@ class ControlPanel(QWidget):
         self.combo_speaker_max_count.setFixedWidth(130)
         self.combo_speaker_max_count.currentIndexChanged.connect(self.on_speaker_max_count_changed)
 
-        lbl_thresh = QLabel("분리 감도")
+        lbl_thresh = QLabel()
+        self._i18n(lbl_thresh, "sensitivity")
         lbl_thresh.setStyleSheet("font-size: 12px; font-weight: 600;")
         self.lbl_speaker_threshold = lbl_thresh
         self.slider_speaker_threshold = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -2288,7 +2354,8 @@ class ControlPanel(QWidget):
         self.lbl_speaker_threshold_num = QLabel(str(int(cur_th * 100)))
         self.lbl_speaker_threshold_num.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 12px;")
 
-        lbl_ocr_link = QLabel("화자명 자동 연동")
+        lbl_ocr_link = QLabel()
+        self._i18n(lbl_ocr_link, "name_link")
         lbl_ocr_link.setStyleSheet("font-size: 12px; font-weight: 600;")
         lbl_ocr_link.setToolTip("화면 OCR에서 대화 화자명(예: '카터: ...') 감지 시 최근 음성 화자(예: [화자 1])에 실명을 자동으로 연동합니다.")
         self.toggle_ocr_auto_mapping = ModernToggle(active_color=COLOR_ACCENT_MINT)
@@ -2328,21 +2395,26 @@ class ControlPanel(QWidget):
         spk_actions = QHBoxLayout()
         self.speaker_actions_layout = spk_actions
         spk_actions.setSpacing(6)
-        self.btn_reset_speakers = QPushButton("🔄 화자 초기화")
+        self.btn_reset_speakers = QPushButton()
+        self._i18n(self.btn_reset_speakers, "reset_speakers")
         self.btn_reset_speakers.clicked.connect(self.on_reset_speakers_clicked)
         spk_actions.addWidget(self.btn_reset_speakers)
 
         spk_actions.addStretch(1)
 
-        btn_sel_trans = QPushButton("선택한 화자 번역 적용")
+        btn_sel_trans = QPushButton()
+        self._i18n(btn_sel_trans, "apply_selected_trans")
         btn_sel_trans.setStyleSheet(f"border-color: {COLOR_ACCENT_MINT}; color: {COLOR_ACCENT_MINT};")
         btn_sel_trans.clicked.connect(self.on_translate_selected_speakers)
-        btn_sel_dub = QPushButton("선택한 화자 더빙 적용")
+        btn_sel_dub = QPushButton()
+        self._i18n(btn_sel_dub, "apply_selected_dub")
         btn_sel_dub.setStyleSheet(f"border-color: {COLOR_ACCENT_PINK}; color: {COLOR_ACCENT_PINK};")
         btn_sel_dub.clicked.connect(self.on_dub_selected_speakers)
-        btn_all_trans = QPushButton("전체 화자 번역")
+        btn_all_trans = QPushButton()
+        self._i18n(btn_all_trans, "all_speakers_trans")
         btn_all_trans.clicked.connect(self.on_unmute_all_speakers)
-        btn_all_dub = QPushButton("전체 화자 더빙")
+        btn_all_dub = QPushButton()
+        self._i18n(btn_all_dub, "all_speakers_dub")
         btn_all_dub.clicked.connect(self.on_dub_all_speakers)
 
         spk_actions.addWidget(btn_sel_trans)
@@ -2361,9 +2433,11 @@ class ControlPanel(QWidget):
         dub_layout.setSpacing(8)
 
         dub_head = QHBoxLayout()
-        lbl_dub_title = QLabel("🔊 음성 더빙 (출력 설정)")
+        lbl_dub_title = QLabel()
+        self._i18n(lbl_dub_title, "dub_output")
         lbl_dub_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        self.btn_toggle_audio_overlay = QPushButton("👁 자막창 보이기")
+        self.btn_toggle_audio_overlay = QPushButton()
+        self._i18n(self.btn_toggle_audio_overlay, "show_overlay")
         self.btn_toggle_audio_overlay.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_toggle_audio_overlay.setStyleSheet("font-size: 11px; padding: 3px 8px;")
         self.btn_toggle_audio_overlay.clicked.connect(self.toggle_audio_overlay_window)
@@ -2376,7 +2450,8 @@ class ControlPanel(QWidget):
         # 1. 오디오 출력 장치 (가장 상단 배치)
         out_dev_row = QHBoxLayout()
         out_dev_row.setContentsMargins(0, 0, 0, 0)
-        lbl_out_dev = QLabel("오디오 출력 장치")
+        lbl_out_dev = QLabel()
+        self._i18n(lbl_out_dev, "output_device")
         lbl_out_dev.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
         self.combo_dub_out_dev = NoWheelComboBox()
         self.combo_dub_out_dev.setFixedHeight(28)
@@ -2388,13 +2463,14 @@ class ControlPanel(QWidget):
 
         # 2. 핵심 더빙 소스 선택 (음성 / 화면)
         top_opts = [
-            ("음성 번역 더빙", "dubbing_source_audio", self.on_dubbing_source_audio_toggled, True),
-            ("화면 번역 더빙", "dubbing_source_screen", self.on_dubbing_source_screen_toggled, False),
+            ("dub_voice", "dubbing_source_audio", self.on_dubbing_source_audio_toggled, True),
+            ("dub_screen", "dubbing_source_screen", self.on_dubbing_source_screen_toggled, False),
         ]
         for name, key, cb, default_val in top_opts:
             t_row = QHBoxLayout()
             t_row.setContentsMargins(0, 0, 0, 0)
-            lbl_t = QLabel(name)
+            lbl_t = QLabel()
+            self._i18n(lbl_t, name)
             lbl_t.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
             tgl = ModernToggle(active_color=COLOR_ACCENT_MINT)
             tgl.setFixedHeight(24)
@@ -2409,7 +2485,8 @@ class ControlPanel(QWidget):
         dub_vol_row = QHBoxLayout()
         dub_vol_row.setContentsMargins(0, 0, 0, 0)
         cur_d_vol = int(self.config.get("dubbing_volume", 80))
-        self.lbl_dubbing_vol = QLabel("더빙 음량")
+        self.lbl_dubbing_vol = QLabel()
+        self._i18n(self.lbl_dubbing_vol, "dub_volume")
         self.lbl_dubbing_vol.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
         self.lbl_dubbing_vol.setFixedHeight(24)
         self.lbl_dubbing_vol_val = QLabel(f"{cur_d_vol}%")
@@ -2431,7 +2508,8 @@ class ControlPanel(QWidget):
         orig_vol_row = QHBoxLayout()
         orig_vol_row.setContentsMargins(0, 0, 0, 0)
         cur_o_vol = int(self.config.get("original_volume", 100))
-        self.lbl_original_vol = QLabel("원본 음량")
+        self.lbl_original_vol = QLabel()
+        self._i18n(self.lbl_original_vol, "original_volume")
         self.lbl_original_vol.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
         self.lbl_original_vol.setFixedHeight(24)
         self.lbl_original_vol_val = QLabel(f"{cur_o_vol}%")
@@ -2452,7 +2530,8 @@ class ControlPanel(QWidget):
         # 5. 콤보: 더빙 속도
         spd_row = QHBoxLayout()
         spd_row.setContentsMargins(0, 0, 0, 0)
-        lbl_spd = QLabel("더빙 속도")
+        lbl_spd = QLabel()
+        self._i18n(lbl_spd, "dub_speed")
         lbl_spd.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
         self.lbl_spd_val = QLabel(self.config.get("dubbing_speed", "+10%"))
         self.combo_dubbing_speed = NoWheelComboBox()
@@ -2475,7 +2554,8 @@ class ControlPanel(QWidget):
         # 6. 토글: 오디오 덕킹 ON/OFF
         duck_toggle_row = QHBoxLayout()
         duck_toggle_row.setContentsMargins(0, 0, 0, 0)
-        self.lbl_duck_toggle = QLabel("오디오 덕킹")
+        self.lbl_duck_toggle = QLabel()
+        self._i18n(self.lbl_duck_toggle, "ducking")
         self.lbl_duck_toggle.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
         self.toggle_audio_ducking = ModernToggle(active_color=COLOR_ACCENT_MINT)
         self.toggle_audio_ducking.setFixedHeight(24)
@@ -2490,7 +2570,8 @@ class ControlPanel(QWidget):
         # 7. 슬라이더: 감쇄 목표 (%)
         att_row = QHBoxLayout()
         att_row.setContentsMargins(0, 0, 0, 0)
-        self.lbl_att_title = QLabel("감쇄 목표")
+        self.lbl_att_title = QLabel()
+        self._i18n(self.lbl_att_title, "duck_target")
         self.lbl_att_title.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
         self.lbl_att_title.setFixedHeight(24)
         cur_duck = int(self.config.get("audio_ducking_volume", 25))
@@ -2517,13 +2598,14 @@ class ControlPanel(QWidget):
 
         # 8. 하단 부가 토글 옵션 2종
         sub_opts = [
-            ("새 대사 즉시 전환", "dubbing_interrupt", self.on_dubbing_interrupt_toggled, False),
-            ("에코 자동 차단", "dubbing_echo_cancellation", self.on_dubbing_echo_cancel_toggled, True),
+            ("dub_cut", "dubbing_interrupt", self.on_dubbing_interrupt_toggled, False),
+            ("dub_echo", "dubbing_echo_cancellation", self.on_dubbing_echo_cancel_toggled, True),
         ]
         for name, key, cb, default_val in sub_opts:
             t_row = QHBoxLayout()
             t_row.setContentsMargins(0, 0, 0, 0)
-            lbl_t = QLabel(name)
+            lbl_t = QLabel()
+            self._i18n(lbl_t, name)
             lbl_t.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
             tgl = ModernToggle(active_color=COLOR_ACCENT_MINT)
             tgl.setFixedHeight(24)
@@ -2535,7 +2617,8 @@ class ControlPanel(QWidget):
             dub_layout.addLayout(t_row)
 
         # 9. 하단 싱크 초기화
-        self.btn_reset_sync = QPushButton("🔄 싱크 초기화")
+        self.btn_reset_sync = QPushButton()
+        self._i18n(self.btn_reset_sync, "reset_sync")
         self.btn_reset_sync.setStyleSheet("font-size: 11.5px; font-weight: 600; padding: 6px;")
         self.btn_reset_sync.setFixedHeight(30)
         self.btn_reset_sync.clicked.connect(self.on_reset_sync_clicked)
@@ -2578,7 +2661,8 @@ class ControlPanel(QWidget):
         tb_layout.setContentsMargins(14, 8, 14, 8)
         tb_layout.setSpacing(12)
 
-        lbl_mon = QLabel("모니터 선택")
+        lbl_mon = QLabel()
+        self._i18n(lbl_mon, "monitor")
         lbl_mon.setStyleSheet("font-weight: bold; font-size: 11px; color: #ECEFF1;")
         self.combo_display = NoWheelComboBox()
         self._populate_display_combo()
@@ -2586,13 +2670,15 @@ class ControlPanel(QWidget):
         tb_layout.addWidget(lbl_mon)
         tb_layout.addWidget(self.combo_display)
 
-        self.btn_identify_monitors = QPushButton("🖥️ 번호 표시")
+        self.btn_identify_monitors = QPushButton()
+        self._i18n(self.btn_identify_monitors, "show_numbers")
         self.btn_identify_monitors.setToolTip("모든 모니터에 식별 번호를 2초 동안 표시합니다.")
         self.btn_identify_monitors.clicked.connect(self.show_monitor_identifiers)
         tb_layout.addWidget(self.btn_identify_monitors)
 
         cur_hk = self.config.get("inplace_hotkey", "F4")
-        self.btn_inplace_translate = QPushButton("⚡ 전체 화면 번역")
+        self.btn_inplace_translate = QPushButton()
+        self._i18n(self.btn_inplace_translate, "fullscreen_translate")
         self.btn_inplace_translate.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_inplace_translate.setToolTip(f"화면 전체의 원문 텍스트를 제자리에서 번역합니다 (전역 단축키: {cur_hk}, 단축키 설정은 설정 탭에서 가능)")
         self.btn_inplace_translate.setStyleSheet(f"""
@@ -2613,11 +2699,13 @@ class ControlPanel(QWidget):
 
         tb_layout.addSpacing(6)
 
-        self.btn_select_roi = QPushButton("📐 영역 추가/편집")
+        self.btn_select_roi = QPushButton()
+        self._i18n(self.btn_select_roi, "edit_regions")
         self.btn_select_roi.clicked.connect(self.open_roi_selector)
         tb_layout.addWidget(self.btn_select_roi)
 
-        self.btn_instant_ocr = QPushButton("📷 영역 즉시 번역")
+        self.btn_instant_ocr = QPushButton()
+        self._i18n(self.btn_instant_ocr, "instant_region")
         self.btn_instant_ocr.clicked.connect(self.trigger_instant_screen_ocr)
         tb_layout.addWidget(self.btn_instant_ocr)
 
@@ -2645,11 +2733,13 @@ class ControlPanel(QWidget):
         sp_layout.setSpacing(6)
 
         preview_head = QHBoxLayout()
-        self.lbl_screen_preview = QLabel("선택 모니터 · 미리보기")
+        self.lbl_screen_preview = QLabel()
+        self._i18n(self.lbl_screen_preview, "preview")
         self.lbl_screen_preview.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px;")
         preview_head.addWidget(self.lbl_screen_preview)
         preview_head.addStretch(1)
-        self.btn_refresh_screen_preview = QPushButton("↻ 화면 새로고침")
+        self.btn_refresh_screen_preview = QPushButton()
+        self._i18n(self.btn_refresh_screen_preview, "refresh_screen")
         self.btn_refresh_screen_preview.clicked.connect(self._refresh_screen_preview)
         preview_head.addWidget(self.btn_refresh_screen_preview)
         sp_layout.addLayout(preview_head)
@@ -2664,7 +2754,8 @@ class ControlPanel(QWidget):
             self.screen_canvas.set_monitor(screens[current_index].geometry())
         sp_layout.addWidget(self.screen_canvas, stretch=1)
 
-        guide_lbl = QLabel("ⓘ '영역 추가/편집'에서 번역 영역(ROI)을 지정하세요. 미리보기는 정지 화면이며 ↻ 버튼으로 갱신합니다.")
+        guide_lbl = QLabel()
+        self._i18n(guide_lbl, "roi_guide")
         guide_lbl.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px;")
         sp_layout.addWidget(guide_lbl)
 
@@ -2678,29 +2769,34 @@ class ControlPanel(QWidget):
 
         # 상단 헤더: 타이틀 + 뱃지 + 추가/전체삭제 버튼
         roi_top_bar = QHBoxLayout()
-        lbl_card_title = QLabel("📐 번역 영역 관리")
+        lbl_card_title = QLabel()
+        self._i18n(lbl_card_title, "roi_manage")
         lbl_card_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ECEFF1;")
         roi_top_bar.addWidget(lbl_card_title)
 
-        self.lbl_roi_count_badge = QLabel("0개")
+        self.lbl_roi_count_badge = QLabel()
+        self._i18n(self.lbl_roi_count_badge, "roi_count", count=0)
         self.lbl_roi_count_badge.setStyleSheet(f"background-color: #1E293B; color: {COLOR_ACCENT_CYAN}; font-size: 11px; font-weight: bold; padding: 2px 6px; border-radius: 10px;")
         roi_top_bar.addWidget(self.lbl_roi_count_badge)
 
         roi_top_bar.addStretch(1)
 
-        btn_top_add = QPushButton("➕ 추가")
+        btn_top_add = QPushButton()
+        self._i18n(btn_top_add, "add")
         btn_top_add.setStyleSheet(f"background-color: {COLOR_ACCENT_PURPLE}; color: #FFF; font-weight: bold; padding: 3px 8px; font-size: 11px; border-radius: 4px;")
         btn_top_add.clicked.connect(self.open_roi_selector)
         roi_top_bar.addWidget(btn_top_add)
 
-        btn_top_clear = QPushButton("전체 삭제")
+        btn_top_clear = QPushButton()
+        self._i18n(btn_top_clear, "clear_all")
         btn_top_clear.setStyleSheet("background-color: rgba(239,68,68,0.15); color: #EF4444; border: 1px solid #EF4444; padding: 3px 8px; font-size: 11px; border-radius: 4px;")
         btn_top_clear.clicked.connect(self.clear_rois)
         roi_top_bar.addWidget(btn_top_clear)
 
         roi_main_layout.addLayout(roi_top_bar)
 
-        lbl_card_sub = QLabel("각 영역별로 독립된 글자 크기, 투명도, 지속시간을 설정합니다.")
+        lbl_card_sub = QLabel()
+        self._i18n(lbl_card_sub, "roi_hint")
         lbl_card_sub.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px;")
         roi_main_layout.addWidget(lbl_card_sub)
 
@@ -2724,7 +2820,8 @@ class ControlPanel(QWidget):
         pre_layout.setContentsMargins(8, 4, 8, 4)
         pre_layout.setSpacing(10)
 
-        lbl_pre = QLabel("선명도 강화:")
+        lbl_pre = QLabel()
+        self._i18n(lbl_pre, "sharpen")
         lbl_pre.setStyleSheet("font-size: 11px; color: #94A3B8;")
         pre_layout.addWidget(lbl_pre)
         self.slider_ocr_clahe = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -2733,7 +2830,8 @@ class ControlPanel(QWidget):
         self.slider_ocr_clahe.valueChanged.connect(lambda v: self.config.update({"screen_ocr_preprocess": v > 30}))
         pre_layout.addWidget(self.slider_ocr_clahe, stretch=1)
 
-        lbl_snap = QLabel("기본 스냅:")
+        lbl_snap = QLabel()
+        self._i18n(lbl_snap, "snap")
         lbl_snap.setStyleSheet("font-size: 11px; color: #94A3B8;")
         pre_layout.addWidget(lbl_snap)
         self.toggle_snap_to_roi = ModernToggle(active_color=COLOR_ACCENT_PURPLE)
@@ -2757,18 +2855,22 @@ class ControlPanel(QWidget):
         bc_layout.setSpacing(6)
 
         bc_head = QHBoxLayout()
-        lbl_bc_title = QLabel("화면 번역 (최근 2건)")
+        lbl_bc_title = QLabel()
+        self._i18n(lbl_bc_title, "recent_screen")
         lbl_bc_title.setStyleSheet("font-weight: bold; font-size: 11px; color: #ECEFF1;")
         bc_head.addWidget(lbl_bc_title)
         bc_head.addStretch(1)
 
-        btn_copy = QPushButton("📋 복사")
+        btn_copy = QPushButton()
+        self._i18n(btn_copy, "copy")
         btn_copy.setStyleSheet("font-size: 10px; padding: 2px 8px;")
         btn_copy.clicked.connect(lambda: self.on_copy_subtitles_clicked(source_filter="screen"))
-        btn_srt = QPushButton("📥 SRT 내보내기")
+        btn_srt = QPushButton()
+        self._i18n(btn_srt, "export_srt")
         btn_srt.setStyleSheet("font-size: 10px; padding: 2px 8px;")
         btn_srt.clicked.connect(lambda: self.on_export_srt_clicked(source_filter="screen"))
-        btn_txt = QPushButton("📄 TXT 내보내기")
+        btn_txt = QPushButton()
+        self._i18n(btn_txt, "export_txt")
         btn_txt.setStyleSheet("font-size: 10px; padding: 2px 8px;")
         btn_txt.clicked.connect(lambda: self.on_export_txt_clicked(source_filter="screen"))
 
@@ -2815,9 +2917,11 @@ class ControlPanel(QWidget):
 
         head_vbox = QVBoxLayout()
         head_vbox.setSpacing(2)
-        log_title = QLabel("자막 기록")
+        log_title = QLabel()
+        self._i18n(log_title, "history_title")
         log_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ECEFF1;")
-        log_sub = QLabel("음성 인식, 화면 번역, AI 음성 더빙의 결과를 한눈에 비교할 수 있습니다.")
+        log_sub = QLabel()
+        self._i18n(log_sub, "history_sub")
         log_sub.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_SECONDARY};")
         head_vbox.addWidget(log_title)
         head_vbox.addWidget(log_sub)
@@ -2844,24 +2948,30 @@ class ControlPanel(QWidget):
         self.input_sub_search.textChanged.connect(self.on_subtitle_filter_changed)
         tb_row.addWidget(self.input_sub_search, stretch=1)
 
-        lbl_autoscroll = QLabel("자동 스크롤")
+        lbl_autoscroll = QLabel()
+        self._i18n(lbl_autoscroll, "autoscroll")
         lbl_autoscroll.setStyleSheet("font-size: 11px;")
         self.toggle_sub_autoscroll = ModernToggle(active_color=COLOR_ACCENT_PURPLE)
         self.toggle_sub_autoscroll.setChecked(True)
         tb_row.addWidget(lbl_autoscroll)
         tb_row.addWidget(self.toggle_sub_autoscroll)
 
-        self.lbl_sub_count = QLabel("총 0개")
+        self.lbl_sub_count = QLabel()
+        self._i18n(self.lbl_sub_count, "count_total", total=0)
         self.lbl_sub_count.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-size: 11px; font-weight: bold; background: #0E1524; padding: 4px 8px; border-radius: 4px;")
         tb_row.addWidget(self.lbl_sub_count)
 
-        self.btn_export_srt = QPushButton("📥 SRT 저장")
+        self.btn_export_srt = QPushButton()
+        self._i18n(self.btn_export_srt, "save_srt")
         self.btn_export_srt.clicked.connect(self.on_export_srt_clicked)
-        self.btn_export_txt = QPushButton("📄 TXT 저장")
+        self.btn_export_txt = QPushButton()
+        self._i18n(self.btn_export_txt, "save_txt")
         self.btn_export_txt.clicked.connect(self.on_export_txt_clicked)
-        self.btn_copy_sub = QPushButton("📋 전체 복사")
+        self.btn_copy_sub = QPushButton()
+        self._i18n(self.btn_copy_sub, "copy_all")
         self.btn_copy_sub.clicked.connect(self.on_copy_subtitles_clicked)
-        self.btn_clear_sub = QPushButton("🗑 기록 초기화")
+        self.btn_clear_sub = QPushButton()
+        self._i18n(self.btn_clear_sub, "clear_history")
         self.btn_clear_sub.setStyleSheet("color: #EF4444; border-color: rgba(239,68,68,0.4);")
         self.btn_clear_sub.clicked.connect(self.on_clear_subtitles_clicked)
 
@@ -2896,7 +3006,8 @@ class ControlPanel(QWidget):
         filter_layout.setContentsMargins(14, 14, 14, 14)
         filter_layout.setSpacing(10)
 
-        f_title = QLabel("표시 필터")
+        f_title = QLabel()
+        self._i18n(f_title, "filter_title")
         f_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
         filter_layout.addWidget(f_title)
 
@@ -2955,7 +3066,8 @@ class ControlPanel(QWidget):
         info_box = CardWidget(bg_color=COLOR_CARD_INNER, border_radius=6)
         ib_layout = QVBoxLayout(info_box)
         ib_layout.setContentsMargins(10, 10, 10, 10)
-        ib_txt = QLabel("ⓘ 선택한 항목의 음성 인식, 번역, 실제 더빙 결과를 나란히 비교하여 실시간으로 모니터링할 수 있습니다.")
+        ib_txt = QLabel()
+        self._i18n(ib_txt, "history_hint")
         ib_txt.setWordWrap(True)
         ib_txt.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 10px; line-height: 1.4;")
         ib_layout.addWidget(ib_txt)
@@ -2991,9 +3103,11 @@ class ControlPanel(QWidget):
         c_head = QHBoxLayout()
         c_vbox = QVBoxLayout()
         c_vbox.setSpacing(2)
-        c_title = QLabel("자막 디자인 미리보기")
+        c_title = QLabel()
+        self._i18n(c_title, "design_preview")
         c_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ECEFF1;")
-        c_sub = QLabel("실제 자막이 표시되는 방식을 미리 확인하고 스타일을 조정할 수 있습니다.")
+        c_sub = QLabel()
+        self._i18n(c_sub, "design_sub")
         c_sub.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_SECONDARY};")
         c_vbox.addWidget(c_title)
         c_vbox.addWidget(c_sub)
@@ -3012,7 +3126,8 @@ class ControlPanel(QWidget):
         ex_layout = QVBoxLayout(ex_card)
         ex_layout.setContentsMargins(14, 10, 14, 10)
         ex_layout.setSpacing(8)
-        ex_title = QLabel("검은색 vs 흰색")
+        ex_title = QLabel()
+        self._i18n(ex_title, "contrast_sample")
         ex_title.setStyleSheet("font-weight: bold; font-size: 12px; color: #ECEFF1;")
         ex_layout.addWidget(ex_title)
 
@@ -3029,7 +3144,8 @@ class ControlPanel(QWidget):
         s_layout.setSpacing(10)
 
         # 섹션 1: 자막 표시 제어
-        sec0_title = QLabel("자막 표시 제어")
+        sec0_title = QLabel()
+        self._i18n(sec0_title, "display_control")
         sec0_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
         s_layout.addWidget(sec0_title)
 
@@ -3038,7 +3154,8 @@ class ControlPanel(QWidget):
 
         r1 = QHBoxLayout()
         r1.setContentsMargins(0, 1, 0, 1)
-        lbl_r1 = QLabel("음성 자막 표시")
+        lbl_r1 = QLabel()
+        self._i18n(lbl_r1, "show_audio_sub")
         lbl_r1.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
         self.toggle_audio_overlay_vis = ModernToggle(active_color=COLOR_ACCENT_MINT)
         self.toggle_audio_overlay_vis.setChecked(self.config.get("audio_overlay_visible", True))
@@ -3050,7 +3167,8 @@ class ControlPanel(QWidget):
 
         r2 = QHBoxLayout()
         r2.setContentsMargins(0, 1, 0, 1)
-        lbl_r2 = QLabel("화면 자막 표시")
+        lbl_r2 = QLabel()
+        self._i18n(lbl_r2, "show_screen_sub")
         lbl_r2.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
         self.toggle_screen_overlay_vis = ModernToggle(active_color=COLOR_ACCENT_PURPLE)
         self.toggle_screen_overlay_vis.setChecked(self.config.get("screen_overlay_visible", True))
@@ -3067,7 +3185,8 @@ class ControlPanel(QWidget):
         s_layout.addWidget(line0)
 
         # 섹션 2: 자막 스타일
-        sec1_title = QLabel("자막 스타일")
+        sec1_title = QLabel()
+        self._i18n(sec1_title, "subtitle_style")
         sec1_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
         s_layout.addWidget(sec1_title)
 
@@ -3077,7 +3196,8 @@ class ControlPanel(QWidget):
         # 글꼴 크기
         r_font = QHBoxLayout()
         r_font.setContentsMargins(0, 1, 0, 1)
-        lbl_font = QLabel("글꼴 크기")
+        lbl_font = QLabel()
+        self._i18n(lbl_font, "font_size")
         lbl_font.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
         lbl_font.setFixedWidth(84)
         self.font_slider = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -3096,7 +3216,8 @@ class ControlPanel(QWidget):
         # 배경 불투명도
         r_op = QHBoxLayout()
         r_op.setContentsMargins(0, 1, 0, 1)
-        lbl_op = QLabel("배경 불투명도")
+        lbl_op = QLabel()
+        self._i18n(lbl_op, "opacity")
         lbl_op.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
         lbl_op.setFixedWidth(84)
         cur_op = int(self.config.get("overlay_bg_opacity", 0.66) * 100)
@@ -3116,7 +3237,8 @@ class ControlPanel(QWidget):
         # 외곽선 두께
         r_str = QHBoxLayout()
         r_str.setContentsMargins(0, 1, 0, 1)
-        lbl_str = QLabel("외곽선 두께")
+        lbl_str = QLabel()
+        self._i18n(lbl_str, "stroke")
         lbl_str.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
         lbl_str.setFixedWidth(84)
         cur_str = self.config.get("subtitle_stroke_width", 0)
@@ -3136,7 +3258,8 @@ class ControlPanel(QWidget):
         # 글자 자간
         r_spc = QHBoxLayout()
         r_spc.setContentsMargins(0, 1, 0, 1)
-        lbl_spc = QLabel("글자 자간")
+        lbl_spc = QLabel()
+        self._i18n(lbl_spc, "letter_spacing")
         lbl_spc.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
         lbl_spc.setFixedWidth(84)
         cur_spc = float(self.config.get("letter_spacing", 0.0))
@@ -3156,18 +3279,19 @@ class ControlPanel(QWidget):
         # 유지 시간
         r_dur = QHBoxLayout()
         r_dur.setContentsMargins(0, 1, 0, 1)
-        lbl_dur = QLabel("유지 시간")
+        lbl_dur = QLabel()
+        self._i18n(lbl_dur, "duration")
         lbl_dur.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
         lbl_dur.setFixedWidth(84)
         cur_dur = self.config.get("screen_subtitle_duration", 10)
         self.slider_duration = NoWheelSlider(Qt.Orientation.Horizontal)
         self.slider_duration.setRange(0, 90)
         self.slider_duration.setValue(cur_dur)
-        self.lbl_duration = QLabel(f"{cur_dur}초" if cur_dur > 0 else "영구 유지")
+        self.lbl_duration = QLabel(self._duration_text(cur_dur))
         self.lbl_duration.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
         self.lbl_duration.setFixedWidth(52)
         self.lbl_duration.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.slider_duration.valueChanged.connect(lambda v: (self.on_duration_slider_changed(v), self.lbl_duration.setText(f"{v}초" if v > 0 else "영구 유지")))
+        self.slider_duration.valueChanged.connect(lambda v: (self.on_duration_slider_changed(v), self.lbl_duration.setText(self._duration_text(v))))
         r_dur.addWidget(lbl_dur)
         r_dur.addWidget(self.slider_duration, stretch=1)
         r_dur.addWidget(self.lbl_duration)
@@ -3181,7 +3305,8 @@ class ControlPanel(QWidget):
         s_layout.addWidget(line2)
 
         # 섹션 3: 표시 설정
-        sec2_title = QLabel("표시 설정")
+        sec2_title = QLabel()
+        self._i18n(sec2_title, "display_settings")
         sec2_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
         s_layout.addWidget(sec2_title)
 
@@ -3229,7 +3354,8 @@ class ControlPanel(QWidget):
 
         s_layout.addStretch(1)
 
-        btn_reset_pos = QPushButton("🔄 자막 위치 및 크기 복원")
+        btn_reset_pos = QPushButton()
+        self._i18n(btn_reset_pos, "reset_geometry")
         btn_reset_pos.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_reset_pos.setFixedHeight(34)
         btn_reset_pos.setStyleSheet("""
@@ -3311,16 +3437,19 @@ class ControlPanel(QWidget):
         start_layout.setContentsMargins(14, 12, 14, 12)
         start_layout.setSpacing(8)
 
-        st_title = QLabel("시작 옵션")
+        st_title = QLabel()
+        self._i18n(st_title, "startup")
         st_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        st_sub = QLabel("프로그램 실행 시 자동으로 시작할 기능을 설정하세요.")
+        st_sub = QLabel()
+        self._i18n(st_sub, "startup_sub")
         st_sub.setStyleSheet(f"font-size: 10px; color: {COLOR_TEXT_SECONDARY};")
         start_layout.addWidget(st_title)
         start_layout.addWidget(st_sub)
 
         # 음성 번역 자동 시작
         a_row = QHBoxLayout()
-        lbl_a = QLabel("음성 번역 자동 시작")
+        lbl_a = QLabel()
+        self._i18n(lbl_a, "auto_audio")
         lbl_a.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_PRIMARY};")
         self.toggle_auto_audio = ModernToggle(active_color=COLOR_ACCENT_MINT)
         self.toggle_auto_audio.setChecked(self.config.get("auto_start_audio", False))
@@ -3333,7 +3462,8 @@ class ControlPanel(QWidget):
 
         # 화면 번역 자동 시작
         s_row = QHBoxLayout()
-        lbl_s = QLabel("화면 번역 자동 시작")
+        lbl_s = QLabel()
+        self._i18n(lbl_s, "auto_screen")
         lbl_s.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_PRIMARY};")
         self.toggle_auto_screen = ModernToggle(active_color=COLOR_ACCENT_PURPLE)
         self.toggle_auto_screen.setChecked(self.config.get("auto_start_screen", False))
@@ -3346,7 +3476,8 @@ class ControlPanel(QWidget):
 
         # GPU 모델 즉시 예열
         w_row = QHBoxLayout()
-        lbl_w = QLabel("GPU 모델 즉시 예열")
+        lbl_w = QLabel()
+        self._i18n(lbl_w, "gpu_warmup")
         lbl_w.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_PRIMARY};")
         self.toggle_gpu_warmup = ModernToggle(active_color=COLOR_ACCENT_CYAN)
         self.toggle_gpu_warmup.setChecked(self.config.get("gpu_warmup_on_startup", False))
@@ -3359,7 +3490,8 @@ class ControlPanel(QWidget):
 
         # 유튜브 자동 감지 및 도메인 사전 적용
         y_row = QHBoxLayout()
-        lbl_y = QLabel("유튜브 자동 감지 및 도메인 사전")
+        lbl_y = QLabel()
+        self._i18n(lbl_y, "youtube_detect")
         lbl_y.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_PRIMARY};")
         self.toggle_auto_youtube = ModernToggle(active_color=COLOR_ACCENT_PINK)
         has_gemini_init = bool(self.config.get("gemini_api_key", "").strip())
@@ -3397,7 +3529,8 @@ class ControlPanel(QWidget):
                 border: 1px solid {COLOR_ACCENT_PINK};
             }}
         """)
-        self.btn_apply_youtube_url = QPushButton("사전 적용")
+        self.btn_apply_youtube_url = QPushButton()
+        self._i18n(self.btn_apply_youtube_url, "apply_glossary")
         self.btn_apply_youtube_url.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_apply_youtube_url.setStyleSheet(f"""
             QPushButton {{
@@ -3434,7 +3567,8 @@ class ControlPanel(QWidget):
         self.yt_input_container.setVisible(self.toggle_auto_youtube.isChecked())
 
         # 전체 화면 번역 전역 단축키 설정
-        lbl_hk = QLabel("전체 화면 번역 단축키")
+        lbl_hk = QLabel()
+        self._i18n(lbl_hk, "hotkey")
         lbl_hk.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_PRIMARY};")
         start_layout.addWidget(lbl_hk)
 
@@ -3449,7 +3583,8 @@ class ControlPanel(QWidget):
         self.btn_settings_hotkey.recording_state_changed.connect(self._on_hotkey_recording_state_changed)
         hk_btn_row.addWidget(self.btn_settings_hotkey, 1)
 
-        self.btn_reset_hotkey = QPushButton("↺ 기본값")
+        self.btn_reset_hotkey = QPushButton()
+        self._i18n(self.btn_reset_hotkey, "reset_default")
         self.btn_reset_hotkey.setToolTip("단축키를 기본값인 F4로 초기화합니다.")
         self.btn_reset_hotkey.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reset_hotkey.setStyleSheet(f"""
@@ -3476,9 +3611,11 @@ class ControlPanel(QWidget):
 
         # 문제 진단: 배포판은 콘솔 창이 없으므로 로그 파일 위치를 바로 열 수 있게 한다.
         log_row = QHBoxLayout()
-        lbl_log = QLabel("문제 진단")
+        lbl_log = QLabel()
+        self._i18n(lbl_log, "diagnostics")
         lbl_log.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_PRIMARY};")
-        self.btn_open_logs = QPushButton("📂 로그 폴더 열기")
+        self.btn_open_logs = QPushButton()
+        self._i18n(self.btn_open_logs, "open_logs")
         self.btn_open_logs.setToolTip("오류 신고 시 이 폴더의 crash.log · stderr.log · stdout.log 를 첨부해 주세요.")
         self.btn_open_logs.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_open_logs.setStyleSheet(f"""
@@ -3512,16 +3649,19 @@ class ControlPanel(QWidget):
         pr_head = QHBoxLayout()
         pr_vbox = QVBoxLayout()
         pr_vbox.setSpacing(2)
-        pr_title = QLabel("설정 프리셋")
+        pr_title = QLabel()
+        self._i18n(pr_title, "preset_section")
         pr_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        pr_sub = QLabel("추천 및 커스텀 설정을 빠르게 전환하세요.")
+        pr_sub = QLabel()
+        self._i18n(pr_sub, "preset_section_sub")
         pr_sub.setStyleSheet(f"font-size: 10px; color: {COLOR_TEXT_SECONDARY};")
         pr_vbox.addWidget(pr_title)
         pr_vbox.addWidget(pr_sub)
         pr_head.addLayout(pr_vbox)
         pr_head.addStretch(1)
 
-        self.btn_save_preset = QPushButton("➕ 현재 설정 저장")
+        self.btn_save_preset = QPushButton()
+        self._i18n(self.btn_save_preset, "save_current")
         self.btn_save_preset.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save_preset.setStyleSheet(f"""
             QPushButton {{
@@ -3591,9 +3731,11 @@ class ControlPanel(QWidget):
         stt_dev_layout.setContentsMargins(14, 12, 14, 12)
         stt_dev_layout.setSpacing(8)
 
-        stt_dev_title = QLabel("음성인식 (STT)")
+        stt_dev_title = QLabel()
+        self._i18n(stt_dev_title, "stt_title")
         stt_dev_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        stt_dev_sub = QLabel("음성을 텍스트로 변환할 가속 디바이스를 선택하세요.")
+        stt_dev_sub = QLabel()
+        self._i18n(stt_dev_sub, "stt_sub")
         stt_dev_sub.setStyleSheet(f"font-size: 10px; color: {COLOR_TEXT_SECONDARY};")
         stt_dev_layout.addWidget(stt_dev_title)
         stt_dev_layout.addWidget(stt_dev_sub)
@@ -3666,16 +3808,19 @@ class ControlPanel(QWidget):
         m_head = QHBoxLayout()
         m_vbox = QVBoxLayout()
         m_vbox.setSpacing(2)
-        lbl_model_title = QLabel("STT 모델")
+        lbl_model_title = QLabel()
+        self._i18n(lbl_model_title, "stt_model")
         lbl_model_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        self.lbl_model_sub = QLabel("속도와 정확도 균형에 맞는 Whisper 모델을 선택하세요.")
+        self.lbl_model_sub = QLabel()
+        self._i18n(self.lbl_model_sub, "stt_model_sub")
         self.lbl_model_sub.setStyleSheet(f"font-size: 10px; color: {COLOR_TEXT_SECONDARY};")
         m_vbox.addWidget(lbl_model_title)
         m_vbox.addWidget(self.lbl_model_sub)
         m_head.addLayout(m_vbox)
         m_head.addStretch(1)
 
-        self.btn_manage_stt = QPushButton("⚙️ 모델 관리")
+        self.btn_manage_stt = QPushButton()
+        self._i18n(self.btn_manage_stt, "manage_stt")
         self.btn_manage_stt.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_manage_stt.setStyleSheet(f"""
             QPushButton {{
@@ -3732,7 +3877,8 @@ class ControlPanel(QWidget):
 
         t_head_vbox = QVBoxLayout()
         t_head_vbox.setSpacing(2)
-        lbl_tempo_title = QLabel("콘텐츠 템포")
+        lbl_tempo_title = QLabel()
+        self._i18n(lbl_tempo_title, "content_tempo")
         lbl_tempo_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
         self.lbl_tempo_title_tab4 = lbl_tempo_title
         self.tempo_card_tab4 = tempo_card
@@ -3760,11 +3906,12 @@ class ControlPanel(QWidget):
         ]
 
         for key, title, desc, r, c in tempo_items:
-            btn = QPushButton(title)
+            btn = QPushButton()
+            self._i18n(btn, f"tempo_{key}")
             btn.setCheckable(True)
             btn.setChecked(key == cur_tempo_preset)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setToolTip(desc)
+            btn.setToolTip(tr(f"tempo_{key}") if is_global() else desc)
             btn.setFixedHeight(32)
             btn.setStyleSheet(f"""
                 QPushButton {{
@@ -3833,15 +3980,18 @@ class ControlPanel(QWidget):
         eng_layout.setContentsMargins(14, 12, 14, 12)
         eng_layout.setSpacing(8)
 
-        eng_title = QLabel("번역 엔진")
+        eng_title = QLabel()
+        self._i18n(eng_title, "engine_title")
         eng_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        eng_sub = QLabel("번역에 사용할 엔진을 선택하세요.")
+        eng_sub = QLabel()
+        self._i18n(eng_sub, "engine_sub")
         eng_sub.setStyleSheet(f"font-size: 10px; color: {COLOR_TEXT_SECONDARY};")
         eng_layout.addWidget(eng_title)
         eng_layout.addWidget(eng_sub)
 
         # 온라인 (클라우드)
-        lbl_online = QLabel("온라인 (클라우드)")
+        lbl_online = QLabel()
+        self._i18n(lbl_online, "online_cloud")
         lbl_online.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-size: 11px; font-weight: bold;")
         eng_layout.addWidget(lbl_online)
 
@@ -3898,9 +4048,11 @@ class ControlPanel(QWidget):
 
         # 로컬 (내 PC / Ollama 실행)
         loc_head = QHBoxLayout()
-        lbl_local = QLabel("로컬 AI 번역 (내 PC / Ollama)")
+        lbl_local = QLabel()
+        self._i18n(lbl_local, "local_ai")
         lbl_local.setStyleSheet(f"color: {COLOR_ACCENT_MINT}; font-size: 11px; font-weight: bold;")
-        self.btn_manage_llm = QPushButton("⚙️ 로컬 모델 관리")
+        self.btn_manage_llm = QPushButton()
+        self._i18n(self.btn_manage_llm, "manage_llm")
         self.btn_manage_llm.setToolTip("로컬 생성형 LLM(Gemma, EXAONE) 통합 관리")
         self.btn_manage_llm.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_manage_llm.setStyleSheet(f"""
@@ -3982,9 +4134,11 @@ class ControlPanel(QWidget):
         api_layout.setContentsMargins(14, 12, 14, 12)
         api_layout.setSpacing(8)
 
-        api_title = QLabel("API 키 관리")
+        api_title = QLabel()
+        self._i18n(api_title, "api_title")
         api_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        api_sub = QLabel("온라인 서비스 사용을 위해 API 키를 설정하세요.")
+        api_sub = QLabel()
+        self._i18n(api_sub, "api_sub")
         api_sub.setStyleSheet(f"font-size: 10px; color: {COLOR_TEXT_SECONDARY};")
         api_layout.addWidget(api_title)
         api_layout.addWidget(api_sub)
@@ -4106,7 +4260,8 @@ class ControlPanel(QWidget):
 
         api_layout.addStretch(1)
 
-        api_info = QLabel("ⓘ API 키는 로컬에 안전하게 저장되며, 외부로 전송되지 않습니다.")
+        api_info = QLabel()
+        self._i18n(api_info, "api_info")
         api_info.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 10px;")
         api_info.setWordWrap(True)
         api_layout.addWidget(api_info)
@@ -4217,24 +4372,14 @@ class ControlPanel(QWidget):
                 btn.blockSignals(False)
 
     def _show_no_nvidia_notice(self):
-        QMessageBox.information(
-            self,
-            "NVIDIA GPU 없음",
-            "이 PC에서 NVIDIA 그래픽 카드가 감지되지 않아 GPU 가속을 사용할 수 없습니다.\n\n"
-            "GPU 가속은 NVIDIA CUDA 전용입니다. 음성인식과 로컬 번역은 CPU로 계속 사용할 수 있습니다."
-        )
+        tell(self, "msg_no_nvidia_title", "msg_no_nvidia")
         self._sync_stt_buttons_ui()
 
     def _on_stt_dev_selected(self, selected_key: str):
         if selected_key == "groq":
             has_key = bool(self.config.get("groq_api_key", "").strip())
             if not has_key:
-                ret = QMessageBox.question(
-                    self,
-                    "🔑 Groq API 키 필요",
-                    "Groq 클라우드 STT를 사용하려면 Groq API 키가 필요합니다.\n\nAPI 키 설정 창을 여시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name="Groq")
                 self._sync_stt_buttons_ui()
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_api_key_dialog()
@@ -4242,12 +4387,7 @@ class ControlPanel(QWidget):
         elif selected_key == "deepgram":
             has_key = bool(self.config.get("deepgram_api_key", "").strip())
             if not has_key:
-                ret = QMessageBox.question(
-                    self,
-                    "🔑 Deepgram API 키 필요",
-                    "Deepgram 클라우드 STT를 사용하려면 Deepgram API 키가 필요합니다.\n\nAPI 키 설정 창을 여시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name="Deepgram")
                 self._sync_stt_buttons_ui()
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_api_key_dialog()
@@ -4261,14 +4401,7 @@ class ControlPanel(QWidget):
                 if not LLMModelManager.is_nvidia_gpu_present():
                     self._show_no_nvidia_notice()
                     return
-                ret = QMessageBox.question(
-                    self,
-                    "⚡ NVIDIA CUDA GPU 가속 팩 설치 안내",
-                    "NVIDIA 그래픽 카드가 감지되었으나, GPU 실시간 가속 팩(cuBLAS 라이브러리)이 아직 설치되지 않았습니다.\n\n"
-                    "CUDA 가속 팩을 설치하시면 음성인식(STT)과 로컬 AI 번역을 압도적인 초저지연·고성능으로 이용하실 수 있습니다.\n\n"
-                    "모델 설정 화면으로 이동하여 GPU 가속 팩을 다운로드하시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_cuda_pack_title", "msg_cuda_pack")
                 self._sync_stt_buttons_ui()
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_llm_model_manager()
@@ -4279,7 +4412,7 @@ class ControlPanel(QWidget):
         idx = self.device_keys.index(selected_key) if selected_key in self.device_keys else 0
         self.on_device_changed(idx)
         self._sync_all_pipeline_status()
-        self.update_engine_status("ready", f"음성인식 디바이스 변경: {selected_key.upper()}")
+        self.update_engine_status("ready", tr("status_device", name=selected_key.upper()))
 
     def _on_trans_engine_selected(self, selected_key: str):
         self.set_engine_by_key(selected_key)
@@ -4342,7 +4475,10 @@ class ControlPanel(QWidget):
         }
         lang_tag = ""
         if is_multi:
-            lang_label = lang_names.get(cur_stt_lang, cur_stt_lang)
+            if is_global():
+                lang_label = UI_LANGUAGE_NAMES.get(cur_stt_lang, cur_stt_lang)
+            else:
+                lang_label = lang_names.get(cur_stt_lang, cur_stt_lang)
             lang_tag = f" ({lang_label})"
 
         if hasattr(self, 'chip_stt_model'):
@@ -4365,7 +4501,11 @@ class ControlPanel(QWidget):
             clean_tempo = tempo_short
             for icon in ["🧠", "⚡", "📰", "🎙️", "🎙", "🎬", "🌿"]:
                 clean_tempo = clean_tempo.replace(icon, "").strip()
-            self.chip_tempo.setText(f"⏱️ {clean_tempo} ▾")
+            tempo_key = self.config.get("content_tempo_preset", "smart")
+            tempo_label = tr(f"tempo_{tempo_key}")
+            if tempo_label.startswith("tempo_"):
+                tempo_label = clean_tempo
+            self.chip_tempo.setText(f"⏱️ {tempo_label} ▾")
             if uses_local_tempo_vad(self.config):
                 tempo_tip = f"현재 콘텐츠 템포: {clean_tempo} (로컬 STT 호흡·더빙)"
             else:
@@ -4398,7 +4538,7 @@ class ControlPanel(QWidget):
             if enabled:
                 self.lbl_tempo_desc.setText(tempo_preset_desc(self.config.get("content_tempo_preset", "smart"), self.config))
             else:
-                self.lbl_tempo_desc.setText("Deepgram은 자체 분절을 사용하므로 콘텐츠 템포가 적용되지 않습니다.")
+                self.lbl_tempo_desc.setText(self._tempo_caption())
             self.lbl_tempo_desc.setStyleSheet(f"color: {muted}; font-size: 11px;")
 
         if hasattr(self, "tempo_card_tab4"):
@@ -4514,13 +4654,13 @@ class ControlPanel(QWidget):
             self.overlay.set_paused_state(not is_active)
         if hasattr(self, 'btn_toggle'):
             if is_active:
-                self.btn_toggle.setText("❚❚ 오디오 통역 실행 중")
+                self._i18n(self.btn_toggle, "audio_running")
             else:
-                self.btn_toggle.setText("▶ 오디오 통역 시작")
+                self._i18n(self.btn_toggle, "audio_start")
         if hasattr(self, 'btn_bottom_audio'):
             self.btn_bottom_audio.setChecked(is_active)
             if is_active:
-                self.btn_bottom_audio.setText("❚❚ 일시정지")
+                self._i18n(self.btn_bottom_audio, "pause")
                 self.btn_bottom_audio.setStyleSheet(f"""
                     QPushButton {{
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
@@ -4536,9 +4676,9 @@ class ControlPanel(QWidget):
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34D399, stop:1 #10B981);
                     }}
                 """)
-                self.update_engine_status("ready", "오디오 통역 시작됨 (음성 대기 중)")
+                self.update_engine_status("ready", tr("status_audio_started"))
             else:
-                self.btn_bottom_audio.setText("번역 시작")
+                self._i18n(self.btn_bottom_audio, "start_translation")
                 self.btn_bottom_audio.setStyleSheet(f"""
                     QPushButton {{
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, stop:1 #4338CA);
@@ -4555,7 +4695,7 @@ class ControlPanel(QWidget):
                         border-color: #818CF8;
                     }}
                 """)
-                self.update_engine_status("paused", "음성 번역 일시정지됨")
+                self.update_engine_status("paused", tr("status_audio_paused"))
 
     def set_screen_active_state(self, is_active: bool):
         self._is_screen_active = is_active
@@ -4585,13 +4725,13 @@ class ControlPanel(QWidget):
                 self.screen_overlay.show()
         if hasattr(self, 'btn_toggle_screen'):
             if is_active:
-                self.btn_toggle_screen.setText("❚❚ 화면 실시간 번역 중지")
+                self._i18n(self.btn_toggle_screen, "screen_stop")
             else:
-                self.btn_toggle_screen.setText("▶ 화면 실시간 번역 시작")
+                self._i18n(self.btn_toggle_screen, "screen_start")
         if hasattr(self, 'btn_bottom_screen'):
             self.btn_bottom_screen.setChecked(is_active)
             if is_active:
-                self.btn_bottom_screen.setText("❚❚ 일시정지")
+                self._i18n(self.btn_bottom_screen, "pause")
                 self.btn_bottom_screen.setStyleSheet(f"""
                     QPushButton {{
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
@@ -4607,9 +4747,9 @@ class ControlPanel(QWidget):
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34D399, stop:1 #10B981);
                     }}
                 """)
-                self.update_engine_status("ready", "화면 실시간 번역 시작됨 (감시 중)")
+                self.update_engine_status("ready", tr("status_screen_started"))
             else:
-                self.btn_bottom_screen.setText("번역 시작")
+                self._i18n(self.btn_bottom_screen, "start_translation")
                 self.btn_bottom_screen.setStyleSheet(f"""
                     QPushButton {{
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0369A1);
@@ -4626,14 +4766,14 @@ class ControlPanel(QWidget):
                         border-color: #7DD3FC;
                     }}
                 """)
-                self.update_engine_status("paused", "화면 번역 중지됨")
+                self.update_engine_status("paused", tr("status_screen_paused"))
 
     def _update_dubbing_toggle_btn_ui(self):
         is_on = self.config.get("dubbing_enabled", False)
         if hasattr(self, 'btn_bottom_dubbing'):
             self.btn_bottom_dubbing.setChecked(is_on)
             if is_on:
-                self.btn_bottom_dubbing.setText("❚❚ 일시정지")
+                self._i18n(self.btn_bottom_dubbing, "pause")
                 self.btn_bottom_dubbing.setStyleSheet(f"""
                     QPushButton {{
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
@@ -4650,7 +4790,7 @@ class ControlPanel(QWidget):
                     }}
                 """)
             else:
-                self.btn_bottom_dubbing.setText("더빙 시작")
+                self._i18n(self.btn_bottom_dubbing, "start_dubbing")
                 self.btn_bottom_dubbing.setStyleSheet(f"""
                     QPushButton {{
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #DB2777, stop:1 #BE185D);
@@ -4697,13 +4837,7 @@ class ControlPanel(QWidget):
         if checked:
             has_gemini = bool(self.config.get("gemini_api_key", "").strip())
             if not has_gemini:
-                ret = QMessageBox.question(
-                    self,
-                    "🔑 Gemini API 키 등록 필요",
-                    "유튜브 자동 감지 및 도메인 사전 기능을 사용하려면 Google Gemini API 키가 필요합니다.\n\n"
-                    "API 키 설정 창을 여시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name="Gemini")
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_api_key_dialog()
 
@@ -4735,34 +4869,28 @@ class ControlPanel(QWidget):
             return
         url = self.edit_youtube_url.text().strip()
         if not url:
-            self._set_youtube_status_ui(False, "YouTube 영상 URL 또는 비디오 ID를 입력하세요.")
+            self._set_youtube_status_ui(False, tr("msg_youtube_url"))
             return
 
         from src.youtube_helper import extract_youtube_id
         vid = extract_youtube_id(url)
         if not vid:
-            self._set_youtube_status_ui(False, "올바른 YouTube URL 또는 비디오 ID 형식이 아닙니다.")
+            self._set_youtube_status_ui(False, tr("msg_youtube_bad"))
             return
 
         api_key = self.config.get("gemini_api_key", "").strip()
         if not api_key:
-            ret = QMessageBox.question(
-                self,
-                "🔑 Gemini API 키 등록 필요",
-                "유튜브 도메인 사전 생성을 위해서는 Google Gemini API 키가 필요합니다.\n\n"
-                "API 키 설정 창을 여시겠습니까?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
+            ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name="Gemini")
             if ret == QMessageBox.StandardButton.Yes:
                 self.open_api_key_dialog()
             api_key = self.config.get("gemini_api_key", "").strip()
             if not api_key:
-                self._set_youtube_status_ui(False, "❌ Gemini API 키가 등록되지 않아 사전을 생성할 수 없습니다.")
+                self._set_youtube_status_ui(False, tr("msg_youtube_no_key"))
                 return
 
         self.btn_apply_youtube_url.setEnabled(False)
         self.edit_youtube_url.setEnabled(False)
-        self._set_youtube_status_ui(True, "⏳ 유튜브 영상 데이터 수집 및 도메인 사전 생성 중 (Gemini Flash)...", is_loading=True)
+        self._set_youtube_status_ui(True, tr("msg_youtube_building"), is_loading=True)
 
         def _worker():
             try:
@@ -4908,7 +5036,10 @@ class ControlPanel(QWidget):
             clean_t = t_short
             for icon in ["🧠", "⚡", "📰", "🎙️", "🎙", "🎬", "🌿"]:
                 clean_t = clean_t.replace(icon, "").strip()
-            self.chip_tempo.setText(f"⏱️ {clean_t} ▾")
+            tempo_label = tr(f"tempo_{cur_data}")
+            if tempo_label.startswith("tempo_"):
+                tempo_label = clean_t
+            self.chip_tempo.setText(f"⏱️ {tempo_label} ▾")
 
         if self.stt_thread:
             try:
@@ -4919,7 +5050,7 @@ class ControlPanel(QWidget):
             except Exception as e:
                 print(f"[ControlPanel] 템포 프리셋 적용 주의: {e}")
         self.save_config_cb(self.config)
-        self.update_engine_status("ready", f"템포 적용: {p.get('name', cur_data)}")
+        self.update_engine_status("ready", tr("status_tempo_applied", name=p.get("name", cur_data)))
 
     def _on_tempo_status_updated(self, text: str):
         if hasattr(self, 'lbl_tempo_desc'):
@@ -5230,7 +5361,7 @@ class ControlPanel(QWidget):
         )
         self.subtitle_entry_signal.emit(None)
         clean_trans = trans.strip() if trans else ""
-        self.update_engine_status("translating", f"{engine} 통역: {clean_trans}")
+        self.update_engine_status("translating", tr("status_voice_line", engine=engine, text=clean_trans))
 
     def _on_screen_subtitle_received(self, orig, trans, engine, roi_idx=0):
         if not self._is_screen_active and not str(engine).startswith("즉시·"):
@@ -5245,7 +5376,7 @@ class ControlPanel(QWidget):
         )
         self.subtitle_entry_signal.emit(None)
         clean_trans = trans.strip() if trans else ""
-        self.update_engine_status("translating", f"화면 번역 ({engine}): {clean_trans}")
+        self.update_engine_status("translating", tr("status_screen_line", engine=engine, text=clean_trans))
 
     def _on_dubbing_playback_received(self, text, speaker=None, orig_text=None, source="audio", voice=None, speed=None, region_idx=0):
         self.subtitle_history.update_or_add_dubbing(
@@ -5272,9 +5403,9 @@ class ControlPanel(QWidget):
                 search_kw = self.input_sub_search.text().strip() if hasattr(self, 'input_sub_search') else ""
                 if (filter_mode and filter_mode != "all") or search_kw:
                     filtered_len = len(self.subtitle_history.get_entries(source_filter=filter_mode, keyword=search_kw))
-                    self.lbl_sub_count.setText(f"{filtered_len}/{total_cnt}개")
+                    self._i18n(self.lbl_sub_count, "count_filtered", shown=filtered_len, total=total_cnt)
                 else:
-                    self.lbl_sub_count.setText(f"총 {total_cnt}개")
+                    self._i18n(self.lbl_sub_count, "count_total", total=total_cnt)
             except Exception:
                 pass
         self._update_mini_chat()
@@ -5339,9 +5470,9 @@ class ControlPanel(QWidget):
             if hasattr(self, 'lbl_sub_count'):
                 total_cnt = self.subtitle_history.count()
                 if (filter_mode and filter_mode != "all") or search_kw:
-                    self.lbl_sub_count.setText(f"{len(filtered)}/{total_cnt}개")
+                    self._i18n(self.lbl_sub_count, "count_filtered", shown=len(filtered), total=total_cnt)
                 else:
-                    self.lbl_sub_count.setText(f"총 {total_cnt}개")
+                    self._i18n(self.lbl_sub_count, "count_total", total=total_cnt)
             if hasattr(self, 'toggle_sub_autoscroll') and self.toggle_sub_autoscroll.isChecked():
                 sb = self.text_sub_history.verticalScrollBar()
                 sb.setValue(sb.maximum())
@@ -5361,14 +5492,14 @@ class ControlPanel(QWidget):
             "trans_only": "korean_subtitles.srt",
             "dub_only": "dubbing_speech_only.srt",
         }
-        default_name = name_map.get(filter_mode, "subtitles.srt")
-        fn, _ = QFileDialog.getSaveFileName(self, "자막 파일 저장 (.srt)", default_name, "SubRip (*.srt)")
+        default_name = self._subtitle_export_filename(filter_mode, "srt", name_map)
+        fn, _ = QFileDialog.getSaveFileName(self, tr("msg_save_dialog_srt"), default_name, "SubRip (*.srt)")
         if fn:
             ok = self.subtitle_history.export_to_srt(filepath=fn, source_filter=filter_mode, keyword=search_kw)
             if ok:
-                QMessageBox.information(self, "저장 완료", f"자막 파일이 저장되었습니다:\n{fn}")
+                tell(self, "msg_saved_title", "msg_saved_file", path=fn)
             else:
-                QMessageBox.warning(self, "저장 실패", "자막 파일 저장 중 오류가 발생했습니다.")
+                tell(self, "msg_save_failed_title", "msg_save_failed_sub", kind="warn")
 
     def on_export_txt_clicked(self, checked=False, source_filter=None):
         filter_mode = source_filter or (self.combo_sub_filter.currentData() if hasattr(self, 'combo_sub_filter') else "all") or "all"
@@ -5382,14 +5513,14 @@ class ControlPanel(QWidget):
             "trans_only": "korean_transcript.txt",
             "dub_only": "dubbing_transcript.txt",
         }
-        default_name = name_map.get(filter_mode, "subtitles.txt")
-        fn, _ = QFileDialog.getSaveFileName(self, "텍스트 파일 저장 (.txt)", default_name, "Text (*.txt)")
+        default_name = self._subtitle_export_filename(filter_mode, "txt", name_map)
+        fn, _ = QFileDialog.getSaveFileName(self, tr("msg_save_dialog_txt"), default_name, "Text (*.txt)")
         if fn:
             ok = self.subtitle_history.export_to_txt(filepath=fn, source_filter=filter_mode, keyword=search_kw)
             if ok:
-                QMessageBox.information(self, "저장 완료", f"텍스트 파일이 저장되었습니다:\n{fn}")
+                tell(self, "msg_saved_title", "msg_saved_file", path=fn)
             else:
-                QMessageBox.warning(self, "저장 실패", "텍스트 파일 저장 중 오류가 발생했습니다.")
+                tell(self, "msg_save_failed_title", "msg_save_failed_text", kind="warn")
 
     def on_copy_subtitles_clicked(self, checked=False, source_filter=None):
         filter_mode = source_filter or (self.combo_sub_filter.currentData() if hasattr(self, 'combo_sub_filter') else "all") or "all"
@@ -5397,7 +5528,7 @@ class ControlPanel(QWidget):
         content = self.subtitle_history.export_to_txt(source_filter=filter_mode, keyword=search_kw)
         if isinstance(content, str):
             QApplication.clipboard().setText(content)
-            QMessageBox.information(self, "복사 완료", "선택된 범위의 자막 대본이 클립보드에 복사되었습니다.")
+            tell(self, "msg_copied_title", "msg_copied")
 
     def on_clear_subtitles_clicked(self):
         self.subtitle_history.clear()
@@ -5426,17 +5557,15 @@ class ControlPanel(QWidget):
 
     def _speaker_status_text(self):
         if not self.config.get('speaker_diarization_enabled', False):
-            return '화자 분리 꺼짐'
+            return tr("speaker_off")
         deepgram = getattr(self.stt_thread, 'deepgram_streamer', None)
         if (self.config.get('stt_provider') == 'deepgram' and deepgram and
                 deepgram.is_connected()):
-            return 'Deepgram 화자 분리 작동 중 · 최대 {0}명'.format(
-                int(self.config.get('speaker_max_count', 2))
-            )
+            return tr("speaker_live", count=int(self.config.get('speaker_max_count', 2)))
         identifier = getattr(self.stt_thread, 'speaker_identifier', None)
         if identifier and identifier.is_enabled:
-            return f'로컬 · {identifier.get_status()}'
-        return '화자 분리 준비 중'
+            return f'{tr("engine_local")} · {identifier.get_status()}'
+        return tr("speaker_wait")
 
     def refresh_speaker_mgmt_ui(self, force: bool = False):
         if not hasattr(self, 'speaker_list_layout'):
@@ -5469,7 +5598,8 @@ class ControlPanel(QWidget):
                 item.widget().deleteLater()
 
         if not speakers:
-            empty_lbl = QLabel("등록된 화자가 없습니다 (대화 음성이 유입되면 자동 등록)")
+            empty_lbl = QLabel()
+            self._i18n(empty_lbl, "no_speakers")
             empty_lbl.setStyleSheet("color: #64748B; font-size: 11px; padding: 12px;")
             empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.speaker_list_layout.addWidget(empty_lbl)
@@ -5487,13 +5617,13 @@ class ControlPanel(QWidget):
             name_lbl = QLabel(spk_name)
             name_lbl.setStyleSheet(f"font-weight: bold; color: {spk.get('color', COLOR_ACCENT_CYAN)};")
 
-            select_cb = QPushButton("선택")
+            select_cb = QPushButton(tr("select_speaker"))
             select_cb.setCheckable(True)
             select_cb.setChecked(spk_name in selected)
             self.speaker_selection_checkboxes[spk_name] = select_cb
 
             alias_edit = QLineEdit()
-            alias_edit.setPlaceholderText("별칭 (예: 주인공)")
+            alias_edit.setPlaceholderText(tr("alias_placeholder"))
             alias_edit.setText(spk.get("alias", self.config.get("speaker_aliases", {}).get(spk_name, "")))
             def _on_alias(s=spk_name, field=alias_edit):
                 txt = field.text()
@@ -5578,18 +5708,8 @@ class ControlPanel(QWidget):
     def _handle_preset_model_preflight(self, model_name: str, model_type: str, preset_key: str, notify: bool, is_stt: bool = False) -> bool:
         """프리셋 클릭 시 모델 미설치 모델 관리창 유도 다이얼로그 (LLM 팝업과 동일한 표준 QMessageBox.question 형태)"""
         from PyQt6.QtWidgets import QMessageBox
-        role_label = "STT" if is_stt else "로컬"
-        title = f"📦 {role_label} 모델 다운로드 필요"
-        text = (
-            f"선택하신 '{model_name}' 모델이 아직 설치되지 않았습니다.\n\n"
-            "모델 관리창을 열어 모델을 다운로드하시겠습니까?"
-        )
-        ret = QMessageBox.question(
-            self,
-            title,
-            text,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        role_label = "STT" if is_stt else tr("dlg_local_models")
+        ret = ask(self, "msg_model_missing_title", "msg_model_missing", name=model_name or role_label)
         if ret == QMessageBox.StandardButton.Yes:
             if is_stt:
                 self.open_stt_model_manager(target_model_id=model_type)
@@ -5622,7 +5742,7 @@ class ControlPanel(QWidget):
                     self.save_config_cb(self.config)
                     self.set_engine_by_key(self.config["translation_engine"])
                     self._refresh_presets_ui()
-                    QMessageBox.information(self, "✨ 모델 다운로드 완료 & 자동 전환", f"[{tag}] 다운로드가 완료되어 고품질 LLM 번역으로 자동 승격되었습니다!")
+                    tell(self, "msg_download_switched_title", "msg_download_switched", name=tag)
             self._active_worker.finished_signal.connect(_on_done)
             self._active_worker.start()
         else:
@@ -5645,9 +5765,175 @@ class ControlPanel(QWidget):
                         self.save_config_cb(self.config)
                         self.set_engine_by_key(self.config["translation_engine"])
                         self._refresh_presets_ui()
-                        QMessageBox.information(self, "✨ 모델 다운로드 완료 & 자동 전환", f"[{gguf_info['name']}] 다운로드가 완료되어 고품질 내장 번역으로 자동 승격되었습니다!")
+                        tell(self, "msg_download_switched_title", "msg_download_switched", name=gguf_info["name"])
                 self._active_worker.finished_signal.connect(_on_done_gguf)
                 self._active_worker.start()
+
+    def _builtin_presets(self):
+        return active_builtin_presets()
+
+    def _i18n(self, widget, key, **fmt):
+        return bind(widget, key, **fmt)
+
+    def _preset_display_name(self, key, preset):
+        if is_global():
+            label = tr(f"preset_{key}_name")
+            if label != f"preset_{key}_name":
+                return label
+        return preset.get("name", key)
+
+    def _refill_combo(self, combo, items):
+        if combo is None:
+            return
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        for label, data in items:
+            combo.addItem(label, data)
+        index = combo.findData(current)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+        combo.blockSignals(False)
+
+    def _tempo_caption(self, key=None):
+        if not uses_local_tempo_vad(self.config):
+            return tr("tempo_ignored")
+        key = key or self.config.get("content_tempo_preset", "smart")
+        return tr(f"tempo_{key}_desc")
+
+    def _duration_text(self, seconds, short=False):
+        seconds = int(seconds or 0)
+        if seconds <= 0:
+            return tr("duration_forever")
+        return tr("duration_sec", n=seconds)
+
+    def _refill_localized_lists(self):
+        if hasattr(self, "combo_tempo_preset"):
+            self._refill_combo(self.combo_tempo_preset, [(tr(f"tempo_{key}"), key) for key in CONTENT_TEMPO_PRESETS])
+        if hasattr(self, "combo_tempo_preset_tab4"):
+            self._refill_combo(self.combo_tempo_preset_tab4, [(tr(f"tempo_{key}"), key) for key in CONTENT_TEMPO_PRESETS])
+        if hasattr(self, "combo_speaker_max_count"):
+            self._refill_combo(self.combo_speaker_max_count, [
+                (tr("spk_2"), 2), (tr("spk_3"), 3), (tr("spk_4"), 4), (tr("spk_8"), 8),
+            ])
+        if hasattr(self, "combo_dubbing_speed"):
+            speeds = [
+                ("+0%", tr("speed_normal")), ("+10%", tr("speed_brisk")),
+                ("+15%", "1.15x"), ("+20%", "1.2x"), ("+25%", "1.25x"),
+                ("+30%", "1.3x"), ("+40%", "1.4x"), ("+50%", "1.5x"),
+                ("+80%", "1.8x"), ("+100%", "2.0x"),
+            ]
+            self._refill_combo(self.combo_dubbing_speed, [(label, code) for code, label in speeds])
+        if hasattr(self, "combo_sub_filter"):
+            self._refill_combo(self.combo_sub_filter, [
+                (tr("filter_all"), "all"), (tr("filter_audio"), "audio"),
+                (tr("filter_screen"), "screen"), (tr("filter_dub"), "dubbing"),
+                (tr("filter_orig"), "orig_only"), (tr("filter_trans"), "trans_only"),
+                (tr("filter_dub_only"), "dub_only"),
+            ])
+        if hasattr(self, "combo_trans_engine"):
+            local = tr("engine_local")
+            self._refill_combo(self.combo_trans_engine, [
+                ("DeepL", "deepl"), (tr("engine_google"), "google"),
+                ("Gemini Flash", "gemini"), ("Groq Qwen 27B", "groq"),
+                (f"TranslateGemma ({local})", "gemma"),
+                (f"EXAONE ({local})", "exaone"),
+                (f"Hy-MT2 ({local})", "hymt"),
+            ])
+        for combo in (getattr(self, "combo_audio_cap_dev", None), getattr(self, "combo_dub_out_dev", None)):
+            if combo is None:
+                continue
+            index = combo.findData("default")
+            if index >= 0:
+                combo.setItemText(index, "🔊 " + tr("audio_default"))
+        if hasattr(self, "lbl_tempo_desc"):
+            self.lbl_tempo_desc.setText(self._tempo_caption())
+        if hasattr(self, "lbl_tempo_desc_tab4"):
+            self.lbl_tempo_desc_tab4.setText(self._tempo_caption())
+        if hasattr(self, "input_sub_search"):
+            self.input_sub_search.setPlaceholderText(tr("search_placeholder"))
+        if hasattr(self, "edit_youtube_url"):
+            self.edit_youtube_url.setPlaceholderText(tr("msg_youtube_url"))
+        if hasattr(self, "lbl_duration"):
+            value = self.slider_duration.value() if hasattr(self, "slider_duration") else 0
+            self.lbl_duration.setText(self._duration_text(value))
+        if hasattr(self, "lbl_speaker_status"):
+            self.lbl_speaker_status.setText(self._speaker_status_text())
+
+    def _apply_ui_language(self):
+        if is_global():
+            set_ui_language(self.config.get("ui_lang") or "en")
+        else:
+            set_ui_language("ko")
+        self.setWindowTitle(tr("window_title"))
+        refresh_texts(self)
+        if getattr(self, "nav_buttons", None):
+            tab_total = 0
+            for index, btn in enumerate(self.nav_buttons):
+                btn.setFixedSize(nav_tab_width(btn.text(), self.font()), NAV_TAB_HEIGHT)
+                if index:
+                    tab_total += NAV_TAB_SPACING
+                tab_total += nav_tab_width(btn.text(), self.font())
+            self.setMinimumWidth(max(self.minimumWidth(), control_panel_min_width(self.font()), tab_total + 360))
+        if hasattr(self, "combo_target_lang"):
+            self.combo_target_lang.setToolTip(tr("target_lang_label"))
+        if hasattr(self, "combo_ui_lang"):
+            self.combo_ui_lang.setToolTip(tr("ui_lang_label"))
+        if hasattr(self, "quick_presets_layout"):
+            self._refresh_presets_ui()
+        if hasattr(self, "chip_tempo"):
+            self._sync_all_pipeline_status()
+        if hasattr(self, "_revert_engine_status"):
+            self._revert_engine_status()
+        if getattr(self, "overlay", None) is not None and hasattr(self.overlay, "setWindowTitle"):
+            self.overlay.setWindowTitle(tr("overlay_audio_title"))
+        screen_overlay = getattr(self, "screen_overlay", None)
+        if getattr(self, "screen_overlay", None) is not None:
+            overlays = screen_overlay.get_overlays() if hasattr(screen_overlay, "get_overlays") else [screen_overlay]
+            for window in overlays:
+                if hasattr(window, "setWindowTitle"):
+                    window.setWindowTitle(tr("overlay_screen_title"))
+        self._refill_localized_lists()
+
+    def _on_ui_lang_changed(self, index):
+        if index < 0 or not hasattr(self, "combo_ui_lang"):
+            return
+        code = self.combo_ui_lang.itemData(index)
+        if not code or code == self.config.get("ui_lang"):
+            return
+        self.config["ui_lang"] = code
+        self.save_config_cb(self.config)
+        self._apply_ui_language()
+
+    def _on_target_lang_changed(self, index):
+        if index < 0 or not hasattr(self, "combo_target_lang"):
+            return
+        code = self.combo_target_lang.itemData(index)
+        if not code:
+            return
+        self.config["target_lang"] = code
+        self.save_config_cb(self.config)
+        translator = getattr(getattr(self, "stt_thread", None), "translator", None)
+        if translator is not None and hasattr(translator, "update_config"):
+            translator.update_config(self.config)
+        if getattr(self, "overlay", None) is not None and hasattr(self.overlay, "config"):
+            self.overlay.config["target_lang"] = code
+        if getattr(self, "screen_overlay", None) is not None and hasattr(self.screen_overlay, "config"):
+            self.screen_overlay.config["target_lang"] = code
+
+    def _subtitle_export_filename(self, filter_mode, extension, fallback_map):
+        from src.product import get_product
+        from src.subtitle_manager import subtitle_export_filename
+        name = subtitle_export_filename(
+            filter_mode,
+            extension,
+            source_lang=self.config.get("source_lang", "en"),
+            target_lang=self.config.get("target_lang", "ko"),
+            product=get_product(),
+        )
+        if name:
+            return name
+        return fallback_map.get(filter_mode, f"subtitles.{extension}")
 
     def _coerce_device_without_nvidia(self):
         """GPU 프리셋이라도 NVIDIA 가 없는 PC 에서는 CPU 로 실행한다."""
@@ -5657,14 +5943,17 @@ class ControlPanel(QWidget):
         from src.stt_model_manager import STTModelManager
         self.config["device"] = "cpu"
         self.config["compute_type"] = "int8"
-        if not STTModelManager.is_cpu_usable(self.config.get("model_size", "distil-small.en")):
-            self.config["model_size"] = "distil-small.en"
+        fallback_model = "small" if is_global() else "distil-small.en"
+        if not STTModelManager.is_cpu_usable(self.config.get("model_size", fallback_model)):
+            self.config["model_size"] = fallback_model
+            if is_global():
+                self.config["stt_language"] = "auto"
 
     def _apply_preset_with_temp_engine(self, preset_key: str, temp_engine: str = "google", notify: bool = True):
         """프리셋의 템포 및 기타 설정을 적용하되 번역 엔진만 임시 엔진으로 연결"""
         if preset_key == "cloud":
             preset_key = "low_spec"
-        item = BUILTIN_PRESETS.get(preset_key)
+        item = self._builtin_presets().get(preset_key)
         if item:
             self._active_preset_id = preset_key
             self.config["translation_engine"] = temp_engine
@@ -5689,33 +5978,25 @@ class ControlPanel(QWidget):
                         break
 
             self._sync_all_pipeline_status()
-            self.update_engine_status("ready", f"프리셋 적용: {item['name']}")
+            self.update_engine_status("ready", tr("status_preset_applied", name=self._preset_display_name(preset_key, item)))
             if notify:
-                QMessageBox.information(
-                    self, "프리셋 임시 적용 완료",
-                    f"[{item['name']}] 설정이 적용되었습니다!\n\n• {item['desc']} (임시 엔진: {temp_engine})"
-                )
+                tell(self, "msg_preset_temp_title", "msg_preset_temp", name=self._preset_display_name(preset_key, item), desc=item.get("desc", ""), engine=temp_engine)
 
     def apply_preset(self, preset_key: str, notify: bool = True):
         if preset_key == "cloud":
             preset_key = "low_spec"
 
-        if preset_key not in BUILTIN_PRESETS:
+        if preset_key not in self._builtin_presets():
             return
 
-        item = BUILTIN_PRESETS[preset_key]
+        item = self._builtin_presets()[preset_key]
         req_model = item.get("requires_model")
         req_api_key = item.get("requires_api_key")
 
         # 1. Groq API 키 점검
         if req_api_key == "groq":
             if not self.config.get("groq_api_key", "").strip():
-                ret = QMessageBox.question(
-                    self,
-                    "🔑 Groq API 키 필요",
-                    f"[{item['name']}] 프리셋을 사용하려면 Groq API 키가 필요합니다.\n\nAPI 키 설정 창을 여시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name=item.get("name", "Groq"))
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_api_key_dialog()
                 return
@@ -5812,14 +6093,10 @@ class ControlPanel(QWidget):
                 self.overlay.update_live_display()
 
         self._sync_all_pipeline_status()
-        self.update_engine_status("ready", f"프리셋 적용: {item['name']}")
+        self.update_engine_status("ready", tr("status_preset_applied", name=self._preset_display_name(preset_key, item)))
         self._refresh_presets_ui()
         if notify:
-            QMessageBox.information(
-                self, "추천 프리셋 적용",
-                f"[{item['name']}] 프리셋이 성공적으로 적용되었습니다!\n\n"
-                f"• {item['desc']}"
-            )
+            tell(self, "msg_preset_applied_title", "msg_preset_applied", name=self._preset_display_name(preset_key, item), desc=item.get("desc", ""))
 
     def _check_custom_preset_status(self, p_cfg: dict) -> tuple[str, str]:
         """커스텀 프리셋의 엔진 및 모델 사용 가능 상태(텍스트, 타입) 점검"""
@@ -5829,35 +6106,35 @@ class ControlPanel(QWidget):
         # 1. API 키 점검
         if engine == "groq" or stt == "groq":
             if not self.config.get("groq_api_key", "").strip():
-                return "키 필요", "need_key"
+                return tr("need_key"), "need_key"
         if engine == "deepgram" or stt == "deepgram":
             if not self.config.get("deepgram_api_key", "").strip():
-                return "키 필요", "need_key"
+                return tr("need_key"), "need_key"
         if engine == "deepl":
             if not self.config.get("deepl_api_key", "").strip():
-                return "키 필요", "need_key"
+                return tr("need_key"), "need_key"
         if engine == "gemini":
             if not self.config.get("gemini_api_key", "").strip():
-                return "키 필요", "need_key"
+                return tr("need_key"), "need_key"
 
         # 2. 로컬 LLM 준비 여부 점검
         if "translategemma" in engine or engine == "gemma":
             if not self._check_model_ready("translategemma"):
-                return "다운 필요", "need_dl"
+                return tr("need_download"), "need_dl"
         elif "exaone" in engine:
             if not self._check_model_ready("exaone"):
-                return "다운 필요", "need_dl"
+                return tr("need_download"), "need_dl"
         elif "hymt" in engine or "hy-mt" in engine:
             if not self._check_model_ready("hymt"):
-                return "다운 필요", "need_dl"
+                return tr("need_download"), "need_dl"
 
         # 3. 로컬 STT 준비 여부 점검
         if stt == "local" and p_cfg.get("model_size"):
             from src.stt_model_manager import STTModelManager
             if not (STTModelManager.is_model_installed(p_cfg["model_size"]) or STTModelManager.is_bundled_model(p_cfg["model_size"])):
-                return "STT 다운 필요", "need_dl"
+                return tr("need_stt"), "need_dl"
 
-        return "즉시 실행", "ready"
+        return tr("ready_now"), "ready"
 
     def _format_preset_tooltip(self, name: str, cfg: dict, status_text: str = "") -> str:
         """프리셋의 세부 구성(번역 엔진, STT, 콘텐츠 템포, 상태)을 툴팁 텍스트로 생성"""
@@ -5919,7 +6196,7 @@ class ControlPanel(QWidget):
                 widget.deleteLater()
         active_id = self._detect_active_preset_id()
 
-        for p_key, p_def in BUILTIN_PRESETS.items():
+        for p_key, p_def in self._builtin_presets().items():
             req_m = p_def.get("requires_model")
             req_k = p_def.get("requires_api_key")
             if req_k == "groq":
@@ -5937,7 +6214,7 @@ class ControlPanel(QWidget):
             btn = QPushButton()
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setFixedHeight(30)
-            btn.setToolTip(self._format_preset_tooltip(p_def["name"], p_def, st_text))
+            btn.setToolTip(self._format_preset_tooltip(self._preset_display_name(p_key, p_def), p_def, st_text))
             if p_key == active_id:
                 btn.setStyleSheet(f"""
                     QPushButton {{
@@ -5979,7 +6256,8 @@ class ControlPanel(QWidget):
         # 2. 사용자 정의 커스텀 프리셋 (기본 프리셋과 동일한 버튼 방식 & 사용 가능 상태 표시, 옆에 삭제 버튼 배치)
         custom_presets = self.config.get("custom_presets", {})
         if custom_presets:
-            cust_title = QLabel("⭐ 커스텀 프리셋")
+            cust_title = QLabel()
+            self._i18n(cust_title, "custom_presets")
             cust_title.setStyleSheet(f"font-size: 11px; font-weight: bold; color: {COLOR_ACCENT_CYAN}; margin-top: 10px; margin-bottom: 2px;")
             self.preset_list_layout.addWidget(cust_title)
 
@@ -6048,7 +6326,7 @@ class ControlPanel(QWidget):
                 btn_del.setIconSize(QSize(14, 14))
                 btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_del.setFixedSize(30, 30)
-                btn_del.setToolTip("프리셋 삭제")
+                btn_del.setToolTip(tr("tip_delete_preset"))
                 btn_del.setStyleSheet("""
                     QPushButton {
                         background-color: rgba(239, 68, 68, 0.12);
@@ -6072,24 +6350,20 @@ class ControlPanel(QWidget):
         if hasattr(self, 'btn_save_preset'):
             c_count = len(custom_presets)
             if c_count >= 6:
-                self.btn_save_preset.setToolTip("커스텀 프리셋은 최대 6개까지 저장할 수 있습니다. (현재 6/6 - 기존 프리셋 삭제 필요)")
+                self.btn_save_preset.setToolTip(tr("tip_preset_full"))
             else:
-                self.btn_save_preset.setToolTip(f"현재 설정을 새 커스텀 프리셋으로 저장합니다. (현재 {c_count}/6)")
+                self.btn_save_preset.setToolTip(tr("tip_save_preset", count=c_count))
         self._refresh_quick_presets_ui()
 
     def save_current_as_custom_preset(self):
         """현재 설정 상태를 새 커스텀 프리셋으로 저장 (이름만 입력, 최대 6개 제한)"""
         custom_presets = self.config.setdefault("custom_presets", {})
         if len(custom_presets) >= 6:
-            QMessageBox.warning(
-                self,
-                "프리셋 개수 제한",
-                "커스텀 프리셋은 최대 6개까지만 추가할 수 있습니다.\n\n새 프리셋을 추가하려면 기존 프리셋을 삭제해 주세요."
-            )
+            tell(self, "msg_preset_limit_title", "msg_preset_limit", kind="warn")
             return
 
         from PyQt6.QtWidgets import QInputDialog
-        name, ok = QInputDialog.getText(self, "새 커스텀 프리셋 저장", "현재 설정을 저장할 프리셋 이름을 입력하세요:")
+        name, ok = QInputDialog.getText(self, tr("msg_preset_name_title"), tr("msg_preset_name_prompt"))
         if not ok or not name.strip():
             return
 
@@ -6122,7 +6396,7 @@ class ControlPanel(QWidget):
         self.save_config_cb(self.config)
         self._active_preset_id = preset_id
         self._refresh_presets_ui()
-        QMessageBox.information(self, "프리셋 저장 완료", f"'{name.strip()}' 프리셋이 성공적으로 저장되었습니다.")
+        tell(self, "msg_preset_saved_title", "msg_preset_saved", name=name.strip())
 
     def apply_custom_preset(self, preset_id: str, notify: bool = True):
         """커스텀 프리셋 적용"""
@@ -6139,11 +6413,7 @@ class ControlPanel(QWidget):
 
         if eng == "groq" or stt_p == "groq":
             if not self.config.get("groq_api_key", "").strip():
-                ret = QMessageBox.question(
-                    self, "🔑 Groq API 키 필요",
-                    f"[{p_info.get('name', '커스텀')}] 프리셋을 사용하려면 Groq API 키가 필요합니다.\n\nAPI 키 설정 창을 여시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name=p_info.get("name", "Groq"))
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_api_key_dialog()
                 return
@@ -6244,10 +6514,7 @@ class ControlPanel(QWidget):
         self._update_subtitle_preview()
 
         if notify:
-            QMessageBox.information(
-                self, "커스텀 프리셋 적용",
-                f"[{p_info['name']}] 커스텀 프리셋 설정이 적용되었습니다!\n\n• {p_info.get('desc', '')}"
-            )
+            tell(self, "msg_preset_applied_title", "msg_preset_applied", name=p_info.get("name", ""), desc=p_info.get("desc", ""))
 
     def delete_custom_preset(self, preset_id: str):
         """커스텀 프리셋 삭제"""
@@ -6255,12 +6522,7 @@ class ControlPanel(QWidget):
         if preset_id not in custom_presets:
             return
         p_name = custom_presets[preset_id].get("name", "프리셋")
-        ret = QMessageBox.question(
-            self,
-            "프리셋 삭제 확인",
-            f"'{p_name}' 커스텀 프리셋을 삭제하시겠습니까?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        ret = ask(self, "msg_delete_preset_title", "msg_delete_preset", name=p_name)
         if ret == QMessageBox.StandardButton.Yes:
             del custom_presets[preset_id]
             self.config["custom_presets"] = custom_presets
@@ -6339,8 +6601,8 @@ class ControlPanel(QWidget):
         # 1. 기존 활성 ID가 여전히 유효한지 우선 점검
         if self._active_preset_id:
             chk_id = "low_spec" if self._active_preset_id == "cloud" else self._active_preset_id
-            if chk_id in BUILTIN_PRESETS:
-                if self._is_builtin_preset_matching(chk_id, BUILTIN_PRESETS[chk_id]):
+            if chk_id in self._builtin_presets():
+                if self._is_builtin_preset_matching(chk_id, self._builtin_presets()[chk_id]):
                     self._active_preset_id = chk_id
                     return chk_id
             elif self._active_preset_id in custom_presets:
@@ -6354,7 +6616,7 @@ class ControlPanel(QWidget):
                     return self._active_preset_id
 
         # 2. 일치하는 빌트인 프리셋 자동 감지
-        for p_key, p_def in BUILTIN_PRESETS.items():
+        for p_key, p_def in self._builtin_presets().items():
             if self._is_builtin_preset_matching(p_key, p_def):
                 self._active_preset_id = p_key
                 return p_key
@@ -6440,12 +6702,12 @@ class ControlPanel(QWidget):
         """
 
         # 1. 추천 빌트인 프리셋 아이콘 버튼 (BUILTIN_PRESETS SSOT)
-        for p_key, p_def in BUILTIN_PRESETS.items():
+        for p_key, p_def in self._builtin_presets().items():
             btn = QPushButton(p_def["icon"])
             btn.setFixedSize(26, 26)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             st_text, _ = self._check_custom_preset_status(p_def)
-            btn.setToolTip(self._format_preset_tooltip(p_def["name"], p_def, st_text))
+            btn.setToolTip(self._format_preset_tooltip(self._preset_display_name(p_key, p_def), p_def, st_text))
             if p_key == active_id:
                 btn.setStyleSheet(style_active)
             else:
@@ -6678,13 +6940,7 @@ class ControlPanel(QWidget):
             if not has_key:
                 eng_names = {"deepl": "DeepL", "gemini": "Gemini Flash", "groq": "Groq Qwen 27B"}
                 disp_name = eng_names.get(engine_key, engine_key.upper())
-                ret = QMessageBox.question(
-                    self,
-                    "🔑 API 키 등록 필요",
-                    f"'{disp_name}' 번역 엔진을 사용하려면 API 키가 필요합니다.\n\n"
-                    "API 키 설정 창을 여시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name=disp_name)
                 self._revert_engine_ui()
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_api_key_dialog()
@@ -6727,28 +6983,13 @@ class ControlPanel(QWidget):
             has_cuda = LLMModelManager.is_cuda_binary_available()
             if not has_cuda:
                 if LLMModelManager.can_install_llm_cuda():
-                    ret = QMessageBox.question(
-                        self,
-                        "⚡ GPU 가속 팩 설치 필요",
-                        f"로컬 LLM({disp_name})은 CPU 모드로 실행 시 속도가 매우 느려(문장당 수초~수십초 지연) 정상적인 실시간 동시통역이 어렵습니다.\n\n"
-                        "원활한 실시간 통역을 위해 NVIDIA GPU 가속 팩(약 460MB)을 먼저 설치하신 후 사용하실 수 있습니다.\n\n"
-                        "모델 관리 화면을 열어 GPU 가속 팩을 다운로드하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_gpu_pack_needed_title", "msg_gpu_pack_needed", name=disp_name)
                     if ret == QMessageBox.StandardButton.Yes:
                         self.open_llm_model_manager(target_model_id=engine_key)
                     self._revert_engine_ui()
                     return
                 else:
-                    ret = QMessageBox.question(
-                        self,
-                        "⚠️ 로컬 LLM GPU 가속 불가 안내",
-                        f"{LLMModelManager.llm_gpu_unavailable_reason()}\n\n"
-                        f"로컬 LLM({disp_name})을 CPU 모드로 구동 시 번역 속도가 매우 느려 실시간 동시통역에 지연이 발생할 수 있습니다.\n"
-                        "• 권장: 클라우드 번역 엔진(Google 무료, DeepL, Groq 등) 사용\n\n"
-                        "그래도 CPU 모드로 실행하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_gpu_slow_title", "msg_gpu_slow", reason=LLMModelManager.llm_gpu_unavailable_reason(), name=disp_name)
                     if ret != QMessageBox.StandardButton.Yes:
                         self._revert_engine_ui()
                         return
@@ -6764,13 +7005,7 @@ class ControlPanel(QWidget):
                     ollama_installed = LLMModelManager.is_ollama_model_installed(ollama_tag)
 
                 if not ollama_installed:
-                    ret = QMessageBox.question(
-                        self,
-                        "📦 로컬 모델 다운로드 필요",
-                        f"선택하신 '{disp_name}' 모델이 아직 설치되지 않았습니다.\n\n"
-                        "모델 관리창을 열어 모델을 다운로드하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_model_missing_title", "msg_model_missing", name=disp_name)
                     if ret == QMessageBox.StandardButton.Yes:
                         self.open_llm_model_manager(target_model_id=engine_key)
                     self._revert_engine_ui()
@@ -6828,7 +7063,7 @@ class ControlPanel(QWidget):
                 disp = f"Ollama ({tag_name})"
         else:
             disp = eng_names.get(engine_key.lower(), engine_key.upper())
-        self.update_engine_status("ready", f"번역 엔진 변경: {disp}")
+        self.update_engine_status("ready", tr("status_engine_changed", name=disp))
 
     def open_from_overlay(self):
         """오버레이창에서 ⚙️ 설정 버튼 클릭 시 전체화면(유튜브, 동영상 등) 위로 컨트롤 패널을 최상위로 띄움"""
@@ -7010,7 +7245,7 @@ class ControlPanel(QWidget):
         m_name = model_info.get("name", m_id)
 
         progress_dlg = QProgressDialog(f"'{m_name}' 모델을 다운로드하는 중...", "취소", 0, 100, self)
-        progress_dlg.setWindowTitle("STT 모델 다운로드")
+        progress_dlg.setWindowTitle(tr("progress_stt_title"))
         progress_dlg.setWindowModality(Qt.WindowModality.WindowModal)
         progress_dlg.setMinimumDuration(0)
         progress_dlg.setValue(10)
@@ -7058,19 +7293,11 @@ class ControlPanel(QWidget):
                     if hasattr(self.stt_thread, 'change_model'):
                         self.stt_thread.change_model(model_id)
                 self._sync_all_pipeline_status()
-                QMessageBox.information(
-                    self,
-                    "다운로드 완료",
-                    f"'{m_name}' 모델 다운로드가 완료되어 적용되었습니다!"
-                )
+                tell(self, "msg_download_switched_title", "msg_stt_download_done", name=m_name)
             else:
                 self._revert_model_selection()
-                if "취소" not in msg:
-                    QMessageBox.warning(
-                        self,
-                        "다운로드 실패",
-                        f"모델 다운로드에 실패했습니다:\n{msg}"
-                    )
+                if not is_cancel_message(msg):
+                    tell(self, "msg_download_switched_title", "msg_download_fail", kind="warn", error=msg)
 
         progress_dlg.canceled.connect(worker.cancel)
         worker.progress_signal.connect(_on_progress)
@@ -7098,14 +7325,7 @@ class ControlPanel(QWidget):
                     if not LLMModelManager.is_nvidia_gpu_present():
                         self._show_no_nvidia_notice()
                         return
-                    ret = QMessageBox.question(
-                        self,
-                        "⚡ NVIDIA CUDA GPU 가속 팩 설치 안내",
-                        "NVIDIA 그래픽 카드가 감지되었으나, GPU 실시간 가속 팩(cuBLAS 라이브러리)이 아직 설치되지 않았습니다.\n\n"
-                        "CUDA 가속 팩을 설치하시면 음성인식(STT)과 로컬 AI 번역을 압도적인 초저지연·고성능으로 이용하실 수 있습니다.\n\n"
-                        "모델 설정 화면으로 이동하여 GPU 가속 팩을 다운로드하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_cuda_pack_title", "msg_cuda_pack")
                     self._sync_stt_buttons_ui()
                     if ret == QMessageBox.StandardButton.Yes:
                         self.open_llm_model_manager()
@@ -7159,12 +7379,7 @@ class ControlPanel(QWidget):
         if cur_provider == "deepgram":
             has_key = bool(self.config.get("deepgram_api_key", "").strip())
             if not has_key:
-                ret = QMessageBox.question(
-                    self,
-                    "API 키 필요",
-                    f"Deepgram '{m}' 모델을 사용하려면 Deepgram API 키가 필요합니다.\n\nAPI 키 설정 창을 여시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name=f"Deepgram {m}")
                 self._revert_model_selection()
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_api_key_dialog()
@@ -7178,12 +7393,7 @@ class ControlPanel(QWidget):
         elif cur_provider == "groq":
             has_key = bool(self.config.get("groq_api_key", "").strip())
             if not has_key:
-                ret = QMessageBox.question(
-                    self,
-                    "API 키 필요",
-                    f"Groq '{m}' 모델을 사용하려면 Groq API 키가 필요합니다.\n\nAPI 키 설정 창을 여시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name=f"Groq {m}")
                 self._revert_model_selection()
                 if ret == QMessageBox.StandardButton.Yes:
                     self.open_api_key_dialog()
@@ -7201,13 +7411,7 @@ class ControlPanel(QWidget):
 
         if not is_usable:
             self._revert_model_selection()
-            ret = QMessageBox.question(
-                self,
-                "📦 STT 모델 다운로드 필요",
-                f"선택하신 '{m}' 모델이 아직 설치되지 않았습니다.\n\n"
-                "STT 모델 관리창을 열어 다운로드하시겠습니까?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
+            ret = ask(self, "msg_model_missing_title", "msg_model_missing", name=m)
             if ret == QMessageBox.StandardButton.Yes:
                 self.open_stt_model_manager(target_model_id=m)
             return
@@ -7383,12 +7587,12 @@ class ControlPanel(QWidget):
         if hasattr(self, 'lbl_screen_status'):
             self.lbl_screen_status.setText(status_text)
         if "번역 중" in status_text:
-            self.update_engine_status("translating", f"화면: {status_text}")
+            self.update_engine_status("translating", tr("status_screen_prefix", text=status_text))
         elif "완료" in status_text:
-            self.update_engine_status("ready", f"화면: {status_text}")
+            self.update_engine_status("ready", tr("status_screen_prefix", text=status_text))
         elif "감시 중" in status_text:
             if getattr(self, '_is_screen_active', False):
-                self.update_engine_status("ready", "화면 실시간 감시 중")
+                self.update_engine_status("ready", tr("status_watching"))
 
     def trigger_inplace_translate(self, from_button: bool = False):
         if self.inplace_manager:
@@ -7446,7 +7650,7 @@ class ControlPanel(QWidget):
         screens = QApplication.screens()
         for i, s in enumerate(screens):
             geo = s.geometry()
-            self.combo_display.addItem(f"디스플레이 {i+1} ({geo.width()} × {geo.height()})", i)
+            self.combo_display.addItem(tr("monitor_name", n=i + 1) + f" ({geo.width()} × {geo.height()})", i)
         if screens:
             selected = min(max(0, selected), len(screens) - 1)
             self.combo_display.setCurrentIndex(selected)
@@ -7493,7 +7697,7 @@ class ControlPanel(QWidget):
         index = self.combo_display.currentIndex() if hasattr(self, 'combo_display') else -1
         if not 0 <= index < len(screens):
             self.screen_canvas.set_monitor(None)
-            self.lbl_screen_preview.setText("선택할 모니터가 없습니다")
+            self.lbl_screen_preview.setText(tr("no_monitor"))
             return
         screen = screens[index]
         image = screen.grabWindow(0)
@@ -7576,7 +7780,7 @@ class ControlPanel(QWidget):
     def on_duration_slider_changed(self, val: int):
         self.config["screen_subtitle_duration"] = val
         if hasattr(self, 'lbl_duration'):
-            self.lbl_duration.setText(f"{val}초" if val > 0 else "영구 유지")
+            self.lbl_duration.setText(self._duration_text(val))
         if self.screen_overlay:
             if hasattr(self.screen_overlay, "set_subtitle_duration"):
                 self.screen_overlay.set_subtitle_duration(val)
@@ -7596,7 +7800,7 @@ class ControlPanel(QWidget):
             )
             self.selector.show()
         except Exception as e:
-            QMessageBox.warning(self, "ROI 오류", f"영역 선택기를 열 수 없습니다: {e}")
+            tell(self, "msg_roi_error_title", "msg_roi_error", kind="warn", error=e)
 
     def refresh_roi_settings_cards(self):
         if not hasattr(self, 'roi_cards_layout'):
@@ -7610,7 +7814,7 @@ class ControlPanel(QWidget):
 
         rois = self.config.get("screen_rois", [])
         if hasattr(self, 'lbl_roi_count_badge'):
-            self.lbl_roi_count_badge.setText(f"{len(rois)}개")
+            self._i18n(self.lbl_roi_count_badge, "roi_count", count=len(rois))
 
         roi_configs = self.config.setdefault("roi_configs", {})
 
@@ -7638,12 +7842,13 @@ class ControlPanel(QWidget):
             lbl_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             evbox.addWidget(lbl_icon)
 
-            lbl_txt = QLabel("등록된 번역 영역이 없습니다.\n'➕ 추가' 또는 '📐 영역 추가/편집' 버튼을 눌러\n화면 영역을 지정하세요.")
+            lbl_txt = QLabel()
+            self._i18n(lbl_txt, "no_regions")
             lbl_txt.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11.5px; line-height: 1.4;")
             lbl_txt.setAlignment(Qt.AlignmentFlag.AlignCenter)
             evbox.addWidget(lbl_txt)
 
-            btn_add = QPushButton("➕ 새 영역 지정하기")
+            btn_add = QPushButton("➕ " + tr("new_region"))
             btn_add.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {COLOR_ACCENT_PURPLE};
@@ -7772,7 +7977,7 @@ class ControlPanel(QWidget):
             dur_slider.setRange(0, 90)
             dur_val = cfg.get("duration", 10)
             dur_slider.setValue(dur_val)
-            lbl_durval = QLabel(f"{dur_val}초" if dur_val > 0 else "영구")
+            lbl_durval = QLabel(self._duration_text(dur_val))
             lbl_durval.setStyleSheet("color: #94A3B8; font-size: 10px; min-width: 32px;")
             dur_row = QHBoxLayout()
             dur_row.addWidget(dur_slider, stretch=1)
@@ -7820,7 +8025,7 @@ class ControlPanel(QWidget):
         self.save_config_cb(self.config)
 
     def _on_roi_duration_changed(self, idx: int, val: int, lbl_widget: QLabel):
-        lbl_widget.setText(f"{val}초" if val > 0 else "영구")
+        lbl_widget.setText(self._duration_text(val))
         idx_str = str(idx)
         self.config.setdefault("roi_configs", {}).setdefault(idx_str, {})["duration"] = val
         if idx == 0:
@@ -7925,9 +8130,9 @@ class ControlPanel(QWidget):
             return
         vis = self.overlay.isVisible() if self.overlay else False
         if vis:
-            self.btn_toggle_audio_overlay.setText("👁 자막창 숨기기")
+            self._i18n(self.btn_toggle_audio_overlay, "hide_overlay")
         else:
-            self.btn_toggle_audio_overlay.setText("👁 자막창 보이기")
+            self._i18n(self.btn_toggle_audio_overlay, "show_overlay")
         if hasattr(self, 'toggle_audio_overlay_vis'):
             self.toggle_audio_overlay_vis.blockSignals(True)
             self.toggle_audio_overlay_vis.setChecked(vis)
@@ -8168,8 +8373,8 @@ class ControlPanel(QWidget):
 
         reply = QMessageBox.question(
             self,
-            "프로그램 종료",
-            "루미트랜스를 종료하시겠습니까?",
+            tr("quit_title"),
+            tr("quit_message"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )

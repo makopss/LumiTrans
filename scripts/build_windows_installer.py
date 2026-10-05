@@ -241,15 +241,17 @@ def verify_llama_layout(edition: str):
     print(f"[Verify] llama.cpp 라이브러리 구성 정상 (기본: CPU 전용{', CUDA: llama_cuda/' if edition == 'full' else ''})")
 
 
-def run_pyinstaller(edition: str = "full"):
+def run_pyinstaller(edition: str = "full", product: str = "kr"):
     edition_label = "라이트(Lite) 에디션" if edition == "lite" else "풀(Full) 에디션"
-    print_step(f"1단계: PyInstaller를 통한 [{edition_label}] 번들 패키징 시작")
+    product_label = "글로벌" if product == "global" else "한국어"
+    print_step(f"1단계: PyInstaller를 통한 [{product_label} / {edition_label}] 번들 패키징 시작")
     spec_path = ROOT_DIR / "LumiTrans.spec"
     if not spec_path.exists():
         raise FileNotFoundError(f"Spec 파일이 없습니다: {spec_path}")
 
     env = os.environ.copy()
     env["WISE_EDITION"] = edition
+    env["WISE_PRODUCT"] = product
     env["WISE_LLAMA_CPU_DIR"] = str(ensure_llama_cpu_libs())
     if edition != "lite":
         env["WISE_LLAMA_CUDA_DIR"] = str(ensure_llama_cuda_libs())
@@ -268,7 +270,7 @@ def run_pyinstaller(edition: str = "full"):
         "--noconfirm",
         str(spec_path)
     ]
-    print(f"빌드 에디션: {edition.upper()} | 실행 명령: {' '.join(cmd)}")
+    print(f"빌드 제품: {product} | 에디션: {edition.upper()} | 실행 명령: {' '.join(cmd)}")
     start_t = time.time()
     res = subprocess.run(cmd, cwd=str(ROOT_DIR), env=env)
     elapsed = time.time() - start_t
@@ -346,10 +348,18 @@ def run_pyinstaller(edition: str = "full"):
     )
     print(f"[PyInstaller] 최종 압축 전 번들 크기: {total_bundle_bytes / (1024 * 1024):.1f} MB")
 
-def run_innosetup(edition: str = "full") -> Path:
+def setup_filename(edition: str, product: str = "kr") -> str:
+    edition_cap = edition.capitalize()
+    if product == "global":
+        return f"LumiTrans_Global_{edition_cap}_Setup_v1.0.0.exe"
+    return f"LumiTrans_{edition_cap}_Setup_v1.0.0.exe"
+
+
+def run_innosetup(edition: str = "full", product: str = "kr") -> Path:
     edition_cap = edition.capitalize()
     edition_label = "라이트(Lite) 에디션" if edition == "lite" else "풀(Full) 에디션"
-    print_step(f"2단계: Inno Setup을 통한 [{edition_label}] 단일 설치 파일 컴파일")
+    product_label = "글로벌" if product == "global" else "한국어"
+    print_step(f"2단계: Inno Setup을 통한 [{product_label} / {edition_label}] 단일 설치 파일 컴파일")
     iscc = find_iscc()
     if not iscc:
         raise RuntimeError("Inno Setup 컴파일러(ISCC.exe)를 찾을 수 없습니다. 설치 상태를 확인하세요.")
@@ -362,7 +372,7 @@ def run_innosetup(edition: str = "full") -> Path:
     output_dir = ROOT_DIR / "installer_output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    cmd = [iscc, f"/DEdition={edition_cap}", str(iss_path)]
+    cmd = [iscc, f"/DEdition={edition_cap}", f"/DProduct={product}", str(iss_path)]
     print(f"실행 명령: {' '.join(cmd)}")
     start_t = time.time()
     res = subprocess.run(cmd, cwd=str(ROOT_DIR))
@@ -372,7 +382,7 @@ def run_innosetup(edition: str = "full") -> Path:
         raise RuntimeError(f"Inno Setup 컴파일 실패 (코드: {res.returncode})")
 
     # 결과 검증
-    setup_path = output_dir / f"LumiTrans_{edition_cap}_Setup_v1.0.0.exe"
+    setup_path = output_dir / setup_filename(edition, product)
     if not setup_path.exists():
         raise FileNotFoundError(f"생성된 설치 파일이 없습니다: {setup_path}")
 
@@ -382,14 +392,15 @@ def run_innosetup(edition: str = "full") -> Path:
     print(f"[결과] 최종 설치 파일 용량: {size_mb:.2f} MB")
     return setup_path
 
-def build_single_edition(edition: str) -> Path:
+def build_single_edition(edition: str, product: str = "kr") -> Path:
     edition_label = "라이트(Lite - 약 190~220MB)" if edition == "lite" else "풀(Full - 약 750~800MB)"
+    product_label = "글로벌" if product == "global" else "한국어"
     print("\n" + "#" * 60)
-    print(f"### [LumiTrans] {edition_label} 빌드 파이프라인 가동")
+    print(f"### [LumiTrans] {product_label} / {edition_label} 빌드 파이프라인 가동")
     print("#" * 60)
     start_t = time.time()
-    run_pyinstaller(edition=edition)
-    out_file = run_innosetup(edition=edition)
+    run_pyinstaller(edition=edition, product=product)
+    out_file = run_innosetup(edition=edition, product=product)
     elapsed = time.time() - start_t
     print(f"\n>> [{edition.upper()}] 에디션 완료 (소요: {elapsed:.1f}초)")
     return out_file
@@ -402,11 +413,17 @@ def main():
         default="all",
         help="빌드할 에디션 선택 (lite: 라이트 버전, full: 풀 버전, all: 둘 다 빌드, 기본값: lite)"
     )
+    parser.add_argument(
+        "--product",
+        choices=["kr", "global"],
+        default="kr",
+        help="제품 라인 (kr: 한국어, global: 글로벌). 기본값은 kr이며 한국어 Lite/Full만 만든다.",
+    )
     args = parser.parse_args()
 
     print("=" * 60)
     print(f"[BUILD] 루미트랜스 (LumiTrans) - 윈도우 설치 버전 빌드 시작")
-    print(f"[TARGET] 선택된 빌드 대상: {args.edition.upper()}")
+    print(f"[TARGET] 제품: {args.product} | 에디션: {args.edition.upper()}")
     print("=" * 60)
 
     total_start = time.time()
@@ -417,11 +434,11 @@ def main():
 
     built_files = []
     if args.edition in ("lite", "all"):
-        f = build_single_edition("lite")
+        f = build_single_edition("lite", product=args.product)
         built_files.append(("Lite", f))
 
     if args.edition in ("full", "all"):
-        f = build_single_edition("full")
+        f = build_single_edition("full", product=args.product)
         built_files.append(("Full", f))
 
     total_elapsed = time.time() - total_start

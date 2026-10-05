@@ -449,13 +449,13 @@ class STTDownloadWorker(threading.Thread):
                 STTModelManager.delete_model(m_id)
                 self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
             else:
-                self.finished_signal.emit(m_id, False, f"다운로드 실패: {e}")
+                self.finished_signal.emit(m_id, False, str(e))
         except Exception as e:
             if self._is_cancelled or "cancel" in str(e).lower():
                 STTModelManager.delete_model(m_id)
                 self.finished_signal.emit(m_id, False, "다운로드가 취소되었습니다.")
             else:
-                self.finished_signal.emit(m_id, False, f"다운로드 실패: {e}")
+                self.finished_signal.emit(m_id, False, str(e))
         finally:
             STTModelManager.unregister_worker(m_id)
 

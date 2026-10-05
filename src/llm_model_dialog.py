@@ -14,6 +14,7 @@ from .ui_theme import (
     COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_PURPLE,
     COLOR_ACCENT_CYAN, COLOR_ACCENT_PINK, COLOR_ACCENT_MINT, CardWidget
 )
+from src.i18n import ask, is_cancel_message, tell, tr
 from .llm_model_manager import (
     LLMModelManager, OllamaPullWorker, GGUFDownloadWorker, CUDAPackDownloadWorker,
     RECOMMENDED_OLLAMA_MODELS, RECOMMENDED_GGUF_MODELS,
@@ -90,7 +91,7 @@ class UnifiedLLMModelCard(QFrame):
         btn_box.setSpacing(6)
         btn_box.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        self.btn_select = QPushButton("선택 적용")
+        self.btn_select = QPushButton(tr("btn_apply"))
         self.btn_select.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_select.setStyleSheet(f"""
             QPushButton {{
@@ -108,7 +109,7 @@ class UnifiedLLMModelCard(QFrame):
         """)
         self.btn_select.clicked.connect(self._on_select_clicked)
 
-        self.btn_download = QPushButton("⬇️ 다운로드")
+        self.btn_download = QPushButton("⬇️ " + tr("btn_download"))
         self.btn_download.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_download.setStyleSheet("""
             QPushButton {{
@@ -126,7 +127,7 @@ class UnifiedLLMModelCard(QFrame):
         """)
         self.btn_download.clicked.connect(self._on_download_clicked)
 
-        self.btn_delete = QPushButton("🗑️ 삭제")
+        self.btn_delete = QPushButton("🗑️ " + tr("btn_delete"))
         self.btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_delete.setStyleSheet("""
             QPushButton {{
@@ -144,7 +145,7 @@ class UnifiedLLMModelCard(QFrame):
         """)
         self.btn_delete.clicked.connect(self._on_delete_clicked)
 
-        self.btn_cancel = QPushButton("다운로드 취소")
+        self.btn_cancel = QPushButton(tr("btn_cancel_download"))
         self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_cancel.setStyleSheet("""
             QPushButton {
@@ -264,13 +265,13 @@ class UnifiedLLMModelCard(QFrame):
 
             if active_worker:
                 self.worker = active_worker
-                self.lbl_status.setText("다운로드 중...")
+                self.lbl_status.setText(tr("downloading"))
                 self.lbl_status.setStyleSheet("background-color: rgba(245,158,11,0.2); color: #F59E0B;")
                 self.btn_select.setVisible(False)
                 self.btn_download.setVisible(False)
                 self.btn_cancel.setVisible(True)
                 self.btn_cancel.setEnabled(True)
-                self.btn_cancel.setText("다운로드 취소")
+                self.btn_cancel.setText(tr("btn_cancel_download"))
                 self.btn_delete.setVisible(False)
 
                 self.progress_bar.setValue(last_pct)
@@ -288,12 +289,12 @@ class UnifiedLLMModelCard(QFrame):
                 self.worker.progress_signal.connect(self._on_progress)
                 self.worker.finished_signal.connect(self._on_finished)
             else:
-                self.lbl_status.setText("미설치")
+                self.lbl_status.setText(tr("not_installed"))
                 self.lbl_status.setStyleSheet("background-color: rgba(148,163,184,0.15); color: #94A3B8;")
                 self.btn_select.setVisible(False)
                 self.btn_download.setVisible(True)
                 self.btn_download.setEnabled(True)
-                self.btn_download.setText("⬇️ 다운로드")
+                self.btn_download.setText("⬇️ " + tr("btn_download"))
                 self.btn_cancel.setVisible(False)
                 self.btn_delete.setVisible(False)
                 self.progress_container.setVisible(False)
@@ -305,14 +306,7 @@ class UnifiedLLMModelCard(QFrame):
         else:
             if not LLMModelManager.is_cuda_binary_available():
                 if LLMModelManager.can_install_llm_cuda():
-                    ret = QMessageBox.question(
-                        self,
-                        "⚡ GPU 가속 팩 설치 필요",
-                        f"'{self.gguf_info['name']}' 모델은 CPU 모드로 실행 시 속도가 매우 느려(문장당 수초~수십초 지연) 정상적인 실시간 동시통역이 어렵습니다.\n\n"
-                        "원활한 실시간 통역을 위해 NVIDIA GPU 가속 팩(약 460MB)을 먼저 설치하신 후 사용하실 수 있습니다.\n\n"
-                        "지금 GPU 가속 팩을 다운로드하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_gpu_pack_needed_title", "msg_gpu_pack_needed", name=self.gguf_info["name"])
                     if ret == QMessageBox.StandardButton.Yes:
                         dlg = self.window()
                         if hasattr(dlg, 'request_cuda_and_download_model'):
@@ -321,15 +315,7 @@ class UnifiedLLMModelCard(QFrame):
                             dlg._execute_cuda_pack_download()
                     return
                 else:
-                    ret = QMessageBox.question(
-                        self,
-                        "⚠️ 로컬 LLM GPU 가속 불가 안내",
-                        f"{LLMModelManager.llm_gpu_unavailable_reason()}\n\n"
-                        f"CPU 모드로 '{self.gguf_info['name']}' 모델을 실행하면 번역 속도가 매우 느려 실시간 동시통역에 지연이 발생할 수 있습니다.\n"
-                        "• 권장: 클라우드 번역 엔진(Google 무료, DeepL, Groq 등) 사용\n\n"
-                        "그래도 CPU 모드로 이 모델을 선택하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_gpu_slow_title", "msg_gpu_slow", reason=LLMModelManager.llm_gpu_unavailable_reason(), name=self.gguf_info["name"])
                     if ret != QMessageBox.StandardButton.Yes:
                         return
             self.model_selected_signal.emit("embedded", self.gguf_info["id"])
@@ -344,18 +330,18 @@ class UnifiedLLMModelCard(QFrame):
                 self.worker = OllamaPullWorker(self.ollama_info["tag"])
                 self.worker.start()
 
-            self.lbl_status.setText("다운로드 중...")
+            self.lbl_status.setText(tr("downloading"))
             self.lbl_status.setStyleSheet("background-color: rgba(245,158,11,0.2); color: #F59E0B;")
             self.btn_select.setVisible(False)
             self.btn_download.setVisible(False)
             self.btn_cancel.setVisible(True)
             self.btn_cancel.setEnabled(True)
-            self.btn_cancel.setText("다운로드 취소")
+            self.btn_cancel.setText(tr("btn_cancel_download"))
             self.btn_delete.setVisible(False)
             self.progress_container.setVisible(True)
             last_pct, last_msg = LLMModelManager.get_last_ollama_progress(self.ollama_info["tag"])
             self.progress_bar.setValue(last_pct)
-            self.lbl_progress_status.setText(last_msg if last_pct > 0 else "Ollama 서버에 다운로드를 요청합니다...")
+            self.lbl_progress_status.setText(last_msg if last_pct > 0 else tr("downloading"))
             try:
                 self.worker.progress_signal.disconnect(self._on_progress)
             except Exception:
@@ -370,15 +356,7 @@ class UnifiedLLMModelCard(QFrame):
             # GGUF 로컬 모델 다운로드 시 GPU 가속 팩 선행 설치 확인
             if not LLMModelManager.is_cuda_binary_available():
                 if LLMModelManager.can_install_llm_cuda():
-                    ret = QMessageBox.question(
-                        self,
-                        "⚡ GPU 가속 팩 선행 설치 필요",
-                        f"'{self.gguf_info['name']}' 모델을 원활하게 사용하려면 NVIDIA GPU 가속 팩(약 460MB)이 먼저 필요합니다.\n\n"
-                        "CPU 모드로 로컬 LLM을 실행할 경우 번역 속도가 매우 느려(문장당 수초~수십초 지연) 정상적인 실시간 동시통역이 불가능합니다.\n\n"
-                        "먼저 GPU 가속 팩을 다운로드하시겠습니까?\n"
-                        f"(가속 팩 설치 완료 후 '{self.gguf_info['name']}' 모델 다운로드가 자동으로 시작됩니다.)",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_gpu_pack_needed_title", "msg_gpu_pack_needed", name=self.gguf_info["name"])
                     if ret == QMessageBox.StandardButton.Yes:
                         dlg = self.window()
                         if hasattr(dlg, 'request_cuda_and_download_model'):
@@ -387,15 +365,7 @@ class UnifiedLLMModelCard(QFrame):
                             dlg._execute_cuda_pack_download()
                     return
                 else:
-                    ret = QMessageBox.question(
-                        self,
-                        "⚠️ 로컬 LLM GPU 가속 불가 안내",
-                        f"{LLMModelManager.llm_gpu_unavailable_reason()}\n\n"
-                        "CPU 모드로 로컬 LLM을 구동하면 번역 속도가 매우 느려(문장당 수십 초) 실시간 자막 통역에 부적합할 수 있습니다.\n"
-                        "• 권장: 클라우드 번역 엔진(Google 웹 무료, DeepL, Groq 등) 사용\n\n"
-                        f"그래도 CPU 모드로 '{self.gguf_info['name']}' 모델을 다운로드하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_gpu_slow_title", "msg_gpu_slow", reason=LLMModelManager.llm_gpu_unavailable_reason(), name=self.gguf_info["name"])
                     if ret != QMessageBox.StandardButton.Yes:
                         return
 
@@ -410,18 +380,18 @@ class UnifiedLLMModelCard(QFrame):
             self.worker = GGUFDownloadWorker(self.gguf_info)
             self.worker.start()
 
-        self.lbl_status.setText("다운로드 중...")
+        self.lbl_status.setText(tr("downloading"))
         self.lbl_status.setStyleSheet("background-color: rgba(245,158,11,0.2); color: #F59E0B;")
         self.btn_select.setVisible(False)
         self.btn_download.setVisible(False)
         self.btn_cancel.setVisible(True)
         self.btn_cancel.setEnabled(True)
-        self.btn_cancel.setText("다운로드 취소")
+        self.btn_cancel.setText(tr("btn_cancel_download"))
         self.btn_delete.setVisible(False)
         self.progress_container.setVisible(True)
         last_pct, last_msg = LLMModelManager.get_last_gguf_progress(self.gguf_info["id"])
         self.progress_bar.setValue(last_pct)
-        self.lbl_progress_status.setText(last_msg if last_pct > 0 else "HuggingFace에서 내장 GGUF 가중치를 다운로드합니다...")
+        self.lbl_progress_status.setText(last_msg if last_pct > 0 else tr("downloading"))
         try:
             self.worker.progress_signal.disconnect(self._on_progress)
         except Exception:
@@ -443,8 +413,8 @@ class UnifiedLLMModelCard(QFrame):
         target_worker = worker or self.worker
         if target_worker:
             self.btn_cancel.setEnabled(False)
-            self.btn_cancel.setText("취소 중...")
-            self.lbl_progress_status.setText("다운로드 취소 요청 중...")
+            self.btn_cancel.setText(tr("canceling"))
+            self.lbl_progress_status.setText(tr("cancel_requested"))
             target_worker.cancel()
 
     def _on_progress(self, tag, percent, msg):
@@ -459,36 +429,26 @@ class UnifiedLLMModelCard(QFrame):
         self.progress_container.setVisible(False)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(True)
-        self.btn_cancel.setText("다운로드 취소")
+        self.btn_cancel.setText(tr("btn_cancel_download"))
         self.btn_download.setEnabled(True)
-        self.btn_download.setText("⬇️ 다운로드")
+        self.btn_download.setText("⬇️ " + tr("btn_download"))
         if success:
             self.refresh_state()
             if sip.isdeleted(self):
                 return
             self.model_status_changed_signal.emit()
-            ret = QMessageBox.question(
-                self,
-                "다운로드 완료",
-                f"'{self.ollama_info['name']}' 모델 다운로드가 완료되었습니다.\n\n이 모델을 지금 바로 번역 엔진으로 적용하시겠습니까?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
+            ret = ask(self, "msg_download_switched_title", "msg_use_now", name=self.ollama_info["name"])
             if ret == QMessageBox.StandardButton.Yes and not sip.isdeleted(self):
                 self._on_select_clicked()
         else:
             self.refresh_state()
             if not sip.isdeleted(self):
                 self.model_status_changed_signal.emit()
-                if "취소" not in msg:
-                    QMessageBox.warning(self, "다운로드 실패", f"오류가 발생했습니다:\n{msg}")
+                if not is_cancel_message(msg):
+                    tell(self, "msg_download_switched_title", "msg_download_fail", kind="warn", error=msg)
 
     def _on_delete_clicked(self):
-        ret = QMessageBox.question(
-            self,
-            "모델 삭제 확인",
-            f"'{self.ollama_info['name']}' 모델을 디스크에서 삭제하시겠습니까?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        ret = ask(self, "msg_delete_title", "msg_delete_body", name=self.ollama_info["name"])
         if ret == QMessageBox.StandardButton.Yes:
             is_alive, _ = LLMModelManager.check_ollama_alive()
             if is_alive:
@@ -497,11 +457,11 @@ class UnifiedLLMModelCard(QFrame):
                 ok = LLMModelManager.delete_gguf_model(self.gguf_info)
 
             if ok:
-                QMessageBox.information(self, "삭제 완료", "모델이 삭제되었습니다.")
+                tell(self, "msg_saved_title", "msg_deleted", name=self.ollama_info["name"])
                 self.refresh_state()
                 self.model_status_changed_signal.emit()
             else:
-                QMessageBox.warning(self, "삭제 실패", "모델 파일을 삭제하지 못했습니다.")
+                tell(self, "msg_save_failed_title", "msg_delete_fail", kind="warn")
 
 class LLMModelDialog(QDialog):
     """로컬 AI 번역 모델 통합 관리자 (생성형 LLM)"""
@@ -516,7 +476,7 @@ class LLMModelDialog(QDialog):
         self.cards = []
         self._pending_model_download = None
 
-        self.setWindowTitle("로컬 AI 번역 모델 통합 관리자")
+        self.setWindowTitle(tr("dlg_llm_window"))
         self.resize(780, 700)
         self.setStyleSheet(f"""
             QDialog {{
@@ -582,7 +542,7 @@ class LLMModelDialog(QDialog):
         h_layout = QHBoxLayout(head_card)
         h_layout.setContentsMargins(16, 12, 16, 12)
 
-        title = QLabel("🌐 로컬 AI 번역 모델 통합 관리")
+        title = QLabel("🌐 " + tr("dlg_llm_heading"))
         title.setStyleSheet("font-size: 15px; font-weight: bold; color: #ECEFF1;")
         h_layout.addWidget(title)
         h_layout.addStretch(1)
@@ -595,12 +555,12 @@ class LLMModelDialog(QDialog):
         s_layout.setSpacing(8)
 
         s_top = QHBoxLayout()
-        s_title = QLabel("📁 공용 모델 저장소 & 환경변수 정보")
+        s_title = QLabel("📁 " + tr("dlg_llm_store"))
         s_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
         s_top.addWidget(s_title)
         s_top.addStretch(1)
 
-        btn_open_folder = QPushButton("📂 탐색기로 열기")
+        btn_open_folder = QPushButton("📂 " + tr("dlg_open_explorer"))
         btn_open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_open_folder.setStyleSheet(f"""
             QPushButton {{
@@ -618,7 +578,7 @@ class LLMModelDialog(QDialog):
         """)
         btn_open_folder.clicked.connect(self._on_open_folder_clicked)
 
-        btn_change_folder = QPushButton("📁 폴더 지정/변경")
+        btn_change_folder = QPushButton("📁 " + tr("dlg_change_folder"))
         btn_change_folder.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_change_folder.setStyleSheet(f"""
             QPushButton {{
@@ -658,29 +618,29 @@ class LLMModelDialog(QDialog):
         grid.setVerticalSpacing(7)
 
         # 1행: 공용 지정 폴더 & 디스크 여유 공간
-        grid.addWidget(QLabel("📍 공용 모델 지정 폴더:"), 0, 0)
+        grid.addWidget(QLabel("📍 " + tr("dlg_model_folder")), 0, 0)
         self.lbl_custom_dir = QLabel("-")
         self.lbl_custom_dir.setStyleSheet("font-weight: bold; color: #38BDF8; font-size: 11px;")
         grid.addWidget(self.lbl_custom_dir, 0, 1)
 
-        grid.addWidget(QLabel("💾 디스크 여유 공간:"), 0, 2)
+        grid.addWidget(QLabel("💾 " + tr("dlg_free_space")), 0, 2)
         self.lbl_free_space = QLabel("-")
         self.lbl_free_space.setStyleSheet("font-weight: bold; color: #34D399; font-size: 11px;")
         grid.addWidget(self.lbl_free_space, 0, 3)
 
         # 2행: HF_HOME 환경변수 & GGUF 공용 폴더
-        grid.addWidget(QLabel("🌐 HF_HOME (환경변수):"), 1, 0)
+        grid.addWidget(QLabel("🌐 HF_HOME"), 1, 0)
         self.lbl_hf_home = QLabel("-")
         self.lbl_hf_home.setStyleSheet("color: #E2E8F0; font-size: 11px;")
         grid.addWidget(self.lbl_hf_home, 1, 1)
 
-        grid.addWidget(QLabel("📦 GGUF 단일 공유 폴더:"), 1, 2)
+        grid.addWidget(QLabel("📦 " + tr("dlg_gguf")), 1, 2)
         self.lbl_gguf_dir = QLabel("-")
         self.lbl_gguf_dir.setStyleSheet("color: #E2E8F0; font-size: 11px;")
         grid.addWidget(self.lbl_gguf_dir, 1, 3)
 
         # 3행: C: 드라이브 연동 상태
-        grid.addWidget(QLabel("🔗 C: 드라이브 연동:"), 2, 0)
+        grid.addWidget(QLabel("🔗 " + tr("dlg_junction")), 2, 0)
         self.lbl_junction_status = QLabel("-")
         self.lbl_junction_status.setStyleSheet("color: #A78BFA; font-size: 11px;")
         grid.addWidget(self.lbl_junction_status, 2, 1, 1, 3)
@@ -701,9 +661,9 @@ class LLMModelDialog(QDialog):
         c_top = QHBoxLayout()
         c_top.setSpacing(10)
         c_top.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        self.lbl_cuda_title = QLabel("⚡ 번역 가속 엔진 (NVIDIA CUDA)")
+        self.lbl_cuda_title = QLabel("⚡ " + tr("dlg_cuda_title"))
         self.lbl_cuda_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1; border: none; outline: none; background: transparent;")
-        self.lbl_edition_badge = QLabel("풀 에디션 (Full)")
+        self.lbl_edition_badge = QLabel(tr("edition_full"))
         self.lbl_edition_badge.setStyleSheet("font-size: 10px; font-weight: bold; color: #A78BFA; background: rgba(167, 139, 250, 0.15); border: 1px solid rgba(167, 139, 250, 0.4); border-radius: 4px; padding: 2px 6px;")
         self.lbl_edition_badge.setVisible(False)
         
@@ -711,7 +671,7 @@ class LLMModelDialog(QDialog):
         c_top.addWidget(self.lbl_edition_badge)
         c_top.addStretch(1)
 
-        self.btn_cuda_action = QPushButton("⚡ CUDA 가속 팩 다운로드")
+        self.btn_cuda_action = QPushButton("⚡ " + tr("dlg_cuda_download"))
         self.btn_cuda_action.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_cuda_action.setStyleSheet("""
             QPushButton {
@@ -731,7 +691,7 @@ class LLMModelDialog(QDialog):
         c_top.addWidget(self.btn_cuda_action)
         c_gpu_layout.addLayout(c_top)
 
-        self.lbl_cuda_status = QLabel("가속 상태 확인 중...")
+        self.lbl_cuda_status = QLabel(tr("dlg_cuda_checking"))
         self.lbl_cuda_status.setStyleSheet("font-size: 11px; color: #94A3B8; border: none; outline: none; background: transparent;")
         self.lbl_cuda_status.setVisible(False)
         c_gpu_layout.addWidget(self.lbl_cuda_status)
@@ -780,7 +740,7 @@ class LLMModelDialog(QDialog):
         c_layout.setSpacing(10)
 
         # 섹션 1: 로컬 생성형 LLM
-        sec1_lbl = QLabel("🤖 로컬 생성형 LLM 번역 모델 (GGUF / Ollama)")
+        sec1_lbl = QLabel("🤖 " + tr("dlg_local_models"))
         sec1_lbl.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {COLOR_ACCENT_PURPLE}; margin-top: 4px;")
         c_layout.addWidget(sec1_lbl)
 
@@ -830,7 +790,7 @@ class LLMModelDialog(QDialog):
         bot_bar.addWidget(lbl_tip)
         bot_bar.addStretch(1)
 
-        btn_close = QPushButton("닫기")
+        btn_close = QPushButton(tr("dlg_close"))
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.setStyleSheet("""
             QPushButton {{
@@ -866,7 +826,7 @@ class LLMModelDialog(QDialog):
         else:
             m_name = "LG EXAONE 3.5 (2.4B)"
 
-        QMessageBox.information(self, "번역 엔진 지정", f"로컬 번역 엔진이 '{m_name}'(으)로 지정되었습니다.")
+        tell(self, "msg_engine_applied_title", "msg_engine_applied", name=m_name)
         self.accept()
 
     def _on_status_changed(self):
@@ -899,9 +859,9 @@ class LLMModelDialog(QDialog):
                 col = "#F59E0B" if free_gb < 20 else "#34D399"
                 self.lbl_free_space.setStyleSheet(f"font-weight: bold; color: {col}; font-size: 11px;")
             except Exception:
-                self.lbl_free_space.setText("용량 확인 불가")
+                self.lbl_free_space.setText(tr("unknown_space"))
         else:
-            self.lbl_custom_dir.setText("미지정 (기본 C: 캐시)")
+            self.lbl_custom_dir.setText(tr("dir_unset"))
             self.lbl_custom_dir.setStyleSheet("font-weight: bold; color: #94A3B8; font-size: 11px;")
             self.lbl_free_space.setText("-")
 
@@ -921,7 +881,7 @@ class LLMModelDialog(QDialog):
             self.lbl_hf_home.setText(f"{hf_home} (활성)")
             self.lbl_hf_home.setStyleSheet("color: #38BDF8; font-size: 11px;")
         else:
-            self.lbl_hf_home.setText("미설정 (C: 기본 캐시 사용)")
+            self.lbl_hf_home.setText(tr("hf_unset"))
             self.lbl_hf_home.setStyleSheet("color: #94A3B8; font-size: 11px;")
 
         # 3. GGUF 단일 공유 폴더 확인
@@ -934,7 +894,7 @@ class LLMModelDialog(QDialog):
             except Exception:
                 self.lbl_gguf_dir.setText(gguf_dir)
         else:
-            self.lbl_gguf_dir.setText("미생성")
+            self.lbl_gguf_dir.setText(tr("gguf_missing"))
             self.lbl_gguf_dir.setStyleSheet("color: #94A3B8; font-size: 11px;")
 
         # 4. C: 드라이브 연동 (Junction / Reparse point 검사)
@@ -980,7 +940,7 @@ class LLMModelDialog(QDialog):
         try:
             os.makedirs(gguf_dir, exist_ok=True)
         except Exception as e:
-            QMessageBox.warning(self, "폴더 생성 오류", f"폴더 권한을 확인해주세요:\n{e}")
+            tell(self, "msg_folder_create_title", "msg_folder_create", kind="warn", error=e)
             return
 
         # config.json 업데이트
@@ -991,13 +951,7 @@ class LLMModelDialog(QDialog):
         self._refresh_storage_info()
         self._on_status_changed()
 
-        QMessageBox.information(
-            self,
-            "공용 모델 폴더 지정 완료",
-            f"공용 모델 저장 폴더가 다음으로 변경되었습니다:\n\n{selected_dir}\n\n"
-            f"• 내장 GGUF 모델 탐색 시 이 폴더를 최우선으로 검사합니다.\n"
-            f"• 하위 공유 폴더: {gguf_dir}"
-        )
+        tell(self, "msg_folder_set_title", "msg_folder_set", path=selected_dir, gguf=gguf_dir)
 
     def _on_open_folder_clicked(self):
         """지정된 공용 모델 폴더를 윈도우 파일 탐색기로 열기"""
@@ -1006,9 +960,9 @@ class LLMModelDialog(QDialog):
             try:
                 os.startfile(c_dir)
             except Exception as e:
-                QMessageBox.warning(self, "탐색기 열기 실패", f"폴더를 열 수 없습니다:\n{e}")
+                tell(self, "msg_explorer_fail_title", "msg_explorer_fail", kind="warn", error=e)
         else:
-            QMessageBox.warning(self, "폴더 없음", f"폴더가 존재하지 않습니다:\n{c_dir}")
+            tell(self, "msg_folder_missing_title", "msg_folder_missing", kind="warn", path=c_dir)
 
     def _refresh_cuda_accel_info(self):
         """에디션 정보 및 CUDA GPU 가속(STT cuBLAS 및 LLM ggml-cuda) 상태 갱신"""
@@ -1023,10 +977,10 @@ class LLMModelDialog(QDialog):
         is_fully_ready = status["is_fully_ready"]
 
         if edition == "full":
-            self.lbl_edition_badge.setText("풀 에디션 (Full - CUDA 전체 내장)")
+            self.lbl_edition_badge.setText(tr("edition_full_bundled"))
             self.lbl_edition_badge.setStyleSheet("font-size: 10px; font-weight: bold; color: #818CF8; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 4px; padding: 2px 6px;")
         else:
-            self.lbl_edition_badge.setText("라이트 에디션 (Lite - 경량 설치)")
+            self.lbl_edition_badge.setText(tr("edition_lite"))
             self.lbl_edition_badge.setStyleSheet("font-size: 10px; font-weight: bold; color: #38BDF8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px; padding: 2px 6px;")
 
         # 드라이버/GPU 세대 때문에 로컬 LLM CUDA 는 설치로 해결되지 않는 경우
@@ -1064,7 +1018,7 @@ class LLMModelDialog(QDialog):
                 status_desc = "⚡ NVIDIA CUDA 가속 라이브러리 다운로드 진행 중..."
                 self.lbl_cuda_status.setText(status_desc)
                 self.lbl_cuda_status.setStyleSheet("color: #F59E0B; font-weight: bold; font-size: 11px; border: none; outline: none; background: transparent;")
-                self.btn_cuda_action.setText("다운로드 중...")
+                self.btn_cuda_action.setText(tr("downloading"))
                 self.btn_cuda_action.setEnabled(False)
                 self.btn_cuda_action.setStyleSheet("background-color: #1E293B; color: #94A3B8; border: 1px solid #334155; border-radius: 5px; padding: 6px 14px; font-size: 11px; font-weight: bold;")
                 self.cuda_progress_container.setVisible(True)
@@ -1148,7 +1102,7 @@ class LLMModelDialog(QDialog):
             self.cuda_worker.start()
 
         self.btn_cuda_action.setEnabled(False)
-        self.btn_cuda_action.setText("다운로드 중...")
+        self.btn_cuda_action.setText(tr("downloading"))
         self.cuda_progress_container.setVisible(True)
         last_pct, last_msg = LLMModelManager.get_last_cuda_progress()
         self.cuda_progress_bar.setValue(last_pct)
@@ -1167,18 +1121,7 @@ class LLMModelDialog(QDialog):
 
     def _on_cuda_action_clicked(self):
         """CUDA 가속 팩 온디맨드 다운로드 실행"""
-        ret = QMessageBox.question(
-            self,
-            "NVIDIA CUDA GPU 가속 팩 다운로드",
-            "NVIDIA CUDA 가속 라이브러리(STT cuBLAS 및 로컬 LLM 가속 바이너리)를 다운로드하여 설치하시겠습니까?\n\n"
-            "• 구성: cuBLAS 12(음성인식) + CUDA 13용 llama.cpp 라이브러리 한 세트(번역)\n"
-            "• 음성인식은 설치 직후 재시작 없이 GPU로 전환할 수 있습니다.\n"
-            "• 로컬 번역은 이번 실행에서 아직 쓰지 않았다면 바로, 이미 썼다면 재시작 후 GPU로 동작합니다.\n"
-            "• 효과: 음성인식 지연시간 최소화 및 GPU 실시간 초고속 동시통역 활성화\n"
-            "• 다운로드 중에도 기존 번역은 중단 없이 계속 사용하실 수 있습니다.\n\n"
-            "계속 진행하시겠습니까?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        ret = ask(self, "msg_cuda_pack_title", "msg_cuda_ask")
         if ret != QMessageBox.StandardButton.Yes:
             return
         self._execute_cuda_pack_download()
@@ -1231,32 +1174,22 @@ class LLMModelDialog(QDialog):
                 m_info, card = self._pending_model_download
                 self._pending_model_download = None
                 if not sip.isdeleted(self):
-                    QMessageBox.information(
-                        self,
-                        "✨ GPU 가속 팩 설치 완료",
-                        f"{msg}\n\n이어서 '{m_info['name']}' 모델 다운로드를 시작합니다!"
-                    )
+                    tell(self, "msg_download_switched_title", "msg_cuda_continue", message=msg, name=m_info["name"])
                 if card and not sip.isdeleted(card):
                     card.start_download()
             else:
                 if not sip.isdeleted(self):
                     # 사용자에게 GPU 모드로 자동 전환할지 안내
                     if cur_dev == "cpu" and parent and hasattr(parent, '_on_stt_dev_selected'):
-                        q_switch = QMessageBox.question(
-                            self,
-                            "✨ CUDA 가속 팩 설치 완료",
-                            f"{msg}\n\n현재 STT 음성인식 장치가 CPU로 설정되어 있습니다.\n"
-                            "지금 NVIDIA CUDA GPU 가속 모드로 전환하시겠습니까?",
-                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                        )
+                        q_switch = ask(self, "msg_download_switched_title", "msg_cuda_switch", message=msg)
                         if q_switch == QMessageBox.StandardButton.Yes:
                             try:
                                 parent._on_stt_dev_selected("cuda")
                             except Exception:
                                 pass
                     else:
-                        QMessageBox.information(self, "✨ CUDA 가속 팩 설치 완료", msg)
+                        tell(self, "msg_download_switched_title", "msg_saved_file", path=msg)
         else:
             self._pending_model_download = None
             if not sip.isdeleted(self):
-                QMessageBox.warning(self, "CUDA 가속 팩 설치 실패", msg)
+                tell(self, "msg_cuda_fail_title", "msg_download_fail", kind="warn", error=msg)

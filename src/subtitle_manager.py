@@ -174,6 +174,71 @@ def break_korean_sentences(text: str, linebreak: str = "<br>") -> str:
     return smart_break_sentences(text, linebreak=linebreak)
 
 
+def break_plain_sentences(text: str, linebreak: str = "<br>", max_lines: int = 2) -> str:
+    """한국어가 아닌 자막은 마침표·물음표·느낌표 뒤에서만 줄을 나눈다."""
+    if not text:
+        return text
+    parts = [part.strip() for part in re.split(r'(?<=[.!?])\s+', text.strip()) if part.strip()]
+    if len(parts) <= 1:
+        return text
+    if len(parts) > max_lines:
+        parts = parts[: max_lines - 1] + [" ".join(parts[max_lines - 1 :])]
+    return linebreak.join(parts)
+
+
+def break_subtitle_text(text: str, target_lang: str = "ko", linebreak: str = "<br>") -> str:
+    """도착 언어가 한국어일 때만 한국어 줄바꿈을 쓴다."""
+    code = str(target_lang or "ko").strip().lower().split("-")[0]
+    if code == "ko":
+        return break_korean_sentences(text, linebreak=linebreak)
+    return break_plain_sentences(text, linebreak=linebreak)
+
+
+def subtitle_export_filename(
+    filter_mode: str,
+    extension: str,
+    source_lang: str = "en",
+    target_lang: str = "ko",
+    product: str = "kr",
+) -> str:
+    """내보내기 기본 파일명. 한국어 제품은 english_/korean_ 이름을 유지한다."""
+    ext = extension.lstrip(".").lower() or "srt"
+    kind = "transcript" if ext == "txt" else "subtitles"
+    if filter_mode == "orig_only":
+        if product != "global":
+            stem = "english_transcript" if ext == "txt" else "english_subtitles"
+        else:
+            code = _export_lang_code(source_lang, "source")
+            stem = f"{code}_{kind}"
+    elif filter_mode == "trans_only":
+        if product != "global":
+            stem = "korean_transcript" if ext == "txt" else "korean_subtitles"
+        else:
+            code = _export_lang_code(target_lang, "target")
+            stem = f"{code}_{kind}"
+    elif filter_mode == "dub_only":
+        stem = "dubbing_transcript" if ext == "txt" else "dubbing_speech_only"
+    elif filter_mode in ("all", "audio", "screen", "dubbing"):
+        prefix = "subtitles_all" if filter_mode == "all" else f"{filter_mode}_subtitles"
+        if ext == "txt" and filter_mode == "dubbing":
+            stem = "dubbing_subtitles"
+        elif ext == "txt" and filter_mode == "all":
+            stem = "subtitles_all"
+        else:
+            stem = prefix
+    else:
+        stem = "subtitles"
+    return f"{stem}.{ext}"
+
+
+def _export_lang_code(code: str, fallback: str) -> str:
+    raw = str(code or "").strip().lower().split("-")[0]
+    if not raw or raw in ("auto", "none"):
+        return fallback
+    cleaned = re.sub(r"[^a-z0-9]", "", raw)
+    return cleaned or fallback
+
+
 break_sentences = smart_break_sentences
 
 

@@ -11,7 +11,8 @@ from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPen, QFontMetrics, QCu
 from src.outline_effect import ThickOutlineEffect
 from src.no_wheel_combobox import NoWheelComboBox
 from src.overlay_geometry import OverlayGeometryMixin
-from src.subtitle_manager import break_korean_sentences, smart_break_sentences
+from src.subtitle_manager import break_subtitle_text, smart_break_sentences
+from src.i18n import tr
 
 # 8방향 테두리 리사이즈 플래그 및 마진 상수
 EDGE_NONE = 0
@@ -103,7 +104,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def _init_ui(self):
         # 윈도우 기본 속성: 무테두리, 항상 위, 반투명 배경
-        self.setWindowTitle("음성 번역 자막")
+        self.setWindowTitle(tr("overlay_audio_title"))
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -1094,7 +1095,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         format_func = getattr(self, '_format_speaker_text', lambda t: t)
         display_ko = format_func(translated_text)
         display_en = format_func(original_text)
-        formatted_ko = smart_break_sentences(display_ko, linebreak="<br>")
+        target_lang = self.config.get("target_lang", "ko")
+        formatted_ko = break_subtitle_text(display_ko, target_lang=target_lang, linebreak="<br>")
         formatted_en = smart_break_sentences(display_en, linebreak="<br>")
         self._auto_fit_text(formatted_en, formatted_ko)
         

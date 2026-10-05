@@ -43,12 +43,22 @@ def get_language_name(code: str, native: bool = False) -> str:
         return entry[1] if native else entry[0]
     return code.upper() if code else ("한국어" if native else "Korean")
 
+
+def concrete_language(value, fallback: str) -> str:
+    """'auto'는 번역 API 언어 코드가 아니다. 감지 전 기본 코드로 둔다."""
+    raw = str(value or "").strip()
+    if not raw or raw.lower() in ("auto", "none"):
+        return fallback
+    return raw
+
 class RealtimeTranslator:
     def __init__(self, config=None, source="en", target="ko"):
         self._requested_config = config or {}
         self.config = dict(self._requested_config)
-        self.source = self.config.get("source_lang") or self.config.get("source") or source
-        self.target = self.config.get("target_lang") or self.config.get("target") or target
+        self.source = concrete_language(
+            self.config.get("source_lang") or self.config.get("source"), source)
+        self.target = concrete_language(
+            self.config.get("target_lang") or self.config.get("target"), target)
         self.cache = {}
         self.cache_expiry = {}
         self.cache_limit = 1000
@@ -111,14 +121,14 @@ class RealtimeTranslator:
             self._requested_config = config
             self.config = dict(config)
             if "source_lang" in config and config["source_lang"]:
-                self.source = str(config["source_lang"]).strip()
+                self.source = concrete_language(config["source_lang"], self.source)
             elif "source" in config and config["source"]:
-                self.source = str(config["source"]).strip()
+                self.source = concrete_language(config["source"], self.source)
 
             if "target_lang" in config and config["target_lang"]:
-                self.target = str(config["target_lang"]).strip()
+                self.target = concrete_language(config["target_lang"], self.target)
             elif "target" in config and config["target"]:
-                self.target = str(config["target"]).strip()
+                self.target = concrete_language(config["target"], self.target)
 
             if self._applied_config != signature:
                 self._applied_config = signature
@@ -223,6 +233,9 @@ class RealtimeTranslator:
                 print(f"[Ollama] [OK] 예열 완료! ({tag}, 소요 시간: {dur:.3f}s)")
         except Exception as e:
             print(f"[Ollama] 예열 실패 (서버 미실행 등): {e}")
+
+    def _is_korean_target(self) -> bool:
+        return str(self.target or "").strip().lower().split("-")[0] == "ko"
 
     def _post_process_korean(self, text: str) -> str:
         """모든 번역 엔진의 출력 결과에 공통 적용되는 고품질 한국어 자막 포스트프로세서"""
@@ -484,10 +497,10 @@ class RealtimeTranslator:
                 if result:
                     used_engine = "MyMemory"
 
-            # 9. 최종 한국어 자막 정제 포스트프로세싱
-            if result:
+            # 9. 한국어 자막 정제. 도착 언어가 한국어일 때만 적용한다.
+            if result and self._is_korean_target():
                 result = self._post_process_korean(result)
-            else:
+            elif not result:
                 result = text
                 used_engine = "원문 유지"
 

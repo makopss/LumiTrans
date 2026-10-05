@@ -124,17 +124,24 @@ def get_nvidia_driver_info() -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[
 
 def llama_cuda_issue(kind: str = "cu13") -> Optional[str]:
     """해당 CUDA 빌드(cu12/cu13)를 이 PC에서 쓸 수 없는 이유. 쓸 수 있으면 None."""
+    from src.i18n import tr
     if not is_nvidia_gpu_present():
-        return "NVIDIA 그래픽 카드가 없어 GPU 가속을 사용할 수 없습니다."
+        return tr("msg_no_nvidia_short")
     driver, cc = get_nvidia_driver_info()
     need_driver = _LLAMA_CUDA_MIN_DRIVER[kind]
     if driver is not None and driver < need_driver:
-        return (f"NVIDIA 드라이버 {driver[0]}.{driver[1]:02d} 은(는) 로컬 LLM GPU 가속에 너무 오래되었습니다 "
-                f"({need_driver[0]}.{need_driver[1]:02d} 이상 필요). 드라이버를 업데이트하세요.")
+        return tr(
+            "msg_driver_old",
+            driver=f"{driver[0]}.{driver[1]:02d}",
+            need=f"{need_driver[0]}.{need_driver[1]:02d}",
+        )
     need_cc = _LLAMA_CUDA_MIN_CC[kind]
     if cc is not None and cc < need_cc:
-        return (f"GPU 연산 능력 {cc[0]}.{cc[1]} 은(는) 로컬 LLM GPU 가속을 지원하지 않습니다 "
-                f"({need_cc[0]}.{need_cc[1]} 이상, RTX 20 시리즈 이상 필요).")
+        return tr(
+            "msg_gpu_old",
+            cc=f"{cc[0]}.{cc[1]}",
+            need=f"{need_cc[0]}.{need_cc[1]}",
+        )
     return None
 
 

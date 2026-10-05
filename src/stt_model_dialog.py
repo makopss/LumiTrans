@@ -14,6 +14,7 @@ from .ui_theme import (
     COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY, COLOR_ACCENT_PURPLE,
     COLOR_ACCENT_CYAN, COLOR_ACCENT_PINK, CardWidget
 )
+from src.i18n import ask, is_cancel_message, tell, tr
 from .stt_model_manager import STTModelManager, STTDownloadWorker, AVAILABLE_STT_MODELS, get_hf_hub_cache_dir
 
 
@@ -79,7 +80,7 @@ class STTModelCard(QFrame):
         btn_box = QHBoxLayout()
         btn_box.setSpacing(6)
 
-        self.btn_select = QPushButton("선택 적용")
+        self.btn_select = QPushButton(tr("btn_apply"))
         self.btn_select.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_select.setStyleSheet(f"""
             QPushButton {{
@@ -97,7 +98,7 @@ class STTModelCard(QFrame):
         """)
         self.btn_select.clicked.connect(self._on_select_clicked)
 
-        self.btn_download = QPushButton("⬇️ 다운로드")
+        self.btn_download = QPushButton("⬇️ " + tr("btn_download"))
         self.btn_download.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_download.setStyleSheet("""
             QPushButton {{
@@ -115,7 +116,7 @@ class STTModelCard(QFrame):
         """)
         self.btn_download.clicked.connect(self._on_download_clicked)
 
-        self.btn_delete = QPushButton("🗑️ 삭제")
+        self.btn_delete = QPushButton("🗑️ " + tr("btn_delete"))
         self.btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_delete.setStyleSheet("""
             QPushButton {{
@@ -133,7 +134,7 @@ class STTModelCard(QFrame):
         """)
         self.btn_delete.clicked.connect(self._on_delete_clicked)
 
-        self.btn_cancel = QPushButton("다운로드 취소")
+        self.btn_cancel = QPushButton(tr("btn_cancel_download"))
         self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_cancel.setStyleSheet("""
             QPushButton {
@@ -220,7 +221,7 @@ class STTModelCard(QFrame):
                 has_cuda = False
             can_select = (self.device != "cpu") or self.model_info.get("cpu_usable", False) or has_cuda
             self.btn_select.setEnabled(can_select)
-            self.btn_select.setText("선택 적용")
+            self.btn_select.setText(tr("btn_apply"))
             if self.device == "cpu" and not self.model_info.get("cpu_usable", False) and has_cuda:
                 self.btn_select.setToolTip("이 모델을 선택하면 CUDA GPU 가속으로 자동 전환되어 최적 속도로 구동됩니다.")
             else:
@@ -247,13 +248,13 @@ class STTModelCard(QFrame):
             active_worker = STTModelManager.get_active_worker(self.model_info["id"])
             if active_worker:
                 self.worker = active_worker
-                self.lbl_status.setText("다운로드 중...")
+                self.lbl_status.setText(tr("downloading"))
                 self.lbl_status.setStyleSheet("background: transparent; border: none; padding: 0px; color: #F59E0B; font-weight: bold; font-size: 11px;")
                 self.btn_select.setVisible(False)
                 self.btn_download.setVisible(False)
                 self.btn_cancel.setVisible(True)
                 self.btn_cancel.setEnabled(True)
-                self.btn_cancel.setText("다운로드 취소")
+                self.btn_cancel.setText(tr("btn_cancel_download"))
                 self.btn_delete.setVisible(False)
 
                 last_pct, last_msg = STTModelManager.get_last_progress(self.model_info["id"])
@@ -272,12 +273,12 @@ class STTModelCard(QFrame):
                 self.worker.progress_signal.connect(self._on_download_progress)
                 self.worker.finished_signal.connect(self._on_download_finished)
             else:
-                self.lbl_status.setText("미설치")
+                self.lbl_status.setText(tr("not_installed"))
                 self.lbl_status.setStyleSheet("background: transparent; border: none; padding: 0px; color: #94A3B8; font-weight: bold; font-size: 11px;")
                 self.btn_select.setVisible(False)
                 self.btn_download.setVisible(True)
                 self.btn_download.setEnabled(True)
-                self.btn_download.setText("⬇️ 다운로드")
+                self.btn_download.setText("⬇️ " + tr("btn_download"))
                 self.btn_cancel.setVisible(False)
                 self.btn_delete.setVisible(False)
                 self.progress_container.setVisible(False)
@@ -290,12 +291,7 @@ class STTModelCard(QFrame):
             has_cuda = False
 
         if self.device == "cpu" and not self.model_info.get("cpu_usable", False) and not has_cuda:
-            QMessageBox.warning(
-                self,
-                "선택 불가",
-                f"'{self.model_info['id']}' 모델은 CPU 환경에서 실시간 음성 인식 지연이 심하여 CPU 모드에서는 선택할 수 없습니다.\n\n"
-                "CUDA 가속 GPU를 사용하시거나, CPU 모드에서 원활한 모델을 선택해 주십시오."
-            )
+            tell(self, "msg_cannot_select_title", "msg_cannot_select_cpu", kind="warn", name=self.model_info["id"])
             return
         self.model_selected_signal.emit(self.model_info["id"])
 
@@ -307,13 +303,13 @@ class STTModelCard(QFrame):
             self.worker = STTDownloadWorker(self.model_info)
             self.worker.start()
 
-        self.lbl_status.setText("다운로드 중...")
+        self.lbl_status.setText(tr("downloading"))
         self.lbl_status.setStyleSheet("background: transparent; border: none; padding: 0px; color: #F59E0B; font-weight: bold; font-size: 11px;")
         self.btn_select.setVisible(False)
         self.btn_download.setVisible(False)
         self.btn_cancel.setVisible(True)
         self.btn_cancel.setEnabled(True)
-        self.btn_cancel.setText("다운로드 취소")
+        self.btn_cancel.setText(tr("btn_cancel_download"))
         self.btn_delete.setVisible(False)
         self.progress_container.setVisible(True)
         last_pct, last_msg = STTModelManager.get_last_progress(self.model_info["id"])
@@ -336,8 +332,8 @@ class STTModelCard(QFrame):
         target_worker = worker or self.worker
         if target_worker:
             self.btn_cancel.setEnabled(False)
-            self.btn_cancel.setText("취소 중...")
-            self.lbl_progress_status.setText("다운로드 취소 요청 중...")
+            self.btn_cancel.setText(tr("canceling"))
+            self.lbl_progress_status.setText(tr("cancel_requested"))
             target_worker.cancel()
 
     def _on_download_progress(self, model_id, percent, msg):
@@ -354,48 +350,37 @@ class STTModelCard(QFrame):
             self.progress_container.setVisible(False)
             self.btn_cancel.setVisible(False)
             self.btn_cancel.setEnabled(True)
-            self.btn_cancel.setText("다운로드 취소")
+            self.btn_cancel.setText(tr("btn_cancel_download"))
             self.btn_download.setEnabled(True)
-            self.btn_download.setText("⬇️ 다운로드")
+            self.btn_download.setText("⬇️ " + tr("btn_download"))
             if success:
                 self.refresh_state()
                 if not sip.isdeleted(self):
                     self.model_status_changed_signal.emit()
-                    ret = QMessageBox.question(
-                        self,
-                        "다운로드 완료",
-                        f"'{self.model_info['id']}' 모델이 성공적으로 다운로드되었습니다.\n\n"
-                        "이 모델을 지금 바로 사용하도록 선택 적용하시겠습니까?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
+                    ret = ask(self, "msg_download_switched_title", "msg_use_now", name=self.model_info["id"])
                     if ret == QMessageBox.StandardButton.Yes and not sip.isdeleted(self):
                         self._on_select_clicked()
             else:
                 self.refresh_state()
                 if not sip.isdeleted(self):
                     self.model_status_changed_signal.emit()
-                    if "취소" not in msg:
-                        QMessageBox.warning(self, "다운로드 실패", f"다운로드 중 오류가 발생했습니다:\n{msg}")
+                    if not is_cancel_message(msg):
+                        tell(self, "msg_download_switched_title", "msg_download_fail", kind="warn", error=msg)
 
     def _on_delete_clicked(self):
         if STTModelManager.is_bundled_model(self.model_info["id"]):
-            QMessageBox.information(self, "삭제 불가", "이 모델은 프로그램에 기본 내장된 번들 모델이므로 삭제할 수 없습니다.")
+            tell(self, "msg_cannot_delete_title", "msg_cannot_delete")
             return
 
-        ret = QMessageBox.question(
-            self,
-            "모델 삭제 확인",
-            f"'{self.model_info['id']}' 모델을 디스크에서 삭제하시겠습니까?\n삭제 후 필요 시 언제든 다시 다운로드할 수 있습니다.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        ret = ask(self, "msg_delete_title", "msg_delete_body", name=self.model_info["id"])
         if ret == QMessageBox.StandardButton.Yes:
             ok = STTModelManager.delete_model(self.model_info["id"])
             if ok:
-                QMessageBox.information(self, "삭제 완료", f"'{self.model_info['id']}' 모델 캐시가 삭제되었습니다.")
+                tell(self, "msg_saved_title", "msg_deleted", name=self.model_info["id"])
                 self.refresh_state()
                 self.model_status_changed_signal.emit()
             else:
-                QMessageBox.warning(self, "삭제 실패", "모델 파일을 삭제하지 못했습니다.")
+                tell(self, "msg_save_failed_title", "msg_delete_fail", kind="warn")
 
 
 class STTModelDialog(QDialog):
@@ -409,7 +394,7 @@ class STTModelDialog(QDialog):
         self.target_model_id = target_model_id
         self.cards = []
 
-        self.setWindowTitle("STT 음성인식 모델 관리자")
+        self.setWindowTitle(tr("dlg_stt_window"))
         self.resize(780, 640)
         self.setStyleSheet(f"""
             QDialog {{
@@ -432,7 +417,7 @@ class STTModelDialog(QDialog):
         h_layout.setContentsMargins(16, 12, 16, 12)
         h_layout.setSpacing(4)
 
-        title = QLabel("🎙️ STT 음성인식 모델 관리")
+        title = QLabel("🎙️ " + tr("dlg_stt_heading"))
         title.setStyleSheet("font-size: 15px; font-weight: bold; color: #ECEFF1;")
         h_layout.addWidget(title)
         layout.addWidget(header_card)
@@ -444,12 +429,12 @@ class STTModelDialog(QDialog):
         s_layout.setSpacing(8)
 
         s_top = QHBoxLayout()
-        s_title = QLabel("📁 STT 모델 저장소")
+        s_title = QLabel("📁 " + tr("dlg_stt_store"))
         s_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
         s_top.addWidget(s_title)
         s_top.addStretch(1)
 
-        btn_open = QPushButton("📂 STT 저장 폴더 열기")
+        btn_open = QPushButton("📂 " + tr("dlg_open_stt"))
         btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_open.setStyleSheet(f"""
             QPushButton {{
@@ -487,18 +472,18 @@ class STTModelDialog(QDialog):
         grid.setVerticalSpacing(6)
 
         # 1행: STT 저장 위치 & 디스크 여유 공간
-        grid.addWidget(QLabel("📍 STT 모델 저장 경로:"), 0, 0)
+        grid.addWidget(QLabel("📍 " + tr("dlg_stt_path")), 0, 0)
         self.lbl_stt_path = QLabel("-")
         self.lbl_stt_path.setStyleSheet("font-weight: bold; color: #38BDF8; font-size: 11px;")
         grid.addWidget(self.lbl_stt_path, 0, 1)
 
-        grid.addWidget(QLabel("💾 디스크 여유 공간:"), 0, 2)
+        grid.addWidget(QLabel("💾 " + tr("dlg_free_space")), 0, 2)
         self.lbl_stt_free = QLabel("-")
         self.lbl_stt_free.setStyleSheet("font-weight: bold; color: #34D399; font-size: 11px;")
         grid.addWidget(self.lbl_stt_free, 0, 3)
 
         # 2행: C: 캐시 정션 상태
-        grid.addWidget(QLabel("🔗 C: 드라이브 연동:"), 1, 0)
+        grid.addWidget(QLabel("🔗 " + tr("dlg_junction")), 1, 0)
         self.lbl_stt_junction = QLabel("-")
         self.lbl_stt_junction.setStyleSheet("color: #A78BFA; font-size: 11px;")
         grid.addWidget(self.lbl_stt_junction, 1, 1, 1, 3)
@@ -577,7 +562,7 @@ class STTModelDialog(QDialog):
         bot_bar.addWidget(self.lbl_summary)
         bot_bar.addStretch(1)
 
-        btn_close = QPushButton("닫기")
+        btn_close = QPushButton(tr("dlg_close"))
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.setStyleSheet("""
             QPushButton {{
@@ -609,7 +594,7 @@ class STTModelDialog(QDialog):
             self.lbl_stt_free.setText(f"여유 {free_gb:.1f} GB / 전체 {total_gb:.1f} GB")
             self.lbl_stt_free.setStyleSheet(f"font-weight: bold; color: {col}; font-size: 11px;")
         except Exception:
-            self.lbl_stt_free.setText("확인 불가")
+            self.lbl_stt_free.setText(tr("unknown_space"))
 
         default_cache = os.path.expanduser("~/.cache/huggingface")
         try:
@@ -628,9 +613,9 @@ class STTModelDialog(QDialog):
             try:
                 os.startfile(cache_dir)
             except Exception as e:
-                QMessageBox.warning(self, "탐색기 열기 실패", f"폴더를 열 수 없습니다:\n{e}")
+                tell(self, "msg_explorer_fail_title", "msg_explorer_fail", kind="warn", error=e)
         else:
-            QMessageBox.warning(self, "폴더 없음", f"폴더가 존재하지 않습니다:\n{cache_dir}")
+            tell(self, "msg_folder_missing_title", "msg_folder_missing", kind="warn", path=cache_dir)
 
     def _update_summary(self):
         installed_count = 0
@@ -646,7 +631,7 @@ class STTModelDialog(QDialog):
         for c in self.cards:
             c.refresh_state(model_id)
         self.model_chosen.emit(model_id)
-        QMessageBox.information(self, "모델 적용", f"STT 음성인식 모델이 '{model_id}'(으)로 지정되었습니다.")
+        tell(self, "msg_stt_applied_title", "msg_stt_applied", name=model_id)
         self.accept()
 
     def _on_status_changed(self):

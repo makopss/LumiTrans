@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPen, QFontMetrics, QCursor, QTextDocument, QPainterPath
 from src.outline_effect import ThickOutlineEffect
 from src.overlay_geometry import OverlayGeometryMixin
+from src.i18n import tr
 
 # 8방향 테두리 리사이즈 플래그 및 마진 상수
 EDGE_NONE = 0
@@ -98,7 +99,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._bind_screen_changed()
 
     def _init_ui(self):
-        self.setWindowTitle("화면 번역 자막")
+        self.setWindowTitle(tr("overlay_screen_title"))
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -736,7 +737,6 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         if not text:
             return ""
         import re
-        from src.subtitle_manager import smart_break_sentences
         text = re.sub(r'\s+', ' ', text).strip()
 
         # 1. 화자 변경 감지 줄바꿈 (예: "...입니다. 진행자: ..." -> "\n진행자: ...")
@@ -745,8 +745,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         # 2. 다중 영역 태그([영역 N]) 감지 줄바꿈
         text = re.sub(r'([.!?~]|\b)\s*(\[영역\s*\d+\])', r'\1\n\2', text).strip()
 
-        # 3. 문장 마침 부호 뒤에서 줄바꿈 (스마트 줄바꿈)
-        text = smart_break_sentences(text, linebreak='\n')
+        # 3. 문장 마침 부호 뒤에서 줄바꿈. 한국어 도착 자막만 한국어 줄바꿈을 쓴다.
+        from src.subtitle_manager import break_subtitle_text
+        target_lang = self.config.get("target_lang", "ko") if hasattr(self, "config") else "ko"
+        text = break_subtitle_text(text, target_lang=target_lang, linebreak='\n')
 
         # 4. 화자 이름 및 [영역 N] 태그 시각화 강조
         lines = text.split('\n')

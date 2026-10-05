@@ -1,6 +1,4 @@
 ; Inno Setup 6 Script for LumiTrans (AI real-time audio & screen subtitle translator)
-#define MyAppName "LumiTrans"
-#define MyAppEnglishName "LumiTrans"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "LumiTrans"
 #define MyAppExeName "LumiTrans.exe"
@@ -13,16 +11,36 @@
   #define Edition "Full"
 #endif
 
-#if Edition == "Lite"
-  #define MyAppTitle "LumiTrans (Lite)"
-  #define MyOutputBaseFilename "LumiTrans_Lite_Setup_v" + MyAppVersion
+#ifndef Product
+  #define Product "kr"
+#endif
+
+#if Product == "global"
+  #define MyAppName "LumiTrans Global"
+  #define MyAppEnglishName "LumiTrans Global"
+  #define MyAppId "{{A7E3C1D4-6B29-4F18-9C55-2D8E0B7A41F6}"
+  #if Edition == "Lite"
+    #define MyAppTitle "LumiTrans Global (Lite)"
+    #define MyOutputBaseFilename "LumiTrans_Global_Lite_Setup_v" + MyAppVersion
+  #else
+    #define MyAppTitle "LumiTrans Global (Full)"
+    #define MyOutputBaseFilename "LumiTrans_Global_Full_Setup_v" + MyAppVersion
+  #endif
 #else
-  #define MyAppTitle "LumiTrans (Full)"
-  #define MyOutputBaseFilename "LumiTrans_Full_Setup_v" + MyAppVersion
+  #define MyAppName "LumiTrans"
+  #define MyAppEnglishName "LumiTrans"
+  #define MyAppId "{{C4B18A57-8971-4712-B6B1-356C19E75BA3}"
+  #if Edition == "Lite"
+    #define MyAppTitle "LumiTrans (Lite)"
+    #define MyOutputBaseFilename "LumiTrans_Lite_Setup_v" + MyAppVersion
+  #else
+    #define MyAppTitle "LumiTrans (Full)"
+    #define MyOutputBaseFilename "LumiTrans_Full_Setup_v" + MyAppVersion
+  #endif
 #endif
 
 [Setup]
-AppId={{C4B18A57-8971-4712-B6B1-356C19E75BA3}
+AppId={#MyAppId}
 AppName={#MyAppTitle}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppTitle} v{#MyAppVersion}
@@ -46,11 +64,19 @@ RestartApplications=no
 LicenseFile=LICENSE
 
 [Languages]
+#if Product == "global"
+Name: "english"; MessagesFile: "compiler:Default.isl"
+#else
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
+#endif
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+#if Product == "global"
+Name: "cleanconfig"; Description: "Reset saved settings"; GroupDescription: "Options:"; Flags: unchecked
+#else
 Name: "cleanconfig"; Description: "기존 설정 초기화 (새로운 기본값으로 클린 설치)"; GroupDescription: "추가 옵션:"; Flags: unchecked
+#endif
 
 [InstallDelete]
 ; 이전 버전 가속 팩이 llama_cpp\lib 에 덮어쓴 CUDA DLL 이 남으면 CPU 전용 라이브러리와 섞이므로 먼저 비운다.
@@ -58,10 +84,12 @@ Type: filesandordirs; Name: "{app}\_internal\llama_cpp\lib"
 Type: filesandordirs; Name: "{app}\_internal\llama_cuda"
 ; 앱은 AppData 설정이 없으면 설치 폴더의 config.json 을 복사해 오므로 클린 설치 때 함께 지운다.
 Type: files; Name: "{app}\config.json"; Tasks: cleanconfig
+#if Product != "global"
 ; 이전 이름(WiseEinstein)으로 설치된 것을 업그레이드할 때 옛 실행 파일과 바로가기를 지운다.
 Type: files; Name: "{app}\{#LegacyExeName}"
 Type: filesandordirs; Name: "{autoprograms}\{#LegacyAppName}"
 Type: files; Name: "{autodesktop}\{#LegacyAppName}.lnk"
+#endif
 
 [Files]
 Source: "dist\LumiTrans\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -70,15 +98,22 @@ Source: "THIRD_PARTY_LICENSES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+#if Product == "global"
+Name: "{group}\{#MyAppName} (Debug)"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--console"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "Live log console for troubleshooting"
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+#else
 Name: "{group}\{#MyAppName} (디버그 모드)"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--console"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "실시간 로그 콘솔 창과 함께 실행 (문제 진단용)"
 Name: "{group}\{#MyAppName} 삭제"; Filename: "{uninstallexe}"
+#endif
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{userappdata}\{#MyAppEnglishName}"
 Type: filesandordirs; Name: "{localappdata}\{#MyAppEnglishName}"
+#if Product != "global"
 Type: filesandordirs; Name: "{userappdata}\{#LegacyEnglishName}"
 Type: filesandordirs; Name: "{localappdata}\{#LegacyEnglishName}"
+#endif
 ; 앱이 설치 폴더에 만든 파일. 사용자가 설치 경로를 바꿨을 수 있으므로 {app} 전체는 지우지 않는다.
 Type: files; Name: "{app}\config.json"
 Type: files; Name: "{app}\clean_install.id"
@@ -104,8 +139,10 @@ procedure DeleteUserData();
 begin
   DelTree(ExpandConstant('{userappdata}\{#MyAppEnglishName}'), True, True, True);
   DelTree(ExpandConstant('{localappdata}\{#MyAppEnglishName}'), True, True, True);
+#if Product != "global"
   DelTree(ExpandConstant('{userappdata}\{#LegacyEnglishName}'), True, True, True);
   DelTree(ExpandConstant('{localappdata}\{#LegacyEnglishName}'), True, True, True);
+#endif
 end;
 
 function InitializeUninstall(): Boolean;

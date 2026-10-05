@@ -8,16 +8,20 @@ block_cipher = None
 ROOT_DIR = os.path.abspath(SPECPATH)
 
 EDITION = os.environ.get("WISE_EDITION", "full").strip().lower()
+PRODUCT = os.environ.get("WISE_PRODUCT", "kr").strip().lower()
+if PRODUCT not in ("kr", "global"):
+    PRODUCT = "kr"
 print(f"[Spec] ========================================")
-print(f"[Spec] Target Build Edition: {EDITION.upper()}")
+print(f"[Spec] Target Build Edition: {EDITION.upper()} | Product: {PRODUCT}")
 print(f"[Spec] ========================================")
 
 # Record edition metadata into assets/edition.json
 try:
     import json
     os.makedirs(os.path.join(ROOT_DIR, 'assets'), exist_ok=True)
+    product_name = "LumiTrans Global" if PRODUCT == "global" else f"LumiTrans {EDITION.capitalize()}"
     with open(os.path.join(ROOT_DIR, 'assets', 'edition.json'), 'w', encoding='utf-8') as f:
-        json.dump({"edition": EDITION, "name": f"LumiTrans {EDITION.capitalize()}"}, f, indent=2)
+        json.dump({"edition": EDITION, "product": PRODUCT, "name": product_name}, f, indent=2)
 except Exception as e:
     print(f"[Spec] Warning creating edition metadata: {e}")
 

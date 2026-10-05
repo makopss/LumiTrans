@@ -42,7 +42,9 @@ def get_config_file_path() -> str:
         os.makedirs(user_cfg_dir, exist_ok=True)
         return user_cfg
     else:
-        return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+        from src.product import is_global
+        filename = "config.global.json" if is_global() else "config.json"
+        return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename)
 
 CONFIG_FILE = get_config_file_path()
 
@@ -50,6 +52,9 @@ DEFAULT_CONFIG = {
     "last_active_tab": 0,            # 마지막으로 활성화되었던 탭 인덱스 (0: 음성 번역)
     "model_size": "distil-small.en", # 기본 내장 번들 모델 (distil-small.en)
     "stt_language": "en",            # STT 인식 언어 ("en": 영어 전용, "auto": 99개 언어 자동감지)
+    "source_lang": "en",             # 번역 출발 언어. "auto"면 인식 결과가 번역기 source를 갱신한다.
+    "target_lang": "ko",             # 번역 도착 언어. 한국어 제품은 ko로 고정한다.
+    "ui_lang": "ko",                 # 화면 언어. 한국어 제품은 ko, 글로벌은 사용자가 고른다.
     "device": "cpu",                 # 초기 기본 연산 디바이스: CPU
     "compute_type": "int8",          # 초기 기본 연산 타입: int8 (CPU 초경량 저지연)
     "vad_threshold": 0.006,          # RMS 에너지 임계값
@@ -296,6 +301,80 @@ BUILTIN_PRESETS = {
 }
 
 
+def _build_global_presets():
+    """글로벌 제품 프리셋. 표시 문구는 i18n.GLOBAL_PRESET_COPY가 단일 출처다."""
+    from src.i18n import GLOBAL_PRESET_COPY
+    specs = {
+        "low_spec": {
+            "key": "low_spec",
+            "icon": "🌱",
+            "device": "cpu",
+            "compute_type": "int8",
+            "stt_provider": "local",
+            "model_size": "small",
+            "stt_language": "auto",
+            "translation_engine": "google",
+            "content_tempo_preset": "smart",
+            "requires_model": None,
+            "requires_api_key": None,
+        },
+        "live": {
+            "key": "live",
+            "icon": "⚡",
+            "device": "cuda",
+            "compute_type": "float16",
+            "stt_provider": "local",
+            "model_size": "large-v3-turbo",
+            "stt_language": "auto",
+            "translation_engine": "hymt",
+            "content_tempo_preset": "youtube",
+            "requires_model": "hymt",
+            "requires_api_key": None,
+        },
+        "balance": {
+            "key": "balance",
+            "icon": "⚖️",
+            "device": "cuda",
+            "compute_type": "float16",
+            "stt_provider": "local",
+            "model_size": "large-v3-turbo",
+            "stt_language": "auto",
+            "translation_engine": "hymt",
+            "content_tempo_preset": "smart",
+            "requires_model": "hymt",
+            "requires_api_key": None,
+        },
+        "cinema": {
+            "key": "cinema",
+            "icon": "🎬",
+            "device": "cuda",
+            "compute_type": "float16",
+            "stt_provider": "local",
+            "model_size": "large-v3-turbo",
+            "stt_language": "auto",
+            "translation_engine": "gemma",
+            "content_tempo_preset": "movie",
+            "requires_model": "translategemma",
+            "requires_api_key": None,
+        },
+    }
+    presets = {}
+    for key, spec in specs.items():
+        item = dict(spec)
+        item.update(GLOBAL_PRESET_COPY[key])
+        presets[key] = item
+    return presets
+
+
+GLOBAL_PRESETS = _build_global_presets()
+
+
+def active_builtin_presets():
+    """지금 제품 라인의 빌트인 프리셋."""
+    from src.product import is_global
+    return GLOBAL_PRESETS if is_global() else BUILTIN_PRESETS
+
+
 def uses_local_tempo_vad(config=None):
     """Deepgram live uses server VAD + SpeechSegmenter; local tempo VAD is Groq/Whisper only."""
     return (config or {}).get("stt_provider") != "deepgram"
@@ -324,22 +403,52 @@ def _apply_hardware_and_model_detection(cfg: dict):
     """
     초기 설치 후 최초 실행 시:
     - 기존 로컬 모델들을 자동 감지하여 상태를 갱신/로깅하되,
-    - 기본 실행 설정은 항상 '저사양 호환 (CPU)' 프리셋(CPU int8 + distil-small.en + Google 번역)으로 시작하도록 유지.
+    - 한국어 제품은 '저사양 호환 (CPU)' 프리셋으로 시작한다.
+    - 글로벌 제품은 다국어 Whisper small과 영어 자막으로 시작한다.
     """
+    from src.product import is_global
     cfg["device"] = "cpu"
     cfg["compute_type"] = "int8"
-    cfg["model_size"] = "distil-small.en"
-    cfg["stt_language"] = "en"
     cfg["translation_engine"] = "google"
     cfg["content_tempo_preset"] = "smart"
+    if is_global():
+        cfg["model_size"] = "small"
+        cfg["stt_language"] = "auto"
+        cfg["source_lang"] = "auto"
+        cfg["target_lang"] = "en"
+        cfg["ui_lang"] = "en"
+        label = "글로벌 에디션 (Whisper small, 자동 감지, 자막 언어 en)"
+    else:
+        cfg["model_size"] = "distil-small.en"
+        cfg["stt_language"] = "en"
+        cfg["source_lang"] = "en"
+        cfg["target_lang"] = "ko"
+        cfg["ui_lang"] = "ko"
+        label = "저사양 호환 (CPU)"
 
-    # 로컬 디스크 내 기설치 모델 현황 자동 감지 및 로깅 (상태 갱신)
     try:
         from src.stt_model_manager import STTModelManager, AVAILABLE_STT_MODELS
         detected = [m["id"] for m in AVAILABLE_STT_MODELS if STTModelManager.is_model_installed(m["id"])]
-        print(f"[Config] 초기 실행: '저사양 호환 (CPU)' 프리셋 적용 완료. (감지된 기설치 모델: {detected})")
+        print(f"[Config] 초기 실행: '{label}' 프리셋 적용 완료. (감지된 기설치 모델: {detected})")
     except Exception as e:
         print(f"[Config] 기설치 모델 감지 중 오류: {e}")
+
+
+def _lock_product_languages(cfg: dict, raw: dict | None = None):
+    """한국어 제품의 도착 언어는 ko다. 글로벌은 저장되지 않은 도착 언어를 en으로 둔다."""
+    from src.product import is_global
+    if not is_global():
+        cfg["target_lang"] = "ko"
+        cfg["ui_lang"] = "ko"
+        return cfg
+    saved = raw or {}
+    if not saved.get("target_lang"):
+        cfg["target_lang"] = "en"
+    if not saved.get("source_lang"):
+        cfg["source_lang"] = "auto"
+    if not saved.get("ui_lang"):
+        cfg["ui_lang"] = "en"
+    return cfg
 
 
 def _consume_clean_install_marker(target_file):
@@ -412,13 +521,14 @@ def load_config(config_file=None):
                     merged["screen_rois"] = []
 
                 merged["screen_roi"] = merged["screen_rois"][0] if merged["screen_rois"] else None
-                return merged
+                return _lock_product_languages(merged, cfg)
         except Exception as e:
             print(f"[Config] 설정 파일 로드 실패, 기본값 사용: {e}")
 
     # 새 설치 또는 설정 파일 부재 시: 저사양 호환 (CPU) 프리셋으로 초기 생성
     cfg = DEFAULT_CONFIG.copy()
     _apply_hardware_and_model_detection(cfg)
+    _lock_product_languages(cfg, {})
     try:
         save_config(cfg, target_file)
     except Exception:

@@ -7,9 +7,16 @@ import os
 import shutil
 
 APP_NAME = "LumiTrans"
+GLOBAL_APP_NAME = "LumiTrans Global"
 LEGACY_APP_NAMES = ("WiseEinstein",)
 
 _migrated = set()
+
+
+def app_data_name() -> str:
+    """설정·로그 폴더 이름. 글로벌 제품은 한국어 제품과 폴더를 공유하지 않는다."""
+    from src.product import is_global
+    return GLOBAL_APP_NAME if is_global() else APP_NAME
 
 
 def _migrate_legacy(base: str) -> None:
@@ -38,8 +45,10 @@ def _migrate_legacy(base: str) -> None:
 
 
 def _ensure(base: str) -> str:
-    _migrate_legacy(base)
-    path = os.path.join(base, APP_NAME)
+    name = app_data_name()
+    if name == APP_NAME:
+        _migrate_legacy(base)
+    path = os.path.join(base, name)
     os.makedirs(path, exist_ok=True)
     return path
 
