@@ -436,18 +436,24 @@ def _apply_hardware_and_model_detection(cfg: dict):
 
 def _lock_product_languages(cfg: dict, raw: dict | None = None):
     """한국어 제품의 도착 언어는 ko다. 글로벌은 저장되지 않은 도착 언어를 en으로 둔다."""
+    from src.i18n import detect_system_ui_language
     from src.product import is_global
+
+    saved = raw or {}
+
+    saved_ui = saved.get("ui_lang")
+    if saved_ui in ("ko", "en"):
+        cfg["ui_lang"] = saved_ui
+    elif not cfg.get("ui_lang"):
+        cfg["ui_lang"] = detect_system_ui_language()
+
     if not is_global():
         cfg["target_lang"] = "ko"
-        cfg["ui_lang"] = "ko"
         return cfg
-    saved = raw or {}
     if not saved.get("target_lang"):
         cfg["target_lang"] = "en"
     if not saved.get("source_lang"):
         cfg["source_lang"] = "auto"
-    if not saved.get("ui_lang"):
-        cfg["ui_lang"] = "en"
     return cfg
 
 

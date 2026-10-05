@@ -1000,10 +1000,12 @@ class ControlPanel(QWidget):
     def __init__(self, config, overlay, audio_thread, stt_thread, save_config_cb, screen_worker=None, screen_overlay=None, inplace_manager=None, roi_border_manager=None, dubbing_engine=None):
         super().__init__()
         self.config = config
-        if is_global():
-            set_ui_language(self.config.get("ui_lang") or "en")
-        else:
-            set_ui_language("ko")
+        current_ui = self.config.get("ui_lang")
+        if not current_ui:
+            from src.i18n import detect_system_ui_language
+            current_ui = detect_system_ui_language()
+            self.config["ui_lang"] = current_ui
+        set_ui_language(current_ui)
         self.overlay = overlay
         self.audio_thread = audio_thread
         self.stt_thread = stt_thread
@@ -1316,23 +1318,24 @@ class ControlPanel(QWidget):
         h_layout.addLayout(brand_layout)
 
         h_layout.addStretch(1)
-        if is_global():
-            self.combo_ui_lang = NoWheelComboBox()
-            self.combo_ui_lang.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.combo_ui_lang.setFixedHeight(32)
-            self.combo_ui_lang.setMinimumWidth(132)
-            self.combo_ui_lang.setToolTip(tr("ui_lang_label"))
-            current_ui = str(self.config.get("ui_lang") or "en").strip().lower().split("-")[0]
-            for code, label in UI_LANGUAGE_NAMES.items():
-                self.combo_ui_lang.addItem(label, code)
-            ui_index = self.combo_ui_lang.findData(current_ui)
-            if ui_index < 0:
-                ui_index = self.combo_ui_lang.findData("en")
-            self.combo_ui_lang.blockSignals(True)
-            self.combo_ui_lang.setCurrentIndex(max(0, ui_index))
-            self.combo_ui_lang.blockSignals(False)
-            self.combo_ui_lang.currentIndexChanged.connect(self._on_ui_lang_changed)
-            h_layout.addWidget(self.combo_ui_lang)
+        # UI 언어 선택 드롭다운 (상단 헤더 바 기존 위치에 상시 노출, 한국어/English 지원)
+        self.combo_ui_lang = NoWheelComboBox()
+        self.combo_ui_lang.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.combo_ui_lang.setFixedHeight(30)
+        self.combo_ui_lang.setMinimumWidth(110)
+        self.combo_ui_lang.setToolTip(tr("ui_lang_label"))
+        current_ui = str(self.config.get("ui_lang") or ui_language()).strip().lower().split("-")[0]
+        from src.i18n import SUPPORTED_UI_LANGUAGES
+        for code, label in SUPPORTED_UI_LANGUAGES.items():
+            self.combo_ui_lang.addItem(f"🌐 {label}", code)
+        ui_index = self.combo_ui_lang.findData(current_ui)
+        if ui_index < 0:
+            ui_index = self.combo_ui_lang.findData("ko" if current_ui == "ko" else "en")
+        self.combo_ui_lang.blockSignals(True)
+        self.combo_ui_lang.setCurrentIndex(max(0, ui_index))
+        self.combo_ui_lang.blockSignals(False)
+        self.combo_ui_lang.currentIndexChanged.connect(self._on_ui_lang_changed)
+        h_layout.addWidget(self.combo_ui_lang)
 
         # 탭 버튼은 아이콘+글자가 잘리지 않는 고정 폭. 창 최소폭이 헤더를 보호한다.
         nav_host = QWidget()
@@ -5861,10 +5864,7 @@ class ControlPanel(QWidget):
             self.lbl_speaker_status.setText(self._speaker_status_text())
 
     def _apply_ui_language(self):
-        if is_global():
-            set_ui_language(self.config.get("ui_lang") or "en")
-        else:
-            set_ui_language("ko")
+        set_ui_language(self.config.get("ui_lang") or "ko")
         self.setWindowTitle(tr("window_title"))
         refresh_texts(self)
         if getattr(self, "nav_buttons", None):

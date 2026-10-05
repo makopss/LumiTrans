@@ -25,9 +25,14 @@ GLOBAL_PRESET_COPY = {
     },
 }
 
-UI_LANGUAGE_NAMES = {
-    "en": "English",
+SUPPORTED_UI_LANGUAGES = {
     "ko": "한국어",
+    "en": "English",
+}
+
+UI_LANGUAGE_NAMES = {
+    "ko": "한국어",
+    "en": "English",
     "ja": "日本語",
     "zh": "中文",
     "es": "Español",
@@ -46,8 +51,29 @@ UI_LANGUAGE_NAMES = {
 _forced_lang = None
 
 
+def detect_system_ui_language() -> str:
+    """Windows OS 언어를 감지하여 'ko' 또는 'en'을 반환한다."""
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(85)
+        if ctypes.windll.kernel32.GetUserDefaultLocaleName(buf, 85) > 0:
+            loc = buf.value.lower()
+            if loc.startswith("ko"):
+                return "ko"
+    except Exception:
+        pass
+    try:
+        import locale
+        loc = (locale.getlocale()[0] or "").lower()
+        if loc.startswith("ko") or loc.startswith("korean"):
+            return "ko"
+    except Exception:
+        pass
+    return "en"
+
+
 def supported_ui_languages():
-    return UI_LANGS
+    return ("ko", "en")
 
 
 def normalize_ui_language(code: str) -> str:
@@ -67,10 +93,10 @@ def set_ui_language(code):
 
 
 def ui_language() -> str:
-    if not is_global():
-        return "ko"
     if _forced_lang:
         return _forced_lang
+    if not is_global():
+        return "ko"
     return "en"
 
 
