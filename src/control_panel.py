@@ -1025,14 +1025,15 @@ class ControlPanel(QWidget):
                 if self.save_config_cb:
                     self.save_config_cb(self.config)
 
-        # STT 로컬 모델 유효성 검사: 미설치된 모델이 설정되어 있다면 기본 번들(distil-small.en)로 안전하게 자동 복구
+        # STT 로컬 모델 유효성 검사: 미설치된 모델이 설정되어 있다면 기본 번들로 안전하게 자동 복구
         from src.stt_model_manager import STTModelManager
         cur_stt_provider = self.config.get("stt_provider", "local")
         if cur_stt_provider == "local":
-            cur_model = self.config.get("model_size", "distil-small.en")
+            default_stt = "small" if is_global() else "distil-small.en"
+            cur_model = self.config.get("model_size", default_stt)
             if not (STTModelManager.is_model_installed(cur_model) or STTModelManager.is_bundled_model(cur_model)) and cur_model not in ("sensevoice-small", "moonshine-tiny", "parakeet-tdt-0.6b"):
-                print(f"[ControlPanel] 미설치 STT 모델('{cur_model}') 감지 -> 기본 번들 모델('distil-small.en')로 자동 복구")
-                self.config["model_size"] = "distil-small.en"
+                print(f"[ControlPanel] 미설치 STT 모델('{cur_model}') 감지 -> 기본 번들 모델('{default_stt}')로 자동 복구")
+                self.config["model_size"] = default_stt
                 if self.save_config_cb:
                     self.save_config_cb(self.config)
 
@@ -1520,14 +1521,44 @@ class ControlPanel(QWidget):
         pipe_vbox.setContentsMargins(0, 0, 0, 0)
         pipe_vbox.setSpacing(5)
 
-        # 상단 헤더 행: 타이틀(좌) + 퀵 프리셋 아이콘 스위처(우)
+        # 상단 헤더 행: 타이틀(좌) + [언어 선택 칩 (글로벌)] + 퀵 프리셋 아이콘 스위처(우)
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
-        title_row.setSpacing(10)
+        title_row.setSpacing(8)
         lbl_pipe_title = QLabel()
         self._i18n(lbl_pipe_title, "pipeline_title")
         lbl_pipe_title.setStyleSheet("color: #ECEFF1; font-size: 12px; font-weight: bold;")
         title_row.addWidget(lbl_pipe_title)
+
+        if is_global():
+            # 0-1) 출발 언어 (원문) 칩 - 윗쪽 빈 공간에 컴팩트 분리 배치
+            self.chip_src_lang = QPushButton(f"🌐 {tr('source_lang_auto')} ▾")
+            self.chip_src_lang.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.chip_src_lang.setFixedHeight(24)
+            self.chip_src_lang.setFixedWidth(102)
+            self.chip_src_lang.setStyleSheet(self._get_compact_chip_style("#38BDF8"))
+            self.chip_src_lang.clicked.connect(self._show_pipe_src_lang_menu)
+
+            arr_src_tgt = QLabel("➔")
+            arr_src_tgt.setFixedWidth(10)
+            arr_src_tgt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            arr_src_tgt.setStyleSheet(f"color: {COLOR_ACCENT_PURPLE}; font-size: 11px; font-weight: bold;")
+
+            # 0-2) 도착 언어 (번역) 칩 - 윗쪽 빈 공간에 컴팩트 분리 배치
+            self.chip_tgt_lang = QPushButton("🎯 한국어 ▾")
+            self.chip_tgt_lang.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.chip_tgt_lang.setFixedHeight(24)
+            self.chip_tgt_lang.setFixedWidth(98)
+            self.chip_tgt_lang.setStyleSheet(self._get_compact_chip_style("#A78BFA"))
+            self.chip_tgt_lang.clicked.connect(self._show_pipe_tgt_lang_menu)
+
+            title_row.addWidget(self.chip_src_lang)
+            title_row.addWidget(arr_src_tgt)
+            title_row.addWidget(self.chip_tgt_lang)
+        else:
+            self.chip_src_lang = None
+            self.chip_tgt_lang = None
+
         title_row.addStretch(1)
 
         self.quick_presets_widget = QWidget()
@@ -1540,7 +1571,7 @@ class ControlPanel(QWidget):
 
         chips_row = QHBoxLayout()
         chips_row.setContentsMargins(0, 0, 0, 0)
-        chips_row.setSpacing(6)
+        chips_row.setSpacing(5)
 
         # 1) STT 디바이스 칩 (프리셋 변경 시 폭 흔들림 방지를 위해 고정폭 설정)
         self.chip_stt_dev = QPushButton("🎙 CUDA ▾")
@@ -1552,7 +1583,7 @@ class ControlPanel(QWidget):
         self.chip_stt = self.chip_stt_dev  # 하위 호환성 별칭
 
         arr1 = QLabel("➔")
-        arr1.setFixedWidth(14)
+        arr1.setFixedWidth(12)
         arr1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         arr1.setStyleSheet(f"color: {COLOR_ACCENT_PURPLE}; font-size: 12px; font-weight: bold;")
 
@@ -1565,7 +1596,7 @@ class ControlPanel(QWidget):
         self.chip_stt_model.clicked.connect(self._show_pipe_stt_model_menu)
 
         arr2 = QLabel("➔")
-        arr2.setFixedWidth(14)
+        arr2.setFixedWidth(12)
         arr2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         arr2.setStyleSheet(f"color: {COLOR_ACCENT_PURPLE}; font-size: 12px; font-weight: bold;")
 
@@ -1578,7 +1609,7 @@ class ControlPanel(QWidget):
         self.chip_trans.clicked.connect(self._show_pipe_trans_menu)
 
         arr3 = QLabel("➔")
-        arr3.setFixedWidth(14)
+        arr3.setFixedWidth(12)
         arr3.setAlignment(Qt.AlignmentFlag.AlignCenter)
         arr3.setStyleSheet(f"color: {COLOR_ACCENT_PURPLE}; font-size: 12px; font-weight: bold;")
 
@@ -1681,6 +1712,28 @@ class ControlPanel(QWidget):
             }}
         """
 
+    def _get_compact_chip_style(self, color_hex: str) -> str:
+        return f"""
+            QPushButton {{
+                background-color: #141C30;
+                color: {color_hex};
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                border-radius: 5px;
+                padding: 1px 4px;
+                font-size: 11px;
+                font-weight: 600;
+                text-align: center;
+            }}
+            QPushButton:hover {{
+                background-color: #1E294A;
+                border-color: {color_hex};
+                color: #FFFFFF;
+            }}
+            QPushButton:pressed {{
+                background-color: #0E1524;
+            }}
+        """
+
     def _create_styled_menu(self, menu_cls=QMenu) -> QMenu:
         menu = menu_cls(self)
         menu.setStyleSheet(f"""
@@ -1725,6 +1778,56 @@ class ControlPanel(QWidget):
             import time
             self._last_menu_closed_widget = widget
             self._last_pipe_menu_closed_time = time.time()
+
+    def _show_pipe_src_lang_menu(self):
+        if not getattr(self, "chip_src_lang", None):
+            return
+        menu = self._create_styled_menu()
+        cur_src = self.config.get("source_lang", "auto")
+
+        act_h = menu.addAction(f"🌐 {tr('source_lang_label')}")
+        act_h.setEnabled(False)
+
+        # 1. 자동 감지
+        auto_label = tr("source_lang_auto")
+        prefix = "✓ " if cur_src == "auto" else "   "
+        act_auto = menu.addAction(f"{prefix}{auto_label}")
+        act_auto.triggered.connect(lambda: self._select_source_lang_from_pipe("auto"))
+
+        menu.addSeparator()
+
+        from src.translator import LANGUAGE_NAMES
+        for code in LANGUAGE_NAMES:
+            name = UI_LANGUAGE_NAMES.get(code, code)
+            prefix = "✓ " if cur_src == code else "   "
+            act = menu.addAction(f"{prefix}{name}")
+            act.triggered.connect(lambda _, c=code: self._select_source_lang_from_pipe(c))
+
+        self._popup_menu_above(menu, self.chip_src_lang)
+
+    def _show_pipe_tgt_lang_menu(self):
+        if not getattr(self, "chip_tgt_lang", None):
+            return
+        menu = self._create_styled_menu()
+        cur_tgt = self.config.get("target_lang", "ko")
+
+        act_h = menu.addAction(f"🎯 {tr('target_lang_label')}")
+        act_h.setEnabled(False)
+
+        from src.translator import LANGUAGE_NAMES
+        for code in LANGUAGE_NAMES:
+            name = UI_LANGUAGE_NAMES.get(code, code)
+            prefix = "✓ " if cur_tgt == code else "   "
+            act = menu.addAction(f"{prefix}{name}")
+            act.triggered.connect(lambda _, c=code: self._select_target_lang_from_pipe(c))
+
+        self._popup_menu_above(menu, self.chip_tgt_lang)
+
+    def _select_source_lang_from_pipe(self, code: str):
+        self._apply_source_lang(code)
+
+    def _select_target_lang_from_pipe(self, code: str):
+        self._apply_target_lang(code)
 
     def _show_pipe_stt_dev_menu(self):
         menu = self._create_styled_menu()
@@ -1813,7 +1916,8 @@ class ControlPanel(QWidget):
                 act.triggered.connect(lambda _, mid=m_id: self._on_stt_model_quick_selected(mid, refresh_menu_cb=refresh_menu_state))
                 model_action_items.append((m_id, act, has_key))
         else:
-            cur_model = self.config.get("model_size", "distil-small.en")
+            default_stt = "small" if is_global() else "distil-small.en"
+            cur_model = self.config.get("model_size", default_stt)
             dev = str(self.config.get("device", "cpu")).lower()
             is_cpu = (dev == "cpu")
             from src.stt_model_manager import AVAILABLE_STT_MODELS
@@ -1897,48 +2001,40 @@ class ControlPanel(QWidget):
         self._popup_menu_above(menu, self.chip_stt_model)
 
     def _on_stt_language_quick_selected(self, lang_code: str):
-        self.config["stt_language"] = lang_code
-        self.config["source_lang"] = lang_code
-        self.save_config_cb(self.config)
-        if hasattr(self, 'stt_thread') and self.stt_thread:
-            self.stt_thread.update_config(self.config)
-        if hasattr(self, 'combo_source_lang'):
-            idx = self.combo_source_lang.findData(lang_code)
-            if idx >= 0 and self.combo_source_lang.currentIndex() != idx:
-                self.combo_source_lang.blockSignals(True)
-                self.combo_source_lang.setCurrentIndex(idx)
-                self.combo_source_lang.blockSignals(False)
-        self._sync_all_pipeline_status()
+        self._apply_source_lang(lang_code)
 
-    def _on_stt_model_quick_selected(self, model_id: str, refresh_menu_cb=None):
+    def _on_stt_model_quick_selected(self, model_id: str, prompt_missing: bool = True, refresh_menu_cb=None):
         from src.stt_model_manager import STTModelManager, AVAILABLE_STT_MODELS
         cur_p = self.config.get("stt_provider", "local")
 
         if cur_p == "deepgram":
             if not bool(self.config.get("deepgram_api_key", "").strip()):
-                tell(self, "msg_need_key_title", "msg_need_deepgram")
-                self.open_api_key_dialog()
+                if prompt_missing:
+                    tell(self, "msg_need_key_title", "msg_need_deepgram")
+                    self.open_api_key_dialog()
                 return
             self.config["deepgram_model"] = model_id
         elif cur_p == "groq":
             if not bool(self.config.get("groq_api_key", "").strip()):
-                tell(self, "msg_need_key_title", "msg_need_groq")
-                self.open_api_key_dialog()
+                if prompt_missing:
+                    tell(self, "msg_need_key_title", "msg_need_groq")
+                    self.open_api_key_dialog()
                 return
             self.config["groq_model"] = model_id
         else:
             # 로컬 Whisper 모델: 설치 여부 우선 검사
             is_installed = STTModelManager.is_model_installed(model_id) or STTModelManager.is_bundled_model(model_id)
             if not is_installed:
-                # 미설치 모델 선택 시: 백그라운드 다운로드가 아닌 모델 관리창으로 유도
-                ret = ask(
-                    self,
-                    "msg_model_missing_title",
-                    "msg_model_missing",
-                    name=model_id,
-                )
-                if ret == QMessageBox.StandardButton.Yes:
-                    self.open_stt_model_manager(target_model_id=model_id)
+                if prompt_missing:
+                    # 미설치 모델 선택 시: 백그라운드 다운로드가 아닌 모델 관리창으로 유도
+                    ret = ask(
+                        self,
+                        "msg_model_missing_title",
+                        "msg_model_missing",
+                        name=model_id,
+                    )
+                    if ret == QMessageBox.StandardButton.Yes:
+                        self.open_stt_model_manager(target_model_id=model_id)
                 return
 
             dev = str(self.config.get("device", "cpu")).lower()
@@ -1951,6 +2047,8 @@ class ControlPanel(QWidget):
                         self.stt_thread.device = "cuda"
                         self.stt_thread.compute_type = "float16"
                 else:
+                    if not prompt_missing:
+                        return
                     ret = ask(self, "msg_cpu_slow_title", "msg_cpu_slow", name=model_id)
                     if ret != QMessageBox.StandardButton.Yes:
                         return
@@ -2109,6 +2207,8 @@ class ControlPanel(QWidget):
             full_detail, Qt.TextElideMode.ElideRight, available_width)
         self.lbl_status_detail.setText(visible_detail)
         self.lbl_status_detail.setToolTip(full_detail if visible_detail != full_detail else "")
+        self._last_engine_state = state
+        self._last_engine_detail = detail
 
         # 3.5초 뒤 기본 ready 상태로 자동 복귀 (단, 일시정지나 오류 상태는 영구 유지)
         if state not in ("paused", "error"):
@@ -2119,6 +2219,11 @@ class ControlPanel(QWidget):
             self._status_reset_timer.start(3500)
 
     def _revert_engine_status(self):
+        is_screen_paused = (getattr(self, 'screen_worker', None) and getattr(self.screen_worker, 'paused', False)) or (getattr(self, 'screen_overlay', None) and getattr(self.screen_overlay, '_paused', False))
+        is_audio_paused = (getattr(self, 'overlay', None) and getattr(self.overlay, '_audio_paused', False)) or (getattr(self, 'stt_thread', None) and getattr(self.stt_thread, 'is_paused', False))
+        if is_screen_paused or is_audio_paused or getattr(self, '_last_engine_state', '') == 'paused':
+            self.update_engine_status("paused", tr("detail_paused"))
+            return
         if getattr(self, '_is_audio_active', False):
             self.update_engine_status("ready", tr("status_listening"))
         elif getattr(self, '_is_screen_active', False):
@@ -4454,6 +4559,23 @@ class ControlPanel(QWidget):
         self.set_engine_by_key(selected_key)
 
     def _sync_all_pipeline_status(self):
+        # 0. 출발어 / 도착어 칩 동기화
+        src_code = self.config.get("source_lang", "auto")
+        tgt_code = self.config.get("target_lang", "ko")
+
+        src_raw = tr("source_lang_auto") if src_code == "auto" else UI_LANGUAGE_NAMES.get(src_code, src_code.upper())
+        src_clean = src_raw.replace("🌐 ", "").strip()
+        tgt_raw = UI_LANGUAGE_NAMES.get(tgt_code, tgt_code.upper())
+        tgt_clean = tgt_raw.replace("🎯 ", "").strip()
+
+        if getattr(self, 'chip_src_lang', None) is not None:
+            self.chip_src_lang.setText(f"🌐 {src_clean} ▾")
+            self.chip_src_lang.setToolTip(f"{tr('source_lang_label')}: {src_clean}")
+
+        if getattr(self, 'chip_tgt_lang', None) is not None:
+            self.chip_tgt_lang.setText(f"🎯 {tgt_clean} ▾")
+            self.chip_tgt_lang.setToolTip(f"{tr('target_lang_label')}: {tgt_clean}")
+
         stt_p = self.config.get("stt_provider", "local")
         dev = self.config.get("device", "cuda")
         if stt_p == "deepgram":
@@ -4464,7 +4586,8 @@ class ControlPanel(QWidget):
             cur_model = self.config.get("groq_model", "whisper-large-v3-turbo")
         else:
             stt_txt = dev.upper()
-            cur_model = self.config.get("model_size", "distil-small.en")
+            default_stt = "small" if is_global() else "distil-small.en"
+            cur_model = self.config.get("model_size", default_stt)
         short_model = cur_model.replace("whisper-", "")
 
         eng_key = self.config.get("translation_engine", "google")
@@ -5982,12 +6105,22 @@ class ControlPanel(QWidget):
             self.lbl_hotkey_status.setText(tr("hotkey_status", key=cur_hk))
         if hasattr(self, "btn_settings_hotkey") and hasattr(self.btn_settings_hotkey, "_update_text"):
             self.btn_settings_hotkey._update_text()
-        if hasattr(self, "refresh_screen_rois_ui"):
-            self.refresh_screen_rois_ui()
+        if hasattr(self, "_populate_display_combo"):
+            self._populate_display_combo()
+        if hasattr(self, "refresh_roi_settings_cards"):
+            self.refresh_roi_settings_cards()
+        if hasattr(self, "refresh_subtitle_view"):
+            self.refresh_subtitle_view()
         if hasattr(self, "_refresh_screen_preview"):
             self._refresh_screen_preview()
         if hasattr(self, "_refresh_all_status_badges"):
             self._refresh_all_status_badges()
+        if hasattr(self, "lbl_screen_status"):
+            is_worker_paused = getattr(self, 'screen_worker', None) and getattr(self.screen_worker, 'paused', False)
+            is_overlay_paused = getattr(self, 'screen_overlay', None) and getattr(self.screen_overlay, '_paused', False)
+            from src.screen_overlay_manager import ScreenOverlayManager
+            if is_worker_paused or is_overlay_paused or (self.lbl_screen_status.text() and ScreenOverlayManager._is_paused_status_text(self.lbl_screen_status.text())):
+                self.lbl_screen_status.setText(tr("ocr_status_paused"))
         self._refill_localized_lists()
 
     def _on_ui_lang_changed(self, index):
@@ -6006,28 +6139,7 @@ class ControlPanel(QWidget):
         code = self.combo_source_lang.itemData(index)
         if not code:
             return
-        self.config["source_lang"] = code
-        self.config["stt_language"] = code
-        self.save_config_cb(self.config)
-        if getattr(self, "stt_thread", None) is not None and hasattr(self.stt_thread, "update_config"):
-            self.stt_thread.update_config(self.config)
-        else:
-            translator = getattr(getattr(self, "stt_thread", None), "translator", None)
-            if translator is not None and hasattr(translator, "update_config"):
-                translator.update_config(self.config)
-        sw_translator = getattr(getattr(self, "screen_worker", None), "translator", None)
-        if sw_translator is not None and hasattr(sw_translator, "update_config"):
-            sw_translator.update_config(self.config)
-        if getattr(self, "overlay", None) is not None and hasattr(self.overlay, "config"):
-            self.overlay.config["source_lang"] = code
-        if getattr(self, "screen_overlay", None) is not None and hasattr(self.screen_overlay, "config"):
-            self.screen_overlay.config["source_lang"] = code
-        d_engine = getattr(self, "dubbing_engine", None)
-        if d_engine is not None and hasattr(d_engine, "update_config"):
-            d_engine.update_config(self.config)
-        if hasattr(self, "_sync_all_pipeline_status"):
-            self._sync_all_pipeline_status()
-        self._check_multilingual_model_compatibility()
+        self._apply_source_lang(code)
 
     def _on_target_lang_changed(self, index):
         if index < 0 or not hasattr(self, "combo_target_lang"):
@@ -6035,48 +6147,154 @@ class ControlPanel(QWidget):
         code = self.combo_target_lang.itemData(index)
         if not code:
             return
+        self._apply_target_lang(code)
+
+    def _apply_source_lang(self, code: str):
+        if not code:
+            return
+        code = str(code).strip().lower()
+        self.config["source_lang"] = code
+        self.config["stt_language"] = code
+        self.save_config_cb(self.config)
+
+        if hasattr(self, "combo_source_lang"):
+            idx = self.combo_source_lang.findData(code)
+            if idx >= 0 and self.combo_source_lang.currentIndex() != idx:
+                self.combo_source_lang.blockSignals(True)
+                self.combo_source_lang.setCurrentIndex(idx)
+                self.combo_source_lang.blockSignals(False)
+
+        # 1. STT Worker 실시간 반영
+        if getattr(self, "stt_thread", None) is not None:
+            if hasattr(self.stt_thread, "update_config"):
+                self.stt_thread.update_config(self.config)
+            elif hasattr(self.stt_thread, "translator") and hasattr(self.stt_thread.translator, "update_config"):
+                self.stt_thread.translator.update_config(self.config)
+
+        # 2. Screen Worker 실시간 반영 (기존 화면 텍스트 즉시 새 출발어로 재번역 유도)
+        if getattr(self, "screen_worker", None) is not None:
+            if hasattr(self.screen_worker, "update_config"):
+                self.screen_worker.update_config(self.config)
+            elif hasattr(self.screen_worker, "translator") and hasattr(self.screen_worker.translator, "update_config"):
+                self.screen_worker.translator.update_config(self.config)
+
+        # 3. 오버레이 창 설정 동기화
+        if getattr(self, "overlay", None) is not None and hasattr(self.overlay, "config"):
+            self.overlay.config["source_lang"] = code
+        if getattr(self, "screen_overlay", None) is not None and hasattr(self.screen_overlay, "config"):
+            self.screen_overlay.config["source_lang"] = code
+
+        # 4. 더빙 엔진 동기화
+        d_engine = getattr(self, "dubbing_engine", None)
+        if d_engine is not None and hasattr(d_engine, "update_config"):
+            d_engine.update_config(self.config)
+
+        # 5. 파이프라인 칩 및 상태 UI 갱신
+        if hasattr(self, "_sync_all_pipeline_status"):
+            self._sync_all_pipeline_status()
+
+        # 6. 모델 호환성 점검 (영어 전용 STT 모델 자동 전환 등)
+        self._check_multilingual_model_compatibility()
+
+    def _apply_target_lang(self, code: str):
+        if not code:
+            return
+        code = str(code).strip().lower()
         self.config["target_lang"] = code
         self.save_config_cb(self.config)
-        translator = getattr(getattr(self, "stt_thread", None), "translator", None)
-        if translator is not None and hasattr(translator, "update_config"):
-            translator.update_config(self.config)
-        sw_translator = getattr(getattr(self, "screen_worker", None), "translator", None)
-        if sw_translator is not None and hasattr(sw_translator, "update_config"):
-            sw_translator.update_config(self.config)
+
+        if hasattr(self, "combo_target_lang"):
+            idx = self.combo_target_lang.findData(code)
+            if idx >= 0 and self.combo_target_lang.currentIndex() != idx:
+                self.combo_target_lang.blockSignals(True)
+                self.combo_target_lang.setCurrentIndex(idx)
+                self.combo_target_lang.blockSignals(False)
+
+        # 1. STT Worker 및 오디오 번역기 실시간 반영
+        if getattr(self, "stt_thread", None) is not None:
+            if hasattr(self.stt_thread, "update_config"):
+                self.stt_thread.update_config(self.config)
+            elif hasattr(self.stt_thread, "translator") and hasattr(self.stt_thread.translator, "update_config"):
+                self.stt_thread.translator.update_config(self.config)
+
+        # 2. Screen Worker 실시간 반영 (기존 화면 텍스트 즉시 새 도착어로 재번역 유도)
+        if getattr(self, "screen_worker", None) is not None:
+            if hasattr(self.screen_worker, "update_config"):
+                self.screen_worker.update_config(self.config)
+            elif hasattr(self.screen_worker, "translator") and hasattr(self.screen_worker.translator, "update_config"):
+                self.screen_worker.translator.update_config(self.config)
+
+        # 3. 오버레이 창 설정 동기화
         if getattr(self, "overlay", None) is not None and hasattr(self.overlay, "config"):
             self.overlay.config["target_lang"] = code
         if getattr(self, "screen_overlay", None) is not None and hasattr(self.screen_overlay, "config"):
             self.screen_overlay.config["target_lang"] = code
+
+        # 4. 더빙 엔진 동기화 (도착 언어 변경 시 대기 큐 비우고 새 언어 음성 로드)
         d_engine = getattr(self, "dubbing_engine", None)
         if d_engine is not None and hasattr(d_engine, "update_config"):
             d_engine.update_config(self.config)
             if hasattr(d_engine, "clear_queue"):
                 d_engine.clear_queue()
+
+        # 5. 파이프라인 칩 및 상태 UI 갱신
         if hasattr(self, "_sync_all_pipeline_status"):
             self._sync_all_pipeline_status()
+
+        # 6. 모델 호환성 점검 (EXAONE 한·영 전용 모델 자동 전환 등)
         self._check_multilingual_model_compatibility()
 
     def _check_multilingual_model_compatibility(self):
-        """출발어/도착어 변경 시 로컬 LLM 및 STT 모델 호환성 점검 및 안내"""
-        src = str(self.config.get("source_lang", "auto")).strip().lower()
-        tgt = str(self.config.get("target_lang", "ko")).strip().lower()
-        eng = str(self.config.get("translation_engine", "google")).strip().lower()
+        """출발어/도착어 변경 시 로컬 LLM 및 STT 모델 호환성 점검 및 지능형 자동 전환"""
+        if getattr(self, "_in_model_compatibility_check", False):
+            return
+        self._in_model_compatibility_check = True
+        try:
+            src = str(self.config.get("source_lang", "auto")).strip().lower()
+            tgt = str(self.config.get("target_lang", "ko")).strip().lower()
+            eng = str(self.config.get("translation_engine", "google")).strip().lower()
 
-        from src.llm_model_manager import LLMModelManager
-        # 1. EXAONE 계열 한-영 전용 모델 호환성 경고
-        if LLMModelManager.is_bilingual_only(eng) and not LLMModelManager.is_language_pair_supported(eng, src, tgt):
-            msg = tr("warn_exaone_bilingual_only")
-            if hasattr(self, "update_engine_status"):
-                self.update_engine_status("ready", msg)
-
-        # 2. 로컬 STT 영어 전용 모델 경고 (출발어가 명시적 비영어일 때)
-        if src not in ("auto", "en", "") and self.config.get("stt_provider", "local") == "local":
+            from src.llm_model_manager import LLMModelManager
             from src.stt_model_manager import STTModelManager
-            model_sz = self.config.get("model_size", "distil-small.en")
-            if not STTModelManager.is_multilingual_model(model_sz, "local"):
-                msg = tr("warn_stt_english_only")
+
+            # 1. 로컬 LLM 호환성 점검 및 지능형 전환 (EXAONE 한·영 전용 제약 대응)
+            if LLMModelManager.is_bilingual_only(eng) and not LLMModelManager.is_language_pair_supported(eng, src, tgt):
+                custom_dir = self.config.get("custom_model_dir")
+                multi_eng = LLMModelManager.is_multilingual_model_installed(custom_dir=custom_dir)
+                if multi_eng:
+                    disp_name = "Hy-MT2 1.8B" if multi_eng == "hymt" else "TranslateGemma 4B"
+                    self.set_engine_by_key(multi_eng, prompt_missing=False)
+                    msg = tr("warn_exaone_switched_to_multi", name=disp_name)
+                else:
+                    self.set_engine_by_key("google", prompt_missing=False)
+                    msg = tr("warn_exaone_bilingual_only")
                 if hasattr(self, "update_engine_status"):
                     self.update_engine_status("ready", msg)
+
+            # 2. 로컬 STT 영어 전용 모델 점검 및 지능형 전환 (비영어/자동감지 출발어 시)
+            if src != "en" and self.config.get("stt_provider", "local") == "local":
+                default_stt = "small" if is_global() else "distil-small.en"
+                model_sz = self.config.get("model_size", default_stt)
+                if not STTModelManager.is_multilingual_model(model_sz, "local"):
+                    dev = str(self.config.get("device", "cpu")).lower()
+                    candidates = ["small", "base", "tiny"] if (dev == "cpu" or is_global()) else ["large-v3-turbo", "small", "base", "tiny", "medium", "large-v3"]
+                    installed_multi = None
+                    for cand in candidates:
+                        if STTModelManager.is_model_installed(cand) or STTModelManager.is_bundled_model(cand):
+                            installed_multi = cand
+                            break
+
+                    if installed_multi:
+                        self._on_stt_model_quick_selected(installed_multi, prompt_missing=False)
+                        src_label = tr("source_lang_auto") if src == "auto" else UI_LANGUAGE_NAMES.get(src, src.upper())
+                        src_clean = src_label.replace("🌐 ", "").strip()
+                        msg = tr("msg_stt_switched_to_multi", src=src_clean, name=installed_multi)
+                    else:
+                        msg = tr("warn_stt_english_only")
+                    if hasattr(self, "update_engine_status"):
+                        self.update_engine_status("ready", msg)
+        finally:
+            self._in_model_compatibility_check = False
 
     def _subtitle_export_filename(self, filter_mode, extension, fallback_map):
         from src.product import get_product
@@ -6195,6 +6413,8 @@ class ControlPanel(QWidget):
         for k in ("device", "compute_type", "stt_provider", "translation_engine", "model_size", "groq_model", "content_tempo_preset", "stt_language"):
             if k in item:
                 self.config[k] = item[k]
+        if is_global() and self.config.get("source_lang") and self.config.get("source_lang") != "auto":
+            self.config["stt_language"] = self.config["source_lang"]
         self._coerce_device_without_nvidia()
         self.save_config_cb(self.config)
 
@@ -6241,6 +6461,9 @@ class ControlPanel(QWidget):
             self.stt_thread.update_config(self.config)
         if hasattr(self, 'audio_thread') and self.audio_thread:
             self.audio_thread.update_config(self.config)
+        if hasattr(self, 'screen_worker') and self.screen_worker:
+            if hasattr(self.screen_worker, 'update_config'):
+                self.screen_worker.update_config(self.config)
 
         # 4. 오버레이 창 동기화
         if hasattr(self, 'overlay') and self.overlay:
@@ -6250,6 +6473,7 @@ class ControlPanel(QWidget):
                 self.overlay.update_live_display()
 
         self._sync_all_pipeline_status()
+        self._check_multilingual_model_compatibility()
         self.update_engine_status("ready", tr("status_preset_applied", name=self._preset_display_name(preset_key, item)))
         self._refresh_presets_ui()
         if notify:
@@ -6296,18 +6520,27 @@ class ControlPanel(QWidget):
     def _format_preset_tooltip(self, name: str, cfg: dict, status_text: str = "") -> str:
         """프리셋의 세부 구성(번역 엔진, STT, 콘텐츠 템포, 상태)을 툴팁 텍스트로 생성"""
         eng_key = cfg.get("translation_engine", "google")
+        local_tag = f"({tr('engine_local')})"
         eng_names = {
             "google": "Google",
             "deepl": "DeepL",
             "gemini": "Gemini Flash",
             "groq": "Groq Qwen 27B",
-            "gemma": "TranslateGemma 4B (로컬)",
-            "translategemma": "TranslateGemma 4B (로컬)",
-            "exaone": "LG EXAONE 3.5 2.4B (로컬)",
-            "exaone7b": "LG EXAONE 3.5 7.8B (로컬)",
-            "hymt": "Tencent Hy-MT2 1.8B (로컬)",
+            "gemma": f"TranslateGemma 4B {local_tag}",
+            "translategemma": f"TranslateGemma 4B {local_tag}",
+            "exaone": f"LG EXAONE 3.5 2.4B {local_tag}",
+            "exaone7b": f"LG EXAONE 3.5 7.8B {local_tag}",
+            "hymt": f"Tencent Hy-MT2 1.8B {local_tag}",
         }
         eng_display = eng_names.get(eng_key, eng_key)
+        if "(로컬)" in eng_display:
+            eng_display = eng_display.replace("(로컬)", local_tag)
+        if "(Local)" in eng_display and local_tag != "(Local)":
+            eng_display = eng_display.replace("(Local)", local_tag)
+        if "(로컬)" in name:
+            name = name.replace("(로컬)", local_tag)
+        if "(Local)" in name and local_tag != "(Local)":
+            name = name.replace("(Local)", local_tag)
 
         stt_p = cfg.get("stt_provider", "local")
         dev = cfg.get("device", "cuda")
@@ -6667,8 +6900,12 @@ class ControlPanel(QWidget):
             self.stt_thread.update_config(self.config)
         if hasattr(self, 'audio_thread') and self.audio_thread:
             self.audio_thread.update_config(self.config)
+        if hasattr(self, 'screen_worker') and self.screen_worker:
+            if hasattr(self.screen_worker, 'update_config'):
+                self.screen_worker.update_config(self.config)
 
         self._sync_all_pipeline_status()
+        self._check_multilingual_model_compatibility()
         self._update_subtitle_preview()
 
         if notify:
@@ -6974,9 +7211,10 @@ class ControlPanel(QWidget):
         """STT 모델 관리 다이얼로그 열기"""
         if not isinstance(target_model_id, str):
             target_model_id = None
+        default_stt = "small" if is_global() else "distil-small.en"
         from src.stt_model_dialog import STTModelDialog
         dlg = STTModelDialog(
-            current_model_id=self.config.get("model_size", "distil-small.en"),
+            current_model_id=self.config.get("model_size", default_stt),
             device=self.config.get("device", "cpu"),
             target_model_id=target_model_id,
             parent=self
@@ -7089,19 +7327,20 @@ class ControlPanel(QWidget):
                 self.overlay.set_engine_by_key(cur_eng)
         self._sync_all_pipeline_status()
 
-    def set_engine_by_key(self, engine_key: str):
+    def set_engine_by_key(self, engine_key: str, prompt_missing: bool = True):
         if not engine_key:
             return
 
         if engine_key in ("deepl", "gemini", "groq"):
             has_key = bool(self.config.get(f"{engine_key}_api_key", "").strip())
             if not has_key:
-                eng_names = {"deepl": "DeepL", "gemini": "Gemini Flash", "groq": "Groq Qwen 27B"}
-                disp_name = eng_names.get(engine_key, engine_key.upper())
-                ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name=disp_name)
-                self._revert_engine_ui()
-                if ret == QMessageBox.StandardButton.Yes:
-                    self.open_api_key_dialog()
+                if prompt_missing:
+                    eng_names = {"deepl": "DeepL", "gemini": "Gemini Flash", "groq": "Groq Qwen 27B"}
+                    disp_name = eng_names.get(engine_key, engine_key.upper())
+                    ret = ask(self, "msg_need_key_title", "msg_open_key_settings", name=disp_name)
+                    self._revert_engine_ui()
+                    if ret == QMessageBox.StandardButton.Yes:
+                        self.open_api_key_dialog()
                 return
 
         model_tags = {
@@ -7140,6 +7379,8 @@ class ControlPanel(QWidget):
             # 1. 로컬 LLM의 GPU 가속 팩 설치 여부 검사 (CPU 모드 저속 실행 사전 차단 및 안내)
             has_cuda = LLMModelManager.is_cuda_binary_available()
             if not has_cuda:
+                if not prompt_missing:
+                    return
                 if LLMModelManager.can_install_llm_cuda():
                     ret = ask(self, "msg_gpu_pack_needed_title", "msg_gpu_pack_needed", name=disp_name)
                     if ret == QMessageBox.StandardButton.Yes:
@@ -7163,10 +7404,11 @@ class ControlPanel(QWidget):
                     ollama_installed = LLMModelManager.is_ollama_model_installed(ollama_tag)
 
                 if not ollama_installed:
-                    ret = ask(self, "msg_model_missing_title", "msg_model_missing", name=disp_name)
-                    if ret == QMessageBox.StandardButton.Yes:
-                        self.open_llm_model_manager(target_model_id=engine_key)
-                    self._revert_engine_ui()
+                    if prompt_missing:
+                        ret = ask(self, "msg_model_missing_title", "msg_model_missing", name=disp_name)
+                        if ret == QMessageBox.StandardButton.Yes:
+                            self.open_llm_model_manager(target_model_id=engine_key)
+                        self._revert_engine_ui()
                     return
 
             ollama_tag, embedded_id = model_tags[engine_key]
@@ -7180,6 +7422,9 @@ class ControlPanel(QWidget):
         self.config["translation_engine"] = engine_key
         if self.stt_thread and hasattr(self.stt_thread, 'translator') and self.stt_thread.translator:
             self.stt_thread.translator.update_config(self.config)
+        if hasattr(self, 'screen_worker') and self.screen_worker:
+            if hasattr(self.screen_worker, 'update_config'):
+                self.screen_worker.update_config(self.config)
         self.save_config_cb(self.config)
 
         # 1. 설정 탭의 번역 엔진 라디오/토글 버튼 동기화
@@ -7292,16 +7537,17 @@ class ControlPanel(QWidget):
                     self._opened_from_overlay_topmost = False
 
     def _get_stt_model_note_text(self) -> str:
+        default_model = "small" if is_global() else "distil-small.en"
         try:
             from src.stt_model_manager import STTModelManager
-            if STTModelManager.is_bundled_model("distil-small.en"):
-                return f"ⓘ distil-small.en {tr('model_bundled')}"
-            elif STTModelManager.is_model_installed("distil-small.en"):
-                return f"ⓘ distil-small.en {tr('model_installed')}"
+            if STTModelManager.is_bundled_model(default_model):
+                return f"ⓘ {default_model} {tr('model_bundled')}"
+            elif STTModelManager.is_model_installed(default_model):
+                return f"ⓘ {default_model} {tr('model_installed')}"
             else:
-                return f"ⓘ distil-small.en ({tr('stt_auto_download_first')})"
+                return f"ⓘ {default_model} ({tr('stt_auto_download_first')})"
         except Exception:
-            return f"ⓘ distil-small.en {tr('model_bundled')}"
+            return f"ⓘ {default_model} {tr('model_bundled')}"
 
     def _populate_models(self):
         if hasattr(self, 'combo_model'):
@@ -7359,7 +7605,8 @@ class ControlPanel(QWidget):
                     self.lbl_stt_model_note.setText(self._get_stt_model_note_text())
                     self.lbl_stt_model_note.setVisible(True)
                 from src.stt_model_manager import AVAILABLE_STT_MODELS, STTModelManager
-                cur = self.config.get("model_size", "distil-small.en")
+                default_stt = "small" if is_global() else "distil-small.en"
+                cur = self.config.get("model_size", default_stt)
 
                 models_to_show = AVAILABLE_STT_MODELS
                 cur_idx = 0
@@ -7387,7 +7634,8 @@ class ControlPanel(QWidget):
         elif cur_p == "groq":
             cur_model = self.config.get("groq_model", "whisper-large-v3-turbo")
         else:
-            cur_model = self.config.get("model_size", "distil-small.en")
+            default_stt = "small" if is_global() else "distil-small.en"
+            cur_model = self.config.get("model_size", default_stt)
 
         for i in range(self.combo_model.count()):
             if self.combo_model.itemData(i) == cur_model:
@@ -7493,14 +7741,16 @@ class ControlPanel(QWidget):
             self.config["device"] = key
             if key == "cpu":
                 from src.stt_model_manager import STTModelManager
-                cur_model = self.config.get("model_size", "distil-small.en")
+                fallback_stt = "small" if is_global() else "distil-small.en"
+                cur_model = self.config.get("model_size", fallback_stt)
                 if not STTModelManager.is_cpu_usable(cur_model):
-                    self.config["model_size"] = "distil-small.en"
+                    self.config["model_size"] = fallback_stt
 
         from src.stt_model_manager import STTModelManager
         cur_p = self.config.get("stt_provider", "local")
+        fallback_stt = "small" if is_global() else "distil-small.en"
         cur_m = self.config.get("deepgram_model", "nova-3") if cur_p == "deepgram" else (
-            self.config.get("groq_model", "whisper-large-v3-turbo") if cur_p == "groq" else self.config.get("model_size", "distil-small.en")
+            self.config.get("groq_model", "whisper-large-v3-turbo") if cur_p == "groq" else self.config.get("model_size", fallback_stt)
         )
         if not STTModelManager.is_multilingual_model(cur_m, cur_p):
             if self.config.get("stt_language", "en") != "en":
@@ -7740,15 +7990,19 @@ class ControlPanel(QWidget):
             print(f"[Overlay] 위치 초기화 오류: {e}")
 
     def update_screen_worker_status(self, status_text: str):
-        if not getattr(self, '_is_screen_active', False) and status_text != "일시정지됨":
+        from src.screen_overlay_manager import ScreenOverlayManager
+        is_paused = ScreenOverlayManager._is_paused_status_text(status_text)
+        if not getattr(self, '_is_screen_active', False) and not is_paused:
             return
         if hasattr(self, 'lbl_screen_status'):
             self.lbl_screen_status.setText(status_text)
-        if "번역 중" in status_text:
+        if is_paused:
+            self.update_engine_status("ready", tr("ocr_status_paused"))
+        elif "번역 중" in status_text or "Translating" in status_text or "翻訳中" in status_text:
             self.update_engine_status("translating", tr("status_screen_prefix", text=status_text))
-        elif "완료" in status_text:
+        elif "완료" in status_text or "complete" in status_text.lower() or "完了" in status_text:
             self.update_engine_status("ready", tr("status_screen_prefix", text=status_text))
-        elif "감시 중" in status_text:
+        elif "감시 중" in status_text or "Monitoring" in status_text or "監視中" in status_text:
             if getattr(self, '_is_screen_active', False):
                 self.update_engine_status("ready", tr("status_watching"))
 

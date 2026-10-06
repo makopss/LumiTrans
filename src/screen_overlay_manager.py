@@ -1,6 +1,7 @@
 from PyQt6.QtCore import QObject, QPoint, QRect, QTimer
 from PyQt6.QtWidgets import QApplication
 from src.screen_overlay import ScreenSubtitleOverlay
+from src.i18n import tr
 
 class ScreenOverlayManager(QObject):
     """
@@ -50,9 +51,10 @@ class ScreenOverlayManager(QObject):
         geo_map = self.config.get("screen_overlay_geometries", {})
 
         for idx, overlay in enumerate(self.overlays):
-            title = f"👁️ 화면 번역 #{idx + 1}" if is_multi else "👁️ 화면 번역"
-            overlay.title_label.setText(title)
             overlay.assigned_roi_idx = idx
+            overlay.is_multi = is_multi
+            title = f"👁️ {tr('screen_translation')} #{idx + 1}" if is_multi else f"👁️ {tr('screen_translation')}"
+            overlay.title_label.setText(title)
             if idx < len(rois):
                 overlay.assigned_roi = rois[idx]
             else:
@@ -261,8 +263,20 @@ class ScreenOverlayManager(QObject):
         if target_screen and not target_screen.geometry().contains(target.geometry().center()):
             self._move_to_target_screen(target, target_screen)
 
+    @staticmethod
+    def _is_paused_status_text(status: str) -> bool:
+        if not status:
+            return False
+        clean = str(status).strip()
+        paused_variants = {
+            "일시정지됨", "일시정지", "Paused", "一時停止中", "一時停止", "已暂停",
+            "En pausa", "En pause", "Pausiert", "Em pausa", "На паузе", "Пауза",
+            "In pausa", "Đang tạm dừng", "หยุดชั่วคราว", "Dijeda", "متوقف مؤقتًا", "متوقف", "रुका हुआ"
+        }
+        return clean in paused_variants or "일시정지" in clean or "pause" in clean.lower()
+
     def display_status(self, status: str):
-        if self._paused and status != "일시정지됨":
+        if self._paused and not self._is_paused_status_text(status):
             return
         for o in self.overlays:
             o.display_status(status)
@@ -292,9 +306,19 @@ class ScreenOverlayManager(QObject):
             o._apply_config(apply_geometry=apply_geometry)
 
     def _apply_ui_language(self):
-        for o in self.overlays:
+        is_multi = len(self.overlays) > 1
+        for idx, o in enumerate(self.overlays):
+            o.assigned_roi_idx = idx
+            o.is_multi = is_multi
+            if self._paused:
+                o.is_paused = True
+                if hasattr(o, "live_badge") and o.live_badge:
+                    o.live_badge.setText(tr("ocr_status_paused"))
             if hasattr(o, "_apply_ui_language"):
                 o._apply_ui_language()
+            elif hasattr(o, "title_label") and o.title_label:
+                title = f"👁️ {tr('screen_translation')} #{idx + 1}" if is_multi else f"👁️ {tr('screen_translation')}"
+                o.title_label.setText(title)
 
     def update(self):
         for o in self.overlays:

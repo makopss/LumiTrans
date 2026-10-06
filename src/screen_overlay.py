@@ -225,6 +225,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         # 4. 실시간 상태 뱃지
         self.live_badge = QLabel(tr("overlay_waiting"))
+        self._is_waiting = True
         self.live_badge.setFixedHeight(26)
         self.live_badge.setFixedWidth(110)
         self.live_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -681,12 +682,39 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._apply_two_line_overlay_height()
         self.update()
 
+    @staticmethod
+    def _is_waiting_badge_text(txt: str) -> bool:
+        if not txt:
+            return True
+        clean = txt.strip()
+        waiting_variants = {
+            "대기 중", "Waiting", "Waiting...", "準備中", "待機中", "等待中",
+            "En espera", "En attente", "Warten", "Aguardando", "Ожидание",
+            "In attesa", "Đang chờ", "กำลังรอ", "Menunggu", "قيد الانتظار", "प्रतीक्षारत"
+        }
+        return clean in waiting_variants or "대기" in clean or "wait" in clean.lower()
+
+    @staticmethod
+    def _is_paused_badge_text(txt: str) -> bool:
+        if not txt:
+            return False
+        clean = txt.strip()
+        paused_variants = {
+            "일시정지됨", "일시정지", "Paused", "一時停止中", "一時停止", "已暂停",
+            "En pausa", "En pause", "Pausiert", "Em pausa", "На паузе", "Пауза",
+            "In pausa", "Đang tạm dừng", "หยุดชั่วคราว", "Dijeda", "متوقف مؤقتًا", "متوقف", "रुका हुआ"
+        }
+        return clean in paused_variants or "일시정지" in clean or "pause" in clean.lower()
+
     def _apply_ui_language(self):
         self.setWindowTitle(tr("overlay_screen_title"))
         cur_hk = self.config.get("inplace_hotkey", "F4")
         if hasattr(self, "title_label") and self.title_label:
             if not getattr(self, "is_click_through", False):
-                self.title_label.setText("👁️ " + tr("screen_translation"))
+                idx = getattr(self, "assigned_roi_idx", 0)
+                is_multi = getattr(self, "is_multi", False)
+                title = f"👁️ {tr('screen_translation')} #{idx + 1}" if is_multi else f"👁️ {tr('screen_translation')}"
+                self.title_label.setText(title)
             else:
                 self.title_label.setText(tr("overlay_click_through_active"))
         if hasattr(self, "btn_pause") and self.btn_pause:
@@ -705,7 +733,12 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         if hasattr(self, "btn_clean") and self.btn_clean:
             self.btn_clean.setToolTip(tr("overlay_tip_clean"))
         if hasattr(self, "live_badge") and self.live_badge:
-            if self.live_badge.text() in ("대기 중", "Waiting...", "準備中"):
+            if getattr(self, "is_paused", False) or self._is_paused_badge_text(self.live_badge.text()):
+                self.is_paused = True
+                self._is_waiting = False
+                self.live_badge.setText(tr("ocr_status_paused"))
+            elif getattr(self, "_is_waiting", True) or self._is_waiting_badge_text(self.live_badge.text()):
+                self._is_waiting = True
                 self.live_badge.setText(tr("overlay_waiting"))
         if hasattr(self, "btn_font_dec") and self.btn_font_dec:
             font_size = self.config.get("screen_font_size", 22)
@@ -1092,9 +1125,22 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._apply_two_line_overlay_height()
 
     def display_status(self, status: str):
+        self._is_waiting = self._is_waiting_badge_text(status)
+        is_paused = self._is_paused_badge_text(status)
+        self.is_paused = is_paused
+        if hasattr(self, 'btn_pause') and self.btn_pause:
+            if is_paused:
+                self.btn_pause.setText("▶")
+                self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+                self.btn_pause.setToolTip(tr("overlay_pause_on"))
+            elif self._is_waiting:
+                self.btn_pause.setText("⏸")
+                self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+                self.btn_pause.setToolTip(tr("overlay_pause_off"))
         self.live_badge.setText(status)
 
     def display_subtitle(self, original_text: str, translated_text: str, engine_badge: str = "", target_roi: list = None):
+        self._is_waiting = False
         self.last_translated_time = time.time()
         self.current_original = original_text
         self.current_translated = translated_text
@@ -1170,14 +1216,17 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             self.set_paused_state(is_paused)
 
     def set_paused_state(self, is_paused: bool):
+        self.is_paused = bool(is_paused)
         if is_paused:
             self.btn_pause.setText("▶")
             self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
             self.btn_pause.setToolTip(tr("overlay_pause_on"))
+            self.display_status(tr("ocr_status_paused"))
         else:
             self.btn_pause.setText("⏸")
             self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
             self.btn_pause.setToolTip(tr("overlay_pause_off"))
+            self.display_status(tr("overlay_waiting"))
 
     def _open_settings(self):
         if hasattr(self, 'ext_open_settings') and self.ext_open_settings:
@@ -1273,7 +1322,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             self.size_grip.hide()
             self._set_header_chrome_opacity(0.35)
         else:
-            self.title_label.setText("👁️ " + tr("screen_translation"))
+            idx = getattr(self, "assigned_roi_idx", 0)
+            is_multi = getattr(self, "is_multi", False)
+            title = f"👁️ {tr('screen_translation')} #{idx + 1}" if is_multi else f"👁️ {tr('screen_translation')}"
+            self.title_label.setText(title)
             self.title_label.setStyleSheet("QLabel { color: rgba(255, 255, 255, 0.5); font-size: 11px; font-weight: bold; }")
             self.btn_lock.setText("🔒")
             self.btn_lock.setFixedWidth(34)

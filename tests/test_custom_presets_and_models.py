@@ -160,8 +160,7 @@ class TestCustomPresetsAndModels(unittest.TestCase):
         self.panel._on_next_custom_preset_page()
         w1 = self.panel.quick_presets_widget.sizeHint().width()
 
-        from src.config import BUILTIN_PRESETS
-        self.assertEqual(self.panel.quick_presets_layout.count(), len(BUILTIN_PRESETS) + 6)
+        self.assertEqual(self.panel.quick_presets_layout.count(), len(self.panel._builtin_presets()) + 6)
 
 
 if __name__ == "__main__":

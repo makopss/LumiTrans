@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("WISE_PRODUCT", "kr")
 
 from PyQt6.QtCore import QRect
 from PyQt6.QtWidgets import QApplication, QSizePolicy, QLabel
@@ -855,6 +856,49 @@ class TestControlPanelLayout(unittest.TestCase):
         self.assertIn("console.deepgram.com", tips_lbl.text())
 
         dlg.close()
+
+    def test_preset_tooltip_local_tag_localization(self):
+        from src.i18n import set_ui_language
+        cfg = {
+            "translation_engine": "hymt",
+            "stt_provider": "local",
+            "device": "cuda",
+            "model_size": "large-v3-turbo",
+            "stt_language": "auto",
+            "content_tempo_preset": "youtube",
+        }
+        # English
+        set_ui_language("en")
+        tip_en = self.panel._format_preset_tooltip("⚡ Low latency", cfg, "Ready")
+        self.assertIn("(Local)", tip_en)
+        self.assertNotIn("(로컬)", tip_en)
+        self.assertIn("Translation engine:", tip_en)
+        self.assertNotIn("translation_engine:", tip_en)
+        self.assertIn("Setup info", tip_en)
+
+        # Japanese
+        set_ui_language("ja")
+        tip_ja = self.panel._format_preset_tooltip("⚡ 低遅延", cfg, "即座に使用可能")
+        self.assertIn("(ローカル)", tip_ja)
+        self.assertNotIn("(로컬)", tip_ja)
+        self.assertNotIn("(Local)", tip_ja)
+        self.assertIn("翻訳エンジン:", tip_ja)
+        self.assertIn("構成情報", tip_ja)
+
+        # Korean
+        set_ui_language("ko")
+        tip_ko = self.panel._format_preset_tooltip("⚡ 초저지연", cfg, "즉시 사용 가능")
+        self.assertIn("(로컬)", tip_ko)
+        self.assertIn("번역 엔진:", tip_ko)
+        self.assertIn("구성 정보", tip_ko)
+
+    def test_cuda_gpu_detection_and_shared_pack_discovery(self):
+        from src.cuda_utils import is_nvidia_gpu_present, get_cuda_pack_status, get_llama_cuda_pack_dir
+        # On this developer machine with RTX 5060, GPU must be detected as True
+        self.assertTrue(is_nvidia_gpu_present())
+        status = get_cuda_pack_status()
+        self.assertTrue(status["has_gpu"])
+        self.assertIsNotNone(get_llama_cuda_pack_dir())
 
 
 if __name__ == "__main__":

@@ -107,7 +107,8 @@ class TestModelManagerRedirection(unittest.TestCase):
 
     def test_preset_preflight_prompts_to_open_stt_manager_when_stt_uninstalled(self):
         """프리셋 적용 시 LLM은 설치되어 있으나 STT 모델이 미설치된 경우 STT 모델 관리창으로 유도되는지 검증"""
-        with patch.object(self.panel, "_check_model_ready", return_value=True), \
+        with patch.dict(os.environ, {"WISE_PRODUCT": "kr"}), \
+             patch.object(self.panel, "_check_model_ready", return_value=True), \
              patch.object(STTModelManager, "is_model_installed", return_value=False), \
              patch.object(STTModelManager, "is_bundled_model", return_value=False), \
              patch.object(self.panel, "open_stt_model_manager") as mock_open_stt, \
@@ -126,7 +127,8 @@ class TestModelManagerRedirection(unittest.TestCase):
 
     def test_preset_preflight_dual_dialog_when_both_uninstalled(self):
         """프리셋 적용 시 LLM과 STT 모델이 둘 다 미설치된 경우 번역 모델 관리창부터 유도 검증"""
-        with patch.object(self.panel, "_check_model_ready", return_value=False), \
+        with patch.dict(os.environ, {"WISE_PRODUCT": "kr"}), \
+             patch.object(self.panel, "_check_model_ready", return_value=False), \
              patch.object(STTModelManager, "is_model_installed", return_value=False), \
              patch.object(STTModelManager, "is_bundled_model", return_value=False), \
              patch.object(self.panel, "open_llm_model_manager") as mock_open_llm, \
@@ -145,6 +147,7 @@ class TestModelManagerRedirection(unittest.TestCase):
 
     def test_stt_uninstalled_popup_message_format_is_concise_and_uses_model_id(self):
         """STT 미설치 팝업 안내 문구가 중복 이름 없이 모델 ID로 간결하게 표시되는지 검증"""
+        from src.i18n import tr
         with patch.object(STTModelManager, "is_model_installed", return_value=False), \
              patch.object(STTModelManager, "is_bundled_model", return_value=False), \
              patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as mock_q:
@@ -153,7 +156,7 @@ class TestModelManagerRedirection(unittest.TestCase):
             mock_q.assert_called_once()
             args, _ = mock_q.call_args
             # Title
-            self.assertEqual(args[1], "📦 STT 모델 다운로드 필요")
+            self.assertEqual(args[1], tr("msg_model_missing_title"))
             msg_text = args[2]
             # Should have model id 'small.en'
             self.assertIn("'small.en'", msg_text)
@@ -161,7 +164,7 @@ class TestModelManagerRedirection(unittest.TestCase):
             self.assertNotIn("Whisper Small (English)", msg_text)
             self.assertNotIn("예상 다운로드 크기", msg_text)
             self.assertNotIn("바로 사용할 수 없습니다", msg_text)
-            self.assertIn("선택하신 'small.en' 모델이 아직 설치되지 않았습니다.\n\nSTT 모델 관리창을 열어 모델을 다운로드하시겠습니까?", msg_text)
+            self.assertIn(tr("msg_model_missing", name="small.en"), msg_text)
 
     def test_llm_model_dialog_target_highlight_exaone7b(self):
         """로컬 마스터피스 등에서 전달되는 'exaone7b' 타겟이 EXAONE 7.8B 카드를 정확히 하이라이트(외곽선) 처리하는지 검증"""

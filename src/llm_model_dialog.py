@@ -1071,8 +1071,8 @@ class LLMModelDialog(QDialog):
                     self.lbl_cuda_title.setToolTip(status_desc)
                     self.cuda_card.setToolTip(status_desc)
                     self.lbl_cuda_status.setStyleSheet("color: #94A3B8; font-size: 11px; border: none; outline: none; background: transparent;")
-                    self.btn_cuda_action.setText(tr("status_no_gpu"))
-                    self.btn_cuda_action.setEnabled(False)
+                    self.btn_cuda_action.setText(tr("btn_download_gpu_pack"))
+                    self.btn_cuda_action.setEnabled(True)
                     self.btn_cuda_action.setStyleSheet("background-color: #334155; color: #E2E8F0; border: 1px solid #475569; border-radius: 5px; padding: 6px 14px; font-size: 11px; font-weight: bold;")
                     self.cuda_card.setStyleSheet(f"""
                         QFrame#CudaCard {{
@@ -1121,7 +1121,11 @@ class LLMModelDialog(QDialog):
 
     def _on_cuda_action_clicked(self):
         """CUDA 가속 팩 온디맨드 다운로드 실행"""
-        ret = ask(self, "msg_cuda_pack_title", "msg_cuda_ask")
+        from src.cuda_utils import is_nvidia_gpu_present
+        if not is_nvidia_gpu_present():
+            ret = ask(self, "msg_cuda_pack_title", "msg_cuda_no_gpu_ask")
+        else:
+            ret = ask(self, "msg_cuda_pack_title", "msg_cuda_ask")
         if ret != QMessageBox.StandardButton.Yes:
             return
         self._execute_cuda_pack_download()

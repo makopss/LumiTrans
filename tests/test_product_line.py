@@ -70,8 +70,14 @@ class TestGlobalProductLine(unittest.TestCase):
         self.assertEqual(low["translation_engine"], "google")
         self.assertEqual(low["name"], GLOBAL_PRESET_COPY["low_spec"]["name"])
         live = GLOBAL_PRESETS["live"]
-        self.assertEqual(live["model_size"], "large-v3-turbo")
+        self.assertEqual(live["model_size"], "small")
         self.assertEqual(live["translation_engine"], "hymt")
+        balance = GLOBAL_PRESETS["balance"]
+        self.assertEqual(balance["model_size"], "small")
+        self.assertEqual(balance["translation_engine"], "hymt")
+        cinema = GLOBAL_PRESETS["cinema"]
+        self.assertEqual(cinema["model_size"], "large-v3-turbo")
+        self.assertEqual(cinema["translation_engine"], "gemma")
         for item in GLOBAL_PRESETS.values():
             self.assertEqual(item["stt_language"], "auto")
             self.assertNotIn(".en", item["model_size"])

@@ -324,7 +324,7 @@ def _build_global_presets():
             "device": "cuda",
             "compute_type": "float16",
             "stt_provider": "local",
-            "model_size": "large-v3-turbo",
+            "model_size": "small",
             "stt_language": "auto",
             "translation_engine": "hymt",
             "content_tempo_preset": "youtube",
@@ -337,7 +337,7 @@ def _build_global_presets():
             "device": "cuda",
             "compute_type": "float16",
             "stt_provider": "local",
-            "model_size": "large-v3-turbo",
+            "model_size": "small",
             "stt_language": "auto",
             "translation_engine": "hymt",
             "content_tempo_preset": "smart",
@@ -450,12 +450,16 @@ def _lock_product_languages(cfg: dict, raw: dict | None = None):
     saved_ui = saved.get("ui_lang")
     if saved_ui:
         cfg["ui_lang"] = normalize_ui_language(saved_ui)
-    elif not cfg.get("ui_lang"):
+    elif is_global():
         cfg["ui_lang"] = detect_system_ui_language()
+    else:
+        cfg["ui_lang"] = "ko"
 
     if not is_global():
         cfg["target_lang"] = "ko"
         return cfg
+    if cfg.get("model_size") == "distil-small.en":
+        cfg["model_size"] = "small"
     if not saved.get("target_lang"):
         cfg["target_lang"] = "en"
     if not saved.get("source_lang"):

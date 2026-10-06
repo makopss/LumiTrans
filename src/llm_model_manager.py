@@ -607,8 +607,7 @@ class CUDAPackDownloadWorker(threading.Thread):
             )
 
             if not is_nvidia_gpu_present():
-                self.finished_signal.emit(False, tr("cuda_no_nvidia_error"))
-                return
+                logger.warning("[CUDAPackDownloadWorker] NVIDIA GPU 미감지 상태에서 가속 팩 다운로드 요청됨 (다운로드 계속 진행)")
 
             target_dir = get_cuda_target_install_dir()
             llama_dir = get_llama_cuda_pack_dir()
@@ -618,7 +617,7 @@ class CUDAPackDownloadWorker(threading.Thread):
             needs_cublas = not is_cublas_installed()
             needs_cudart = find_cuda_dll("cudart64_12.dll", min_size_mb=0.1) is None
             # Full 내장 CUDA 12 라이브러리를 이미 쓸 수 있으면 CUDA 13 팩은 받지 않는다.
-            needs_llama = llm_issue is None and not is_ggml_cuda_available()
+            needs_llama = (llm_issue is None or not is_nvidia_gpu_present()) and not is_ggml_cuda_available()
 
             if not any((needs_cublas, needs_cudart, needs_llama)):
                 register_cuda_dll_directories()

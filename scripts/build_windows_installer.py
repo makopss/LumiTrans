@@ -116,17 +116,26 @@ def generate_icon():
     cropped.save(ico_path, sizes=icon_sizes)
     print(f"[Icon] 아이콘 생성 완료: {ico_path} ({ico_path.stat().st_size:,} bytes)")
 
-def ensure_bundled_stt_model():
-    """빌드 전 필수 기본 내장 번들 STT 모델(distil-small.en) 존재 여부 검사 및 자동 준비"""
-    bundled_target = ROOT_DIR / "models" / "huggingface" / "hub" / "models--Systran--faster-distil-whisper-small.en"
+def ensure_bundled_stt_model(product: str = "kr"):
+    """빌드 전 필수 기본 내장 번들 STT 모델 존재 여부 검사 및 자동 준비"""
+    if product == "global":
+        repo_id = "Systran/faster-whisper-small"
+        folder_name = "models--Systran--faster-whisper-small"
+        label = "Whisper Small (다국어 번들)"
+    else:
+        repo_id = "Systran/faster-distil-whisper-small.en"
+        folder_name = "models--Systran--faster-distil-whisper-small.en"
+        label = "distil-small.en (영어 번들)"
+
+    bundled_target = ROOT_DIR / "models" / "huggingface" / "hub" / folder_name
     if (bundled_target / "snapshots").exists():
-        print(f"[Model Bundle] 기본 내장 distil-small.en 모델 확인됨: {bundled_target}")
+        print(f"[Model Bundle] 기본 내장 {label} 모델 확인됨: {bundled_target}")
         return
 
-    print("[Model Bundle] distil-small.en 번들 모델 준비 중...")
+    print(f"[Model Bundle] {label} 번들 모델 준비 중...")
     candidate_sources = [
-        Path(r"D:\AI_Models\huggingface\hub\models--Systran--faster-distil-whisper-small.en"),
-        Path(os.path.expanduser(r"~/.cache/huggingface/hub/models--Systran--faster-distil-whisper-small.en")),
+        Path(rf"D:\AI_Models\huggingface\hub\{folder_name}"),
+        Path(os.path.expanduser(rf"~/.cache/huggingface/hub/{folder_name}")),
     ]
     for src in candidate_sources:
         if src.exists() and (src / "snapshots").exists():
@@ -144,9 +153,9 @@ def ensure_bundled_stt_model():
             return
 
     # 로컬에 없을 시 faster-whisper로 직접 다운로드
-    print("[Model Bundle] 로컬 캐시 없음. Hugging Face에서 distil-small.en 다운로드 중...")
+    print(f"[Model Bundle] 로컬 캐시 없음. Hugging Face에서 {repo_id} 다운로드 중...")
     from faster_whisper import download_model
-    download_model("Systran/faster-distil-whisper-small.en", output_directory=str(ROOT_DIR / "models" / "huggingface" / "hub"))
+    download_model(repo_id, output_directory=str(ROOT_DIR / "models" / "huggingface" / "hub"))
     print("[Model Bundle] 다운로드 완료!")
 
 # 로컬에서 빌드한 llama-cpp-python 은 빌드 PC 의 CPU 명령어(AVX-512 등)로 컴파일되어 다른 PC 에서
@@ -324,12 +333,13 @@ def run_pyinstaller(edition: str = "full", product: str = "kr"):
         # Full 에디션: 번들 모델 중복 복사 방지 및 단일화 검증
         internal_models = dist_dir / "_internal" / "models"
         root_models = dist_dir / "models"
-        has_internal = (internal_models / "huggingface" / "hub" / "models--Systran--faster-distil-whisper-small.en").exists()
-        has_root = (root_models / "huggingface" / "hub" / "models--Systran--faster-distil-whisper-small.en").exists()
+        target_folder = "models--Systran--faster-whisper-small" if product == "global" else "models--Systran--faster-distil-whisper-small.en"
+        has_internal = (internal_models / "huggingface" / "hub" / target_folder).exists()
+        has_root = (root_models / "huggingface" / "hub" / target_folder).exists()
 
         if has_internal and has_root:
             # 중복 제거: PyInstaller datas(_internal/models)에 이미 존재하므로 dist_dir/models 삭제
-            print(f"[Full Bundle] 중복 모델 감지: {root_models} 제거 (설치 패키지 320MB 중복 절감)")
+            print(f"[Full Bundle] 중복 모델 감지: {root_models} 제거 (설치 패키지 모델 중복 절감)")
             shutil.rmtree(str(root_models), ignore_errors=True)
         elif not has_internal and not has_root:
             models_src = ROOT_DIR / "models"
@@ -337,6 +347,14 @@ def run_pyinstaller(edition: str = "full", product: str = "kr"):
                 print(f"[Full Bundle] 번들 STT 모델을 {root_models}에 동기화합니다...")
                 shutil.copytree(str(models_src), str(root_models), dirs_exist_ok=True)
                 print("[Full Bundle] 번들 STT 모델 복사 완료!")
+
+        # 불필요한 타 제품군 모델 제거
+        unwanted_folder = "models--Systran--faster-distil-whisper-small.en" if product == "global" else "models--Systran--faster-whisper-small"
+        for base in [internal_models, root_models]:
+            unwanted_path = base / "huggingface" / "hub" / unwanted_folder
+            if unwanted_path.exists():
+                shutil.rmtree(str(unwanted_path), ignore_errors=True)
+                print(f"[Full Bundle] 타 제품군 모델 정리 완료: {unwanted_path}")
 
     verify_llama_layout(edition)
 
@@ -430,7 +448,7 @@ def main():
     patch_scipy_python312_bug()
     patch_pyinstaller_sentencepiece_bug()
     generate_icon()
-    ensure_bundled_stt_model()
+    ensure_bundled_stt_model(product=args.product)
 
     built_files = []
     if args.edition in ("lite", "all"):

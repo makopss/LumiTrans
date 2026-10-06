@@ -247,7 +247,13 @@ def is_lite_excluded(path_or_name):
 def is_full_excluded(path_or_name):
     s = str(path_or_name).lower()
     # Full 에디션에서도 런타임에 필요 없는 개발용 .lib 파일만 제외
-    return s.endswith('.lib')
+    if s.endswith('.lib'):
+        return True
+    if PRODUCT == "global" and "models--systran--faster-distil-whisper-small.en" in s:
+        return True
+    if PRODUCT == "kr" and "models--systran--faster-whisper-small" in s and "distil" not in s:
+        return True
+    return False
 
 if EDITION == "lite":
     filtered_datas = [d for d in datas if not is_lite_excluded(d[0])]

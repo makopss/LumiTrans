@@ -704,6 +704,154 @@ class TestPhase4GlobalUXAndI18n(unittest.TestCase):
         self.assertIn("expert audio-visual language engineer", sys_es)
         self.assertIn("Spanish", prompt_es)
 
+    def test_overlay_windows_dynamic_language_switching(self):
+        """글로벌 버전 오버레이 창 다국어 타이틀 및 동적 언어 전환 검증"""
+        from PyQt6.QtWidgets import QApplication
+        from src.i18n import set_ui_language, tr
+        from src.overlay_window import SubtitleOverlay
+        from src.screen_overlay_manager import ScreenOverlayManager
+        from src.config import _lock_product_languages
+
+        app = QApplication.instance() or QApplication([])
+
+        # 1. ScreenOverlayManager 단일 ROI 타이틀 로컬라이제이션 검증
+        cfg = {"ui_lang": "en", "screen_rois": []}
+        set_ui_language("en")
+        mgr = ScreenOverlayManager(cfg)
+        self.assertEqual(len(mgr.overlays), 1)
+        self.assertEqual(mgr.overlays[0].title_label.text(), "👁️ Screen Translation")
+
+        # 일본어로 변경 후 _apply_ui_language 호출
+        set_ui_language("ja")
+        mgr._apply_ui_language()
+        self.assertEqual(mgr.overlays[0].title_label.text(), "👁️ 画面翻訳")
+        self.assertEqual(mgr.overlays[0].live_badge.text(), "待機中")
+
+        # sync_rois가 호출되어도 한글로 덮어써지지 않고 현재 언어 유지
+        mgr.sync_rois()
+        self.assertEqual(mgr.overlays[0].title_label.text(), "👁️ 画面翻訳")
+
+        # 스페인어로 변경
+        set_ui_language("es")
+        mgr._apply_ui_language()
+        self.assertEqual(mgr.overlays[0].title_label.text(), "👁️ Traducción de pantalla")
+        self.assertEqual(mgr.overlays[0].live_badge.text(), "En espera")
+
+        # 2. 다중 ROI 타이틀 번호 및 로컬라이제이션 검증
+        cfg_multi = {"ui_lang": "zh", "screen_rois": [[0, 0, 100, 100], [200, 200, 100, 100]]}
+        set_ui_language("zh")
+        mgr_multi = ScreenOverlayManager(cfg_multi)
+        self.assertEqual(len(mgr_multi.overlays), 2)
+        self.assertEqual(mgr_multi.overlays[0].title_label.text(), "👁️ 屏幕翻译 #1")
+        self.assertEqual(mgr_multi.overlays[1].title_label.text(), "👁️ 屏幕翻译 #2")
+        self.assertEqual(mgr_multi.overlays[0].live_badge.text(), "等待中")
+
+        # 언어를 영어로 전환
+        set_ui_language("en")
+        mgr_multi._apply_ui_language()
+        self.assertEqual(mgr_multi.overlays[0].title_label.text(), "👁️ Screen Translation #1")
+        self.assertEqual(mgr_multi.overlays[1].title_label.text(), "👁️ Screen Translation #2")
+        self.assertEqual(mgr_multi.overlays[0].live_badge.text(), "Waiting")
+
+        # 3. Audio Overlay (SubtitleOverlay) 동적 언어 전환 검증
+        audio_cfg = {"ui_lang": "en"}
+        set_ui_language("en")
+        audio_overlay = SubtitleOverlay(audio_cfg)
+        self.assertEqual(audio_overlay.title_label.text(), "🎤 Audio Translation")
+
+        # 일본어로 전환
+        set_ui_language("ja")
+        audio_overlay._apply_ui_language()
+        self.assertEqual(audio_overlay.title_label.text(), "🎤 音声翻訳")
+        self.assertIn("音声", audio_overlay.title_label.text())
+
+        # 한국어로 전환
+        set_ui_language("ko")
+        audio_overlay._apply_ui_language()
+        self.assertEqual(audio_overlay.title_label.text(), "🎤 음성 번역")
+
+        # 4. _lock_product_languages 글로벌 감지 검증
+        with patch("src.product.is_global", return_value=True), \
+             patch("src.i18n.detect_system_ui_language", return_value="ja"):
+            locked_cfg = _lock_product_languages({}, {})
+            self.assertEqual(locked_cfg["ui_lang"], "ja")
+
+        # 복원
+        set_ui_language("ko")
+
+    def test_screen_ocr_worker_language_signature_and_update_config(self):
+        """ScreenOCRWorker가 언어 변경 시 번역 시그니처를 갱신하고 캐시 무효화를 수행하는지 검증"""
+        from src.screen_ocr_worker import ScreenOCRWorker
+        cfg = {"source_lang": "en", "target_lang": "ko", "translation_engine": "google"}
+        worker = ScreenOCRWorker(cfg, translator=MagicMock())
+        sig1 = worker._translation_signature()
+        self.assertIn("en", sig1)
+        self.assertIn("ko", sig1)
+
+        # 언어 변경 update_config 호출
+        new_cfg = {"source_lang": "ja", "target_lang": "en", "translation_engine": "google"}
+        worker.update_config(new_cfg)
+        sig2 = worker._translation_signature()
+        self.assertNotEqual(sig1, sig2)
+        self.assertIn("ja", sig2)
+        self.assertIn("en", sig2)
+        worker.translator.update_config.assert_called_with(new_cfg)
+
+    def test_control_panel_source_target_lang_and_worker_sync(self):
+        """ControlPanel의 언어 변경 시 STT/Screen/Dubbing 워커 및 모델 호환성 동기화 검증"""
+        from PyQt6.QtWidgets import QApplication
+        from src.control_panel import ControlPanel
+
+        app = QApplication.instance() or QApplication([])
+
+        cfg = {
+            "source_lang": "en",
+            "target_lang": "ko",
+            "translation_engine": "exaone",
+            "stt_provider": "local",
+            "model_size": "distil-small.en",
+            "device": "cpu",
+        }
+
+        # Mock dependencies
+        panel = ControlPanel.__new__(ControlPanel)
+        from PyQt6.QtWidgets import QWidget
+        QWidget.__init__(panel)
+        panel.config = dict(cfg)
+        panel.save_config_cb = MagicMock()
+        panel.stt_thread = MagicMock()
+        panel.screen_worker = MagicMock()
+        panel.overlay = MagicMock()
+        panel.overlay.config = {}
+        panel.screen_overlay = MagicMock()
+        panel.screen_overlay.config = {}
+        panel.dubbing_engine = MagicMock()
+        panel.update_engine_status = MagicMock()
+        panel._sync_all_pipeline_status = MagicMock()
+
+        # 1. 출발어를 일본어('ja')로 변경 시
+        with patch("src.stt_model_manager.STTModelManager.is_model_installed", return_value=True):
+            panel._apply_source_lang("ja")
+
+        self.assertEqual(panel.config["source_lang"], "ja")
+        self.assertEqual(panel.config["stt_language"], "ja")
+        panel.stt_thread.update_config.assert_called_with(panel.config)
+        panel.screen_worker.update_config.assert_called_with(panel.config)
+        panel.dubbing_engine.update_config.assert_called_with(panel.config)
+        # 영어 전용 모델('distil-small.en')에서 다국어 모델('small')로 지능형 자동 전환 확인
+        self.assertEqual(panel.config["model_size"], "small")
+
+        # EXAONE(한·영 전용)에서 ja->ko 변환 시 다국어 모델 또는 구글로 자동 전환 확인
+        with patch("src.llm_model_manager.LLMModelManager.is_multilingual_model_installed", return_value="hymt"):
+            panel._check_multilingual_model_compatibility()
+            self.assertEqual(panel.config["translation_engine"], "hymt")
+
+        # 2. 도착어('target_lang') 변경 시
+        panel._apply_target_lang("es")
+        self.assertEqual(panel.config["target_lang"], "es")
+        panel.screen_worker.update_config.assert_called_with(panel.config)
+        panel.dubbing_engine.clear_queue.assert_called()
+
 
 if __name__ == "__main__":
     unittest.main()

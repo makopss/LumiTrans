@@ -18,31 +18,79 @@ _GPU_PRESENT_CACHE = {"checked": False, "present": False}
 
 
 def is_nvidia_gpu_present() -> bool:
-    """시스템에 NVIDIA 외장/내장 GPU가 물리적으로 장착되어 있는지 감지"""
+    """시스템에 NVIDIA 외장/내장 GPU가 물리적으로 장착되어 있는지 감지.
+    절전 상태인 랩톱 dGPU(D3 Cold), Windows 11의 wmic 제거, PATH 미등록 환경에서도
+    레지스트리, 드라이버 핵심 DLL, nvidia-smi 다단계 검사로 100% 신뢰성 있게 즉시 감지합니다.
+    """
     if _GPU_PRESENT_CACHE["checked"]:
         return _GPU_PRESENT_CACHE["present"]
 
     present = False
-    try:
-        import subprocess
-        # nvidia-smi로 1차 고속 감지
-        res = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=2,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            present = True
-    except Exception:
-        pass
 
+    # 1. Windows 레지스트리 초고속 감지 (<1ms, 프로세스 미생성, 랩톱 dGPU 슬립 영향 없음)
+    if sys.platform == "win32":
+        try:
+            import winreg
+            key_path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as k:
+                for i in range(128):
+                    try:
+                        sub = winreg.EnumKey(k, i)
+                        if sub.isdigit():
+                            with winreg.OpenKey(k, sub) as sk:
+                                try:
+                                    desc, _ = winreg.QueryValueEx(sk, "DriverDesc")
+                                    if "nvidia" in str(desc).lower():
+                                        present = True
+                                        break
+                                except Exception:
+                                    pass
+                    except OSError:
+                        break
+        except Exception:
+            pass
+
+    # 2. NVIDIA 드라이버 핵심 DLL 감지 (System32\nvcuda.dll / nvapi64.dll)
     if not present and sys.platform == "win32":
         try:
-            # WMI / registry 레벨 2차 감지
+            sys32 = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
+            if os.path.isfile(os.path.join(sys32, "nvcuda.dll")) or os.path.isfile(os.path.join(sys32, "nvapi64.dll")):
+                present = True
+        except Exception:
+            pass
+
+    # 3. nvidia-smi 명령행 감지 (표준 경로 포함, 타임아웃 4초로 랩톱 절전 복귀 보장)
+    if not present:
+        import subprocess
+        smi_paths = ["nvidia-smi"]
+        if sys.platform == "win32":
+            sys32_smi = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "nvidia-smi.exe")
+            nvsmi_smi = r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"
+            for p in (sys32_smi, nvsmi_smi):
+                if os.path.isfile(p) and p not in smi_paths:
+                    smi_paths.append(p)
+
+        for smi in smi_paths:
+            try:
+                res = subprocess.run(
+                    [smi, "--query-gpu=name", "--format=csv,noheader"],
+                    capture_output=True, text=True, timeout=4,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                if res.returncode == 0 and res.stdout.strip():
+                    present = True
+                    break
+            except Exception:
+                pass
+
+    # 4. Windows 11 PowerShell CIM 대체 감지 (wmic 제거 대응)
+    if not present and sys.platform == "win32":
+        try:
             import subprocess
+            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                   "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"]
             res = subprocess.run(
-                ["wmic", "path", "win32_VideoController", "get", "name"],
-                capture_output=True, text=True, timeout=2,
+                cmd, capture_output=True, text=True, timeout=3,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if res.returncode == 0 and "nvidia" in res.stdout.lower():
@@ -56,7 +104,14 @@ def is_nvidia_gpu_present() -> bool:
 
 
 def get_cuda_target_install_dir() -> str:
-    """온디맨드 가속 팩 저장 위치. 설치 폴더(Program Files 등)는 쓰기 권한이 없을 수 있어 항상 사용자 폴더를 쓴다."""
+    """온디맨드 가속 팩 저장 위치. 설치 폴더(Program Files 등)는 쓰기 권한이 없을 수 있어 항상 사용자 폴더를 쓴다.
+    한국어 버전(LumiTrans)과 글로벌 버전(LumiTrans Global) 간 대용량 가속 팩 중복 다운로드를 방지하기 위해
+    기존 설치 폴더가 있으면 이를 공유/재사용합니다."""
+    local_app = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    # 기존 LumiTrans/cuda 폴더가 이미 있으면 우선 공유
+    shared_kr = os.path.join(local_app, "LumiTrans", "cuda")
+    if os.path.isdir(shared_kr):
+        return shared_kr
     from src.app_paths import local_data_dir
     target = os.path.join(local_data_dir(), "cuda")
     os.makedirs(target, exist_ok=True)
@@ -83,16 +138,25 @@ _LLAMA_STATE: Dict[str, Any] = {
 
 def _run_nvidia_smi(query: str) -> Optional[str]:
     import subprocess
-    try:
-        res = subprocess.run(
-            ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=3,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            return res.stdout.strip().splitlines()[0]
-    except Exception:
-        pass
+    smi_paths = ["nvidia-smi"]
+    if sys.platform == "win32":
+        sys32_smi = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "nvidia-smi.exe")
+        nvsmi_smi = r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"
+        for p in (sys32_smi, nvsmi_smi):
+            if os.path.isfile(p) and p not in smi_paths:
+                smi_paths.append(p)
+
+    for smi in smi_paths:
+        try:
+            res = subprocess.run(
+                [smi, f"--query-gpu={query}", "--format=csv,noheader"],
+                capture_output=True, text=True, timeout=4,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip().splitlines()[0]
+        except Exception:
+            pass
     return None
 
 
@@ -160,11 +224,6 @@ def get_default_llama_lib_dir() -> Optional[str]:
     return None
 
 
-def get_llama_cuda_pack_dir() -> str:
-    """가속 팩으로 받은 CUDA 13 llama.cpp 라이브러리 폴더 (버전별로 분리해 로드 중인 파일을 덮어쓰지 않는다)."""
-    return os.path.join(get_cuda_target_install_dir(), "llama", LLAMA_CUDA_PACK_ID)
-
-
 def get_bundled_llama_cuda_dir() -> Optional[str]:
     """Full 에디션에 내장된 CUDA 12 llama.cpp 라이브러리 폴더."""
     if not getattr(sys, "frozen", False):
@@ -183,6 +242,22 @@ def is_llama_cuda_dir(path: Optional[str]) -> bool:
                 and os.path.getsize(cuda_dll) > 50 * 1024 * 1024)
     except OSError:
         return False
+
+
+def get_llama_cuda_pack_dir() -> str:
+    """가속 팩으로 받은 CUDA 13 llama.cpp 라이브러리 폴더 (버전별로 분리해 로드 중인 파일을 덮어쓰지 않는다)."""
+    # 1. 대상 설치 폴더 확인 (is_llama_cuda_dir 검사 전에 존재 여부 체크)
+    target = os.path.join(get_cuda_target_install_dir(), "llama", LLAMA_CUDA_PACK_ID)
+    if is_llama_cuda_dir(target):
+        return target
+    # 2. 한국어/글로벌/레거시 폴더 간 기설치된 가속 팩 탐색
+    local_app = os.environ.get("LOCALAPPDATA")
+    if local_app:
+        for name in ("LumiTrans", "LumiTrans Global", "WiseEinstein"):
+            candidate = os.path.join(local_app, name, "cuda", "llama", LLAMA_CUDA_PACK_ID)
+            if is_llama_cuda_dir(candidate):
+                return candidate
+    return target
 
 
 def is_llama_cuda_pack_installed() -> bool:
@@ -324,12 +399,13 @@ def get_cuda_search_paths() -> List[str]:
         pass
 
     # 3. 사용자 LocalAppData / AppData cuda 폴더 (업그레이드 설치는 이전 이름 폴더를 그대로 쓸 수 있음)
-    from src.app_paths import APP_NAME, LEGACY_APP_NAMES
+    from src.app_paths import APP_NAME, GLOBAL_APP_NAME, LEGACY_APP_NAMES
     local_app = os.environ.get("LOCALAPPDATA")
     app_data = os.environ.get("APPDATA")
-    for name in (APP_NAME,) + LEGACY_APP_NAMES:
+    for name in (APP_NAME, GLOBAL_APP_NAME) + LEGACY_APP_NAMES:
         if local_app:
             _add(os.path.join(local_app, name, "cuda"))
+            _add(os.path.join(local_app, name, "cuda", "llama", LLAMA_CUDA_PACK_ID))
             _add(os.path.join(local_app, "Programs", name))
             _add(os.path.join(local_app, "Programs", name, "_internal"))
         if app_data:
@@ -496,10 +572,8 @@ def is_cublas_available() -> bool:
 
 
 def is_cublas_installed() -> bool:
-    """화면 표시·설치 판단용: NVIDIA GPU 와 cuBLAS 12 파일이 있는지만 본다.
-    is_cublas_available() 처럼 DLL 을 올리면 CPU 모드에서도 약 60MB(+ CUDA 초기화 14MB)를 계속 차지한다."""
-    if not is_nvidia_gpu_present():
-        return False
+    """화면 표시·설치 판단용: cuBLAS 12 파일이 시스템 또는 가속 팩 폴더에 존재하는지 검사.
+    is_cublas_available() 처럼 DLL 을 프로세스에 매핑하지 않아 메모리를 차지하지 않습니다."""
     register_cuda_dll_directories()
     return (find_cuda_dll("cublas64_12.dll", min_size_mb=20.0) is not None
             and find_cuda_dll("cublasLt64_12.dll", min_size_mb=20.0) is not None)

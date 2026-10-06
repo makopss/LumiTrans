@@ -11,12 +11,12 @@ GLOBAL_PRESET_COPY = {
     "live": {
         "name": "⚡ Low latency",
         "short_name": "⚡ Live",
-        "desc": "Translation: Tencent Hy-MT2 1.8B | STT: Whisper Large Turbo, auto-detect | Tempo: YouTube",
+        "desc": "Translation: Tencent Hy-MT2 1.8B | STT: Whisper Small, auto-detect | Tempo: YouTube",
     },
     "balance": {
         "name": "⚖️ Smart balance",
         "short_name": "⚖️ Balance",
-        "desc": "Translation: Tencent Hy-MT2 1.8B | STT: Whisper Large Turbo, auto-detect | Tempo: Smart",
+        "desc": "Translation: Tencent Hy-MT2 1.8B | STT: Whisper Small, auto-detect | Tempo: Smart",
     },
     "cinema": {
         "name": "🎬 Film and drama",

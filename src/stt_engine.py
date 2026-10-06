@@ -41,7 +41,8 @@ SENTENCE_ENDINGS = ('.', '?', '!')
 def normalize_whisper_model_id(raw_model: str) -> str:
     """faster-whisper 모델 식별자 정규화 (외부 API 모델명 및 오타 방지)"""
     if not raw_model:
-        return "distil-small.en"
+        from src.product import is_global
+        return "small" if is_global() else "distil-small.en"
     raw = str(raw_model).strip()
     mapping = {
         "whisper-large-v3-turbo": "large-v3-turbo",
@@ -416,7 +417,9 @@ class STTWorker(threading.Thread):
         self.dubbing_engine = dubbing_engine
         self._progress_callback = progress_callback
         
-        self.model_size = self.config.get("model_size", "distil-small.en")
+        from src.product import is_global
+        fallback_model = "small" if is_global() else "distil-small.en"
+        self.model_size = self.config.get("model_size", fallback_model)
         self.device = self.config.get("device", "cuda")
         self.compute_type = self.config.get("compute_type", "float16")
         self.sentence_mode = self.config.get("sentence_mode", True)
@@ -740,10 +743,12 @@ class STTWorker(threading.Thread):
 
         self._local_model_loading = True
         try:
-            # 대안 2: 사용자가 설정/보유한 로컬 기본 STT 모델(model_size)을 우선 연동, 미지정 시 distil-small.en
-            configured_model = self.config.get("model_size", "distil-small.en")
+            # 대안 2: 사용자가 설정/보유한 로컬 기본 STT 모델(model_size)을 우선 연동, 미지정 시 기본 번들 모델
+            from src.product import is_global
+            fb_model = "small" if is_global() else "distil-small.en"
+            configured_model = self.config.get("model_size", fb_model)
             if configured_model in ("parakeet-tdt-0.6b", "sensevoice-small", "moonshine-tiny"):
-                target_model_id = "distil-small.en"
+                target_model_id = fb_model
             else:
                 target_model_id = normalize_whisper_model_id(configured_model)
 
@@ -762,9 +767,11 @@ class STTWorker(threading.Thread):
             print(f"[STT] 로컬 백업 STT 모델({target_model_id} {target_device.upper()}) 준비 완료!")
             return True
         except Exception as e:
-            print(f"[STT] 로컬 백업 모델({target_model_id}) 로드 실패({e}), distil-small.en CPU int8 모드로 대체합니다...")
+            from src.product import is_global
+            fb_model = "small" if is_global() else "distil-small.en"
+            print(f"[STT] 로컬 백업 모델({target_model_id}) 로드 실패({e}), {fb_model} CPU int8 모드로 대체합니다...")
             try:
-                fb_target, fb_hub = _resolve_local_model_target("distil-small.en")
+                fb_target, fb_hub = _resolve_local_model_target(fb_model)
                 self.model = WhisperModel(
                     fb_target,
                     device="cpu",
@@ -772,7 +779,7 @@ class STTWorker(threading.Thread):
                     cpu_threads=4,
                     download_root=fb_hub
                 )
-                print("[STT] 로컬 백업 STT 모델(distil-small.en CPU) 준비 완료!")
+                print(f"[STT] 로컬 백업 STT 모델({fb_model} CPU) 준비 완료!")
                 return True
             except Exception as e2:
                 print(f"[STT] 로컬 백업 모델 준비 최종 실패: {e2}")
@@ -800,11 +807,13 @@ class STTWorker(threading.Thread):
             print(f"[STT] Groq Cloud LPU 모드 가동 완료! (API 모델: {groq_m}, GPU 0%, 지연 0.05s)")
             return
 
+        from src.product import is_global
+        fb_model = "small" if is_global() else "distil-small.en"
         model_id = normalize_whisper_model_id(self.model_size)
         if not (STTModelManager.is_model_installed(model_id) or STTModelManager.is_bundled_model(model_id)) and self.model_size not in ("sensevoice-small", "moonshine-tiny", "parakeet-tdt-0.6b"):
-            print(f"[STT] '{model_id}' 모델이 로컬에 설치되어 있지 않아 기본 번들 모델(distil-small.en)로 안전하게 대체합니다 (모델 관리창에서 다운로드 가능).")
-            self.model_size = "distil-small.en"
-            self.config["model_size"] = "distil-small.en"
+            print(f"[STT] '{model_id}' 모델이 로컬에 설치되어 있지 않아 기본 번들 모델({fb_model})로 안전하게 대체합니다 (모델 관리창에서 다운로드 가능).")
+            self.model_size = fb_model
+            self.config["model_size"] = fb_model
             model_id = normalize_whisper_model_id(self.model_size)
 
         print(f"[STT] 모델 로드 중: {self.model_size} (디바이스: {self.device}, 타입: {self.compute_type})...")
@@ -931,9 +940,11 @@ class STTWorker(threading.Thread):
                 print(f"[STT] CPU int8 폴백 완료! ({fallback_id}) [대상: {fb_target}]")
                 self._report_load_progress(tr("splash_loaded_stt", model=fallback_id), 70)
             except Exception as e2:
-                print(f"[STT] CPU 폴백 실패: {e2}. 기본 내장 번들 모델(distil-small.en)로 최종 폴백...")
+                from src.product import is_global
+                fb_model = "small" if is_global() else "distil-small.en"
+                print(f"[STT] CPU 폴백 실패: {e2}. 기본 내장 번들 모델({fb_model})로 최종 폴백...")
                 try:
-                    def_target, def_hub = _resolve_local_model_target("distil-small.en")
+                    def_target, def_hub = _resolve_local_model_target(fb_model)
                     self.model = WhisperModel(
                         def_target,
                         device="cpu",
@@ -941,7 +952,7 @@ class STTWorker(threading.Thread):
                         cpu_threads=4,
                         download_root=def_hub
                     )
-                    print(f"[STT] distil-small.en 기본 내장 모델 최종 폴백 완료! [대상: {def_target}]")
+                    print(f"[STT] {fb_model} 기본 내장 모델 최종 폴백 완료! [대상: {def_target}]")
                 except Exception as e3:
                     print(f"[STT] 로컬 모델 초기화 최종 실패: {e3}")
                     self.model = None

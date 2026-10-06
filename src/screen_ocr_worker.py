@@ -229,6 +229,14 @@ class ScreenOCRWorker(threading.Thread):
         return tuple(tuple(r) for r in rois
                      if isinstance(r, (tuple, list)) and len(r) == 4 and r[2] > 20 and r[3] > 20)
 
+    def update_config(self, config):
+        """설정(언어, 엔진 등) 변경 시 실시간 반영 및 기존 화면 텍스트 즉시 재번역 유도"""
+        with self._request_lock:
+            self.config = dict(config)
+            if self.translator and hasattr(self.translator, "update_config"):
+                self.translator.update_config(config)
+            self.invalidate_regions()
+
     def invalidate_regions(self):
         """Invalidate queued and in-flight work, including remove/re-add at the same coordinates."""
         with self._request_lock:
@@ -244,7 +252,8 @@ class ScreenOCRWorker(threading.Thread):
 
     def _translation_signature(self):
         return tuple(self.config.get(key) for key in (
-            "translation_engine", "selected_llm_model", "llm_backend", "device"))
+            "translation_engine", "selected_llm_model", "llm_backend", "device",
+            "source_lang", "target_lang"))
 
     def _is_current(self, token):
         generation, rois, idx, serial, instant, engine_signature = token

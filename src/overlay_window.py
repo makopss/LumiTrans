@@ -874,6 +874,18 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             if not isinstance(getattr(self, 'stroke_effect', None), ThickOutlineEffect) or getattr(self.stroke_effect, 'thickness', 0) != stroke_w:
                 self._apply_text_effect()
 
+    @staticmethod
+    def _is_waiting_badge_text(txt: str) -> bool:
+        if not txt:
+            return True
+        clean = txt.strip()
+        waiting_variants = {
+            "대기 중", "Waiting", "Waiting...", "準備中", "待機中", "等待中",
+            "En espera", "En attente", "Warten", "Aguardando", "Ожидание",
+            "In attesa", "Đang chờ", "กำลังรอ", "Menunggu", "قيد الانتظار", "प्रतीक्षारत"
+        }
+        return clean in waiting_variants or "대기" in clean or "wait" in clean.lower()
+
     def _apply_ui_language(self):
         self.setWindowTitle(tr("overlay_audio_title"))
         if hasattr(self, "title_label") and self.title_label:
@@ -889,7 +901,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self.combo_engine.setToolTip(tr("overlay_tip_engine_combo"))
         if hasattr(self, "live_badge") and self.live_badge:
             self.live_badge.setToolTip(tr("overlay_tip_live_badge"))
-            if self.live_badge.text() in ("대기 중", "Waiting...", "準備中"):
+            if self._is_waiting_badge_text(self.live_badge.text()):
                 self.live_badge.setText(tr("overlay_waiting"))
             else:
                 self.update_live_display()
