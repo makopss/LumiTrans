@@ -460,7 +460,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
                     if text_w <= 0:
                         continue
                     # 실제 베이스라인(baseline) 및 글자들의 시각적 수직 중심(visual center) 계산
-                    baseline_y = label.y() + doc_y + line.rect().y() + line.ascent()
+                    label_pos = label.mapTo(self, QPoint(0, 0))
+                    baseline_y = label_pos.y() + doc_y + line.rect().y() + line.ascent()
                     text_center_y = baseline_y - (cap_h / 2.0)
 
                     box_w = min(self.width() - 8, text_w + pad_x * 2)
@@ -474,24 +475,31 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def _calc_subtitle_box_rects(self):
         """자막 텍스트(영문/한글)의 실제 렌더링 라인별 밀착 반투명 라운드 박스 목록 계산"""
+        if getattr(self, "_is_waiting", False) or not getattr(self, "current_translated", "").strip() or self.current_translated.strip() == "...":
+            self._subtitle_box_cache = None
+            return []
+
         show_orig = self.config.get("show_original", True)
-        orig = self.label_original.text() if show_orig and hasattr(self, 'label_original') else ""
-        trans = self.label_translated.text() if hasattr(self, 'label_translated') else ""
+        orig_visible = bool(show_orig and hasattr(self, 'label_original') and self.label_original.isVisible())
+        trans_visible = bool(hasattr(self, 'label_translated') and self.label_translated.isVisible())
+        orig = self.label_original.text() if orig_visible else ""
+        trans = self.label_translated.text() if trans_visible else ""
         key = (
             self.width(),
             orig,
             trans,
+            orig_visible,
+            trans_visible,
             int(self.config.get("font_size", 22)),
             float(self.config.get("letter_spacing", 0.0)),
-            bool(show_orig),
         )
         cached = getattr(self, "_subtitle_box_cache", None)
         if cached and cached[0] == key:
             return cached[1]
         boxes = []
-        if show_orig and hasattr(self, 'label_original'):
+        if orig_visible:
             boxes.extend(self._calc_label_text_boxes(self.label_original, pad_x=12, pad_y=3))
-        if hasattr(self, 'label_translated'):
+        if trans_visible:
             boxes.extend(self._calc_label_text_boxes(self.label_translated, pad_x=14, pad_y=4))
         self._subtitle_box_cache = (key, boxes)
         return boxes
@@ -1138,6 +1146,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
     def display_subtitle(self, original_text: str, translated_text: str, engine_badge: str = ""):
         if getattr(self, '_audio_paused', False):
             return
+        self._is_waiting = False
+        self._subtitle_box_cache = None
         self.last_translated_time = time.time()
         self.is_previewing_new_sentence = False
         self.current_original = original_text
@@ -1164,14 +1174,18 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.clear_timer.start(8000)
         if hasattr(self, 'idle_timer'):
             self.idle_timer.start(3500)
+        self.update()
 
     def fade_or_clear_subtitles(self):
         if hasattr(self, '_typewriter_timer') and self._typewriter_timer.isActive():
             self._typewriter_timer.stop()
+        self._is_waiting = True
+        self._subtitle_box_cache = None
         self.current_original = ""
         self.current_translated = ""
         self.label_original.setText("")
         self._set_label_html(self.label_translated, "...", self._translated_color())
+        self.update()
 
     def set_external_handlers(self, on_toggle_pause=None, on_change_engine=None, on_open_settings=None, on_sync_opacity=None, on_visibility_change=None, on_sync_font=None, on_sync_click_through=None, on_sync_clean_text=None, on_sync_show_speaker=None):
         self.ext_toggle_pause = on_toggle_pause
@@ -1403,8 +1417,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         else:
             self._set_header_chrome_opacity(0.0)
         self.size_grip.hide()
-        if self.clean_text_mode and hasattr(self, 'label_original'):
-            self.label_original.hide()
+        # 주의: 자막 원문(label_original)을 idle 상태라고 해서 임의로 숨기면(hide)
+        # 자막 텍스트와 배경 박스의 수직 위치가 불일치해지고 상하 박스가 비어 보이는 심각한 디싱크가 발생하므로 절대 hide하지 않는다.
         self.update()
 
     def enterEvent(self, event):

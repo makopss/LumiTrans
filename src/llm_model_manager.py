@@ -89,7 +89,7 @@ def format_cuda_arch(capability):
     return f"sm_{major}{minor}"
 
 
-def decide_n_gpu_layers(device, cuda_binary, supports_offload, capability, architectures):
+def decide_n_gpu_layers(device, cuda_binary, supports_offload, capability, architectures, free_vram_mb=None, model_size_mb=None):
     """GPU 오프로딩 레이어 수 결정.
 
     NVIDIA 드라이버는 PTX JIT 컴파일러를 통해 상위 아키텍처(예: Blackwell 연산 능력 12.0 등)에서도
@@ -97,19 +97,39 @@ def decide_n_gpu_layers(device, cuda_binary, supports_offload, capability, archi
     """
     if str(device or "").lower() == "cpu" or not cuda_binary or not supports_offload:
         return 0, ""
-    if capability is None or not architectures:
-        return -1, ""
-    if capability in architectures:
-        return -1, ""
-    min_arch = min(architectures)
-    if capability >= min_arch:
-        return -1, ""
-    supported = ", ".join(format_cuda_arch(item) for item in sorted(architectures))
-    cap_label = f"{capability[0]}.{capability[1]}"
-    return 0, (
-        f"GPU 연산 능력 {cap_label} 용 CUDA 커널이 없습니다 (포함된 아키텍처: {supported}). "
-        "호환성을 위해 CPU로 로드합니다."
-    )
+    if capability is not None and architectures:
+        min_arch = min(architectures)
+        if capability < min_arch:
+            supported = ", ".join(format_cuda_arch(item) for item in sorted(architectures))
+            cap_label = f"{capability[0]}.{capability[1]}"
+            return 0, (
+                f"GPU 연산 능력 {cap_label} 용 CUDA 커널이 없습니다 (포함된 아키텍처: {supported}). "
+                "호환성을 위해 CPU로 로드합니다."
+            )
+
+    # VRAM 여유 용량 동적 검사 (게임 구동 및 STT CUDA 모델과 동시 실행 시 OOM 크래시 방지)
+    if free_vram_mb is not None:
+        size_mb = model_size_mb or 1200
+        required_mb = int(size_mb * 1.35) + 300
+        # 여유가 800MB 미만이면 게임 및 시스템 충돌 방지를 위해 완전 CPU 안전 로드
+        if free_vram_mb < 800:
+            return 0, (
+                f"사용 가능한 GPU VRAM이 부족합니다 ({free_vram_mb}MB 남음 / 최소 800MB 필요). "
+                "게임 및 시스템 충돌 방지를 위해 CPU 모드로 안전 로드합니다."
+            )
+        # 전체 오프로딩에 필요한 용량이 부족한 경우 안전 레이어 부분 오프로딩
+        if free_vram_mb < required_mb + 500:
+            mb_per_layer = max(25, int(size_mb / 32))
+            usable_mb = free_vram_mb - 500 - 250  # 게임/시스템 500MB 여유 + 연산 버퍼 250MB
+            safe_layers = max(0, int(usable_mb / mb_per_layer))
+            if safe_layers < 8:
+                return 0, (
+                    f"GPU VRAM 여유 부족 ({free_vram_mb}MB / 필요 {required_mb}MB). "
+                    "시스템 안정성을 위해 CPU 모드로 안전 로드합니다."
+                )
+            return safe_layers, f"GPU VRAM 여유({free_vram_mb}MB)에 맞춰 {safe_layers}개 레이어만 GPU에 안전 오프로딩합니다."
+
+    return -1, ""
 
 RECOMMENDED_OLLAMA_MODELS = [
     {
@@ -1141,9 +1161,9 @@ class LLMModelManager:
         return set()
 
     @classmethod
-    def resolve_n_gpu_layers(cls, config=None):
-        """(-1, "")이면 GPU 전체 오프로딩, (0, 안내문)이면 CPU로 안전 로드."""
-        from src.cuda_utils import configure_llama_backend
+    def resolve_n_gpu_layers(cls, config=None, model_path=None):
+        """(-1, "")이면 GPU 전체 오프로딩, (n>0, 안내문)이면 부분 오프로딩, (0, 안내문)이면 CPU로 안전 로드."""
+        from src.cuda_utils import configure_llama_backend, get_free_vram_mb
         config = config or {}
         device = config.get("device", "")
         if str(device).lower() == "cpu":
@@ -1162,12 +1182,24 @@ class LLMModelManager:
             supports = False
         if not supports:
             return 0, "llama.cpp CUDA 라이브러리가 GPU 오프로드를 지원하지 않아 CPU로 로드합니다."
+
+        model_size_mb = None
+        if model_path and os.path.isfile(model_path):
+            try:
+                model_size_mb = os.path.getsize(model_path) // (1024 * 1024)
+            except OSError:
+                pass
+
+        free_vram_mb = get_free_vram_mb()
+
         return decide_n_gpu_layers(
             device,
             True,
             supports,
             cls.query_nvidia_compute_capability(),
             cls.bundled_cuda_architectures() if supports else set(),
+            free_vram_mb=free_vram_mb,
+            model_size_mb=model_size_mb,
         )
 
     @classmethod

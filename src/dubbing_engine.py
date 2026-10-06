@@ -279,6 +279,7 @@ class DubbingEngine:
         self._stop_playback_requested = False
         self.last_playback_end_time = 0.0
         self.recent_dubbed_history = []  # [(cleaned_text, timestamp), ...]
+        self.recent_enqueued_items = []  # [(clean_text, orig_text, source, timestamp), ...]
 
         self._mixer_initialized = False
         self.channel = None
@@ -497,7 +498,7 @@ class DubbingEngine:
             generation = getattr(self, "_generation", 0)
             source_generations = getattr(self, "_source_generations", {})
             return (self.is_enabled()
-                    and getattr(self, "_source_active", {}).get(source, True)
+                    and (item.get("force_active", False) or getattr(self, "_source_active", {}).get(source, True))
                     and item.get("_generation", generation) == generation
                     and item.get("_source_generation", source_generations.get(source, 0))
                     == source_generations.get(source, 0)
@@ -565,6 +566,7 @@ class DubbingEngine:
             self._generation += 1
             self._clear_waiting_queues()
             self.stop_current_audio()
+            self.recent_enqueued_items = []
 
     def _clear_waiting_queues(self):
         while not self.text_queue.empty():
@@ -604,6 +606,7 @@ class DubbingEngine:
                     break
             for pitem in rem_play:
                 self.playback_queue.put(pitem)
+            self.recent_enqueued_items = [it for it in getattr(self, "recent_enqueued_items", []) if it[2] != source]
         _safe_print(f"[DubbingEngine] [CLEAN] '{source}' 소스 대기열 정리 완료")
 
     @staticmethod
@@ -636,13 +639,31 @@ class DubbingEngine:
 
         return "", t
 
-    def enqueue(self, translated_text: str, speaker_name: str = "", orig_text: str = "", source: str = "audio", region_idx: int = 0, speaker_confirmed: bool = True, segment_id: str = None):
+    @staticmethod
+    def is_duplicate_or_similar(text1: str, text2: str, threshold: float = 0.72) -> bool:
+        """두 텍스트의 동일성 및 유사도 판별 (자막 지터 및 오디오/화면 동시 더빙 중복 발화 방지)"""
+        if not text1 or not text2:
+            return False
+        t1 = re.sub(r'[\W_]+', '', str(text1).lower())
+        t2 = re.sub(r'[\W_]+', '', str(text2).lower())
+        if not t1 or not t2:
+            return False
+        if t1 == t2:
+            return True
+        # 한쪽이 다른 쪽을 실질적으로 포함하는 경우 (자막 누적 또는 짧은 프래그먼트)
+        if len(t1) >= 4 and len(t2) >= 4:
+            if t1 in t2 or t2 in t1:
+                return True
+        import difflib
+        return difflib.SequenceMatcher(None, t1, t2).ratio() >= threshold
+
+    def enqueue(self, translated_text: str, speaker_name: str = "", orig_text: str = "", source: str = "audio", region_idx: int = 0, speaker_confirmed: bool = True, segment_id: str = None, force_active: bool = False):
         """
         번역 완료된 한국어 문장을 더빙 대기열에 추가합니다.
         source: 'audio' (오디오 통역) 또는 'screen' (화면 OCR)
         """
         with self.lock:
-            if (not self.is_enabled() or not self._source_active.get(source, True)
+            if (not self.is_enabled() or (not force_active and not self._source_active.get(source, True))
                     or not self.config.get(f"dubbing_source_{source}", source == "audio")):
                 return
             request_generation = self._generation
@@ -693,29 +714,52 @@ class DubbingEngine:
             "orig_text": orig_text,
             "source": source,
             "region_idx": region_idx,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "force_active": force_active,
         }
         item['segment_ids'] = [segment_id] if segment_id else []
         with self.lock:
-            if (not self.is_enabled() or not self._source_active.get(source, True)
+            if (not self.is_enabled() or (not force_active and not self._source_active.get(source, True))
                     or not self.config.get(f"dubbing_source_{source}", source == "audio")
                     or request_generation != self._generation
                     or request_source_generation != self._source_generations.get(source, 0)):
                 return
-            if source == "screen":
-                now = time.time()
-                self.recent_dubbed_history = [
-                    (t, ts) for (t, ts) in self.recent_dubbed_history if now - ts < 3.0
-                ]
-                if any(clean_text == past_text and now - past_ts < 1.5
-                       for past_text, past_ts in self.recent_dubbed_history):
+
+            now = time.time()
+            if not hasattr(self, "recent_enqueued_items"):
+                self.recent_enqueued_items = []
+
+            # 8.0초 지난 대사는 중복 검사 목록에서 정리
+            self.recent_enqueued_items = [
+                (t, o, s, ts) for (t, o, s, ts) in self.recent_enqueued_items if now - ts < 8.0
+            ]
+
+            # 1. 화면-음성 간 교차 중복 및 동일 소스 연속 중복 발화 검사
+            for past_trans, past_orig, past_src, past_ts in self.recent_enqueued_items:
+                # A. 화면과 음성이 동시 켜져 있을 때 같은 대사를 번역한 경우 중복 차단
+                if source != past_src and (now - past_ts < 7.0):
+                    if (self.is_duplicate_or_similar(clean_text, past_trans, threshold=0.68) or
+                        (orig_text and past_orig and self.is_duplicate_or_similar(orig_text, past_orig, threshold=0.70))):
+                        _safe_print(f"[Dubbing] [DEDUP] {source} 더빙이 {past_src} 더빙과 중복되어 생략: '{clean_text}'")
+                        return
+
+                # B. 동일 소스(화면 OCR 지터 등)에서 8초 이내 유사한 대사가 반복 유입된 경우 차단
+                if source == past_src and (now - past_ts < 7.0):
+                    if self.is_duplicate_or_similar(clean_text, past_trans, threshold=0.72):
+                        _safe_print(f"[Dubbing] [DEDUP] {source} 연속 유사 대사 중복 제거: '{clean_text}'")
+                        return
+
+            # 2. 현재 재생 중인 발화와 중복 검사
+            if self._is_playing and getattr(self, "_current_speaking_text", None):
+                if self.is_duplicate_or_similar(clean_text, self._current_speaking_text, threshold=0.70):
+                    _safe_print(f"[Dubbing] [DEDUP] 현재 재생 중인 대사와 유사하여 생략: '{clean_text}'")
                     return
+
             item["_generation"] = self._generation
             item["_source_generation"] = self._source_generations.get(source, 0)
             try:
                 self.text_queue.put_nowait(item)
             except queue.Full:
-                # 다른 생산자가 선행 검사 뒤 마지막 칸을 채운 경우에도 멈추지 않는다.
                 try:
                     self.text_queue.get_nowait()
                 except queue.Empty:
@@ -724,7 +768,11 @@ class DubbingEngine:
                     self.text_queue.put_nowait(item)
                 except queue.Full:
                     return
-            self.recent_dubbed_history.append((clean_text, time.time()))
+            self.recent_enqueued_items.append((clean_text, orig_text, source, now))
+            self.recent_dubbed_history.append((clean_text, now))
+            self.recent_dubbed_history = [
+                (t, ts) for (t, ts) in self.recent_dubbed_history if now - ts < 15.0
+            ]
 
     def _is_speaker_dubbing_allowed(self, raw_name: str, display_name: str) -> bool:
         """해당 화자의 더빙이 허용되어 있는지 검사"""

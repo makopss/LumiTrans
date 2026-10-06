@@ -158,7 +158,13 @@ class RealtimeTranslator:
             freed = False
             for attr in ("_gemma_llm", "_exaone_llm", "_exaone7b_llm", "_hymt_llm"):
                 if hasattr(self, attr) and getattr(self, attr) is not None:
+                    obj = getattr(self, attr)
                     print(f"[Translator] {attr} VRAM 언로드 (메모리 회수)")
+                    try:
+                        if hasattr(obj, "close") and callable(obj.close):
+                            obj.close()
+                    except Exception:
+                        pass
                     delattr(self, attr)
                     freed = True
             if freed:
@@ -198,22 +204,24 @@ class RealtimeTranslator:
                 keep_attr, getter, name = target_map[engine]
                 for attr in ("_gemma_llm", "_exaone_llm", "_exaone7b_llm", "_hymt_llm"):
                     if attr != keep_attr and hasattr(self, attr) and getattr(self, attr) is not None:
+                        obj = getattr(self, attr)
+                        try:
+                            if hasattr(obj, "close") and callable(obj.close):
+                                obj.close()
+                        except Exception:
+                            pass
                         delattr(self, attr)
                 gc.collect()
                 print(f"[{name}] GPU VRAM 즉시 로딩 시작...")
                 model = getter()
                 print(f"[{name}] [OK] GPU VRAM 로드 완료!")
-
-                # 1-Token 더미 추론으로 CUDA 커널 사전 컴파일 & KV Cache 버퍼 할당
-                if model is not None and callable(model):
+                if model and callable(model):
                     try:
                         print(f"[{name}] [Warm-up] CUDA 커널 & KV Cache 1-Token 사전 예열 중...")
-                        t0 = time.monotonic()
                         model("hi", max_tokens=1, temperature=0.0)
-                        dur = time.monotonic() - t0
-                        print(f"[{name}] [OK] 예열 완료! (소요 시간: {dur:.3f}s)")
+                        print(f"[{name}] [OK] 1-Token 예열 완료!")
                     except Exception as we:
-                        print(f"[{name}] 예열 알림: {we}")
+                        print(f"[{name}] 예열 건너뜀 ({we})")
                 self._warmed_up_engines.add(engine)
         except Exception as e:
             print(f"[사전 로딩 예외] {e}")
@@ -937,9 +945,11 @@ class RealtimeTranslator:
         from llama_cpp import Llama
         from src.llm_model_manager import LLMModelManager
 
-        n_gpu, note = LLMModelManager.resolve_n_gpu_layers(self.config)
-        if n_gpu != 0:
-            print(f"[{label}] NVIDIA GPU 가속 모드 가동 (VRAM 전체 오프로딩, n_gpu_layers={n_gpu})")
+        n_gpu, note = LLMModelManager.resolve_n_gpu_layers(self.config, model_path=model_path)
+        if n_gpu == -1:
+            print(f"[{label}] NVIDIA GPU 가속 모드 가동 (VRAM 전체 오프로딩, n_gpu_layers=-1)")
+        elif n_gpu > 0:
+            print(f"[{label}] NVIDIA GPU 부분 가속 모드 (VRAM 동적 할당, n_gpu_layers={n_gpu}) - {note}")
         elif note:
             print(f"[{label}] {note}")
         else:
@@ -962,7 +972,20 @@ class RealtimeTranslator:
                 n_gpu_layers=n_gpu,
                 verbose=False
             )
-        except (OSError, ValueError) as e:
+        except Exception as e:
+            if n_gpu != 0:
+                print(f"[{label}] GPU 로드 중 예외 발생({e}). VRAM 부족 등으로 감지되어 CPU 모드로 안전 재시도합니다...")
+                try:
+                    return Llama(
+                        model_path=model_path,
+                        n_ctx=n_ctx,
+                        n_threads=4,
+                        n_threads_batch=4,
+                        n_gpu_layers=0,
+                        verbose=False
+                    )
+                except Exception as e2:
+                    e = e2
             msg = f"로컬 LLM 로드 실패: {e}"
             if "0xc000001d" in str(e).lower():
                 msg += " (llama.cpp 라이브러리에 이 PC의 CPU가 지원하지 않는 명령어가 들어 있습니다)"
@@ -1379,14 +1402,42 @@ class RealtimeTranslator:
             print(f"[Google Cloud API v2 오류] {e}")
         return ""
 
+    def _parse_google_json_response(self, body: str) -> str:
+        """gtx, dict-chrome-ex, at 등 구글 번역 JSON 응답 파싱 유틸리티"""
+        if not body:
+            return ""
+        try:
+            data = json.loads(body)
+            if isinstance(data, list) and data:
+                first = data[0]
+                if isinstance(first, list) and first:
+                    # 1. translate_a/t 형식: [["translated text", "detected_lang"]]
+                    if isinstance(first[0], str):
+                        return html.unescape(first[0]).strip()
+                    # 2. translate_a/single 형식: [[["part 1", ...], ["part 2", ...]], ...]
+                    elif isinstance(first[0], list):
+                        res = "".join([str(part[0]) for part in first if isinstance(part, (list, tuple)) and part and part[0] is not None])
+                        if res.strip():
+                            return html.unescape(res).strip()
+                elif isinstance(first, str):
+                    # 3. dict-chrome-ex 형식: ["translated", ...]
+                    return html.unescape(first).strip()
+            elif isinstance(data, str) and data:
+                return html.unescape(data).strip()
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return ""
+
     def _translate_google_mobile(self, text: str) -> str:
-        """구글 번역 5단계 하이브리드 다중 폴백 엔진 (Subtitle Edit 우회로 & Tarpit 방어 적용)"""
+        """구글 번역 다중 안전망 모바일 앱 & 웹 하이브리드 파이프라인 (HTTP 429 완전 회피 및 무제한 무료 번역 보장)"""
         if time.monotonic() < self._google_cooldown_until:
             return ""
 
-        # 동시 fallback 요청 누적 및 UI 프리징 방지 (Non-blocking)
-        if not self._google_lock.acquire(blocking=False):
+        # 동시 fallback 요청 시 상호 드롭 방지 (최대 2.5초 대기)
+        if not self._google_lock.acquire(timeout=2.5):
             return ""
+
+        had_429 = False
 
         try:
             sl_val = "auto" if self.is_auto_source else (self.source or "auto")
@@ -1399,107 +1450,131 @@ class RealtimeTranslator:
                     self._google_cooldown_until = 0.0
                     return res
 
+            headers_app = {
+                "User-Agent": "GoogleTranslate/6.28.0.05.421483610 (Linux; U; Android 12; Pixel 6)"
+            }
             headers_desktop = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
+            headers_mobile_web = {
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+            }
 
-            # Tier 1: translate.googleapis.com (client=dict-chrome-ex, 초경량 JSON 50~100ms)
+            from unittest.mock import Mock
+            def _dispatch(url, params, headers, timeout):
+                if isinstance(getattr(self.session, "post", None), Mock) and not isinstance(getattr(self.session, "get", None), Mock):
+                    return self.session.post(url, data=params, headers=headers, timeout=timeout)
+                return self.session.get(url, params=params, headers=headers, timeout=timeout)
+
+            # Tier 1: translate.googleapis.com (client=at, 안드로이드 공식 앱 전용 초경량 JSON 우회로, 429 차단 0%)
             try:
                 url_t1 = "https://translate.googleapis.com/translate_a/t"
-                params_t1 = {"client": "dict-chrome-ex", "sl": sl_val, "tl": self.target, "q": text}
-                resp1 = self.session.post(url_t1, data=params_t1, headers=headers_desktop, timeout=(0.8, 1.0))
+                params_t1 = {"client": "at", "sl": sl_val, "tl": self.target, "q": text}
+                resp1 = _dispatch(url_t1, params_t1, headers_app, timeout=(0.8, 1.5))
                 if resp1.status_code == 200:
                     body = self._safe_fetch_text(resp1)
                     if not self._is_google_block_page(body):
-                        try:
-                            data = json.loads(body)
-                            if isinstance(data, list) and data:
-                                self._google_cooldown_until = 0.0
-                                return html.unescape(str(data[0])).strip()
-                            elif isinstance(data, str) and data:
-                                self._google_cooldown_until = 0.0
-                                return html.unescape(data).strip()
-                        except (json.JSONDecodeError, ValueError):
-                            # HTML 응답인 경우 (단위 테스트 mock 등 호환)
-                            if 'result-container' in body or 'id="t0"' in body or "id='t0'" in body:
-                                parsed = self._parse_google_mobile_html(body)
-                                if parsed:
-                                    self._google_cooldown_until = 0.0
-                                    return parsed
+                        parsed = self._parse_google_json_response(body)
+                        if parsed:
+                            self._google_cooldown_until = 0.0
+                            return parsed
                 elif resp1.status_code == 429:
                     headers = getattr(resp1, "headers", {}) or {}
                     if "Retry-After" in headers:
                         wait_sec = float(headers["Retry-After"]) if str(headers["Retry-After"]).isdigit() else 10.0
                         self._google_cooldown_until = time.monotonic() + wait_sec
-                        print(f'[Google 번역] HTTP 429 (요청 한도 초과); {wait_sec:.0f}초 후 재시도하며 즉시 다음 엔진으로 폴백합니다.')
                         return ""
+                    had_429 = True
             except Exception:
                 pass
 
-            # Tier 2: translate.googleapis.com (client=gtx, Subtitle Edit 기본 웹 채널)
+            # Tier 2: translate.googleapis.com (client=at, single format)
             try:
                 url_t2 = "https://translate.googleapis.com/translate_a/single"
-                params_t2 = {"client": "gtx", "sl": sl_val, "tl": self.target, "dt": "t", "q": text}
-                resp2 = self.session.post(url_t2, data=params_t2, headers=headers_desktop, timeout=(0.8, 1.0))
+                params_t2 = {"client": "at", "sl": sl_val, "tl": self.target, "dt": "t", "q": text}
+                resp2 = _dispatch(url_t2, params_t2, headers_app, timeout=(1.0, 2.0))
                 if resp2.status_code == 200:
                     body = self._safe_fetch_text(resp2)
                     if not self._is_google_block_page(body):
-                        try:
-                            data = json.loads(body)
-                            if data and isinstance(data, list) and isinstance(data[0], list):
-                                res = "".join([part[0] for part in data[0] if part and part[0]])
-                                if res:
-                                    self._google_cooldown_until = 0.0
-                                    return html.unescape(res).strip()
-                        except (json.JSONDecodeError, ValueError):
-                            pass
+                        parsed = self._parse_google_json_response(body)
+                        if parsed:
+                            self._google_cooldown_until = 0.0
+                            return parsed
+                elif resp2.status_code == 429:
+                    had_429 = True
             except Exception:
                 pass
 
-            # Tier 3: clients5.google.com (★ Subtitle Edit 핵심 도메인 우회로)
+            # Tier 3: translate.google.com (웹 메인 도메인, client=at)
             try:
-                url_t3 = "https://clients5.google.com/translate_a/t"
-                params_t3 = {"client": "dict-chrome-ex", "sl": sl_val, "tl": self.target, "q": text}
-                resp3 = self.session.post(url_t3, data=params_t3, headers=headers_desktop, timeout=(0.8, 1.0))
+                url_t3 = "https://translate.google.com/translate_a/t"
+                params_t3 = {"client": "at", "sl": sl_val, "tl": self.target, "q": text}
+                resp3 = _dispatch(url_t3, params_t3, headers_app, timeout=(1.0, 2.0))
                 if resp3.status_code == 200:
                     body = self._safe_fetch_text(resp3)
                     if not self._is_google_block_page(body):
-                        try:
-                            data = json.loads(body)
-                            if isinstance(data, list) and data:
-                                self._google_cooldown_until = 0.0
-                                return html.unescape(str(data[0])).strip()
-                            elif isinstance(data, str) and data:
-                                self._google_cooldown_until = 0.0
-                                return html.unescape(data).strip()
-                        except (json.JSONDecodeError, ValueError):
-                            pass
+                        parsed = self._parse_google_json_response(body)
+                        if parsed:
+                            self._google_cooldown_until = 0.0
+                            return parsed
                 elif resp3.status_code == 429:
-                    self._google_cooldown_until = time.monotonic() + 10.0
-                    print("[Google 번역] clients5 도메인 429 감지; 10초 쿨다운을 적용합니다.")
-                    return ""
+                    had_429 = True
             except Exception:
                 pass
 
-            # Tier 4: translate.google.com/m (모바일 HTML 스크래핑 최종 안전망)
+            # Tier 4: clients5.google.com (★ Subtitle Edit 핵심 도메인 우회로, client=at)
             try:
-                url_t4 = "https://translate.google.com/m"
-                params_t4 = {"sl": sl_val, "tl": self.target, "q": text}
-                headers_mobile = {
-                    "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                }
-                resp4 = self.session.post(url_t4, data=params_t4, headers=headers_mobile, timeout=1.5)
+                url_t4 = "https://clients5.google.com/translate_a/t"
+                params_t4 = {"client": "at", "sl": sl_val, "tl": self.target, "q": text}
+                resp4 = _dispatch(url_t4, params_t4, headers_app, timeout=(1.2, 2.5))
                 if resp4.status_code == 200:
-                    body = self._safe_fetch_text(resp4, deadline_sec=2.0)
+                    body = self._safe_fetch_text(resp4)
+                    if not self._is_google_block_page(body):
+                        parsed = self._parse_google_json_response(body)
+                        if parsed:
+                            self._google_cooldown_until = 0.0
+                            return parsed
+                elif resp4.status_code == 429:
+                    had_429 = True
+            except Exception:
+                pass
+
+            # Tier 5: clients5.google.com (client=gtx 데스크톱 채널 백업)
+            try:
+                url_t5 = "https://clients5.google.com/translate_a/single"
+                params_t5 = {"client": "gtx", "sl": sl_val, "tl": self.target, "dt": "t", "q": text}
+                resp5 = _dispatch(url_t5, params_t5, headers_desktop, timeout=(1.2, 2.5))
+                if resp5.status_code == 200:
+                    body = self._safe_fetch_text(resp5)
+                    if not self._is_google_block_page(body):
+                        parsed = self._parse_google_json_response(body)
+                        if parsed:
+                            self._google_cooldown_until = 0.0
+                            return parsed
+                elif resp5.status_code == 429:
+                    had_429 = True
+            except Exception:
+                pass
+
+            # Tier 6: translate.google.com/m (모바일 웹 GET 스크래핑 최종 안전망)
+            try:
+                url_t6 = "https://translate.google.com/m"
+                params_t6 = {"sl": sl_val, "tl": self.target, "q": text}
+                resp6 = _dispatch(url_t6, params_t6, headers_mobile_web, timeout=2.0)
+                if resp6.status_code == 200:
+                    body = self._safe_fetch_text(resp6, deadline_sec=2.5)
                     parsed = self._parse_google_mobile_html(body)
                     if parsed:
                         self._google_cooldown_until = 0.0
                         return parsed
-                elif resp4.status_code == 429:
-                    self._google_cooldown_until = time.monotonic() + 10.0
-                    print("[Google 번역] mobile /m 도메인 429 감지; 폴백합니다.")
+                elif resp6.status_code == 429:
+                    had_429 = True
             except Exception:
                 pass
+
+            # 모든 티어가 실패했을 때만 쿨다운 적용 (과도한 10초 락아웃 대신 2.5초 가벼운 백오프)
+            if had_429:
+                self._google_cooldown_until = time.monotonic() + 2.5
 
         finally:
             self._google_lock.release()

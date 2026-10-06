@@ -4859,13 +4859,6 @@ class ControlPanel(QWidget):
             self._sync_youtube_monitor_active_state()
         if self.dubbing_engine and hasattr(self.dubbing_engine, "set_source_active"):
             self.dubbing_engine.set_source_active("screen", is_active)
-        if self.screen_worker:
-            if hasattr(self.screen_worker, "set_paused_state"):
-                self.screen_worker.set_paused_state(not is_active)
-            elif hasattr(self.screen_worker, "is_paused"):
-                self.screen_worker.is_paused = not is_active
-            elif hasattr(self.screen_worker, "set_enabled"):
-                self.screen_worker.set_enabled(is_active)
         if self.screen_overlay:
             if hasattr(self.screen_overlay, "set_paused_state"):
                 self.screen_overlay.set_paused_state(not is_active)
@@ -4874,6 +4867,15 @@ class ControlPanel(QWidget):
                                else self.screen_overlay.isVisible())
             if is_active and self.config.get("screen_overlay_visible", True) and not overlay_visible:
                 self.screen_overlay.show()
+        if self.screen_worker:
+            if hasattr(self.screen_worker, "update_config"):
+                self.screen_worker.update_config(self.config)
+            if hasattr(self.screen_worker, "set_paused_state"):
+                self.screen_worker.set_paused_state(not is_active)
+            elif hasattr(self.screen_worker, "is_paused"):
+                self.screen_worker.is_paused = not is_active
+            elif hasattr(self.screen_worker, "set_enabled"):
+                self.screen_worker.set_enabled(is_active)
         if hasattr(self, 'btn_toggle_screen'):
             if is_active:
                 self._i18n(self.btn_toggle_screen, "screen_stop")
@@ -4973,6 +4975,10 @@ class ControlPanel(QWidget):
         self.config["dubbing_enabled"] = new_val
         if self.dubbing_engine:
             self.dubbing_engine.set_enabled(new_val)
+        if hasattr(self, 'screen_worker') and self.screen_worker and hasattr(self.screen_worker, 'update_config'):
+            self.screen_worker.update_config(self.config)
+        if hasattr(self, 'stt_thread') and self.stt_thread and hasattr(self.stt_thread, 'update_config'):
+            self.stt_thread.update_config(self.config)
         self._update_dubbing_toggle_btn_ui()
         self.save_config_cb(self.config)
 
@@ -5337,12 +5343,16 @@ class ControlPanel(QWidget):
         self.config["dubbing_source_audio"] = checked
         if self.dubbing_engine:
             self.dubbing_engine.set_source_enabled("audio", checked)
+        if hasattr(self, 'stt_thread') and self.stt_thread and hasattr(self.stt_thread, 'update_config'):
+            self.stt_thread.update_config(self.config)
         self.save_config_cb(self.config)
 
     def on_dubbing_source_screen_toggled(self, checked):
         self.config["dubbing_source_screen"] = checked
         if self.dubbing_engine:
             self.dubbing_engine.set_source_enabled("screen", checked)
+        if hasattr(self, 'screen_worker') and self.screen_worker and hasattr(self.screen_worker, 'update_config'):
+            self.screen_worker.update_config(self.config)
         self.save_config_cb(self.config)
 
     def on_dubbing_interrupt_toggled(self, checked):
@@ -8491,7 +8501,9 @@ class ControlPanel(QWidget):
     def _on_rois_selected(self, rois: list):
         self.config["screen_rois"] = rois
         self.config["screen_roi"] = rois[0] if rois else None
-        if self.screen_worker and hasattr(self.screen_worker, "invalidate_regions"):
+        if self.screen_worker and hasattr(self.screen_worker, "update_config"):
+            self.screen_worker.update_config(self.config)
+        elif self.screen_worker and hasattr(self.screen_worker, "invalidate_regions"):
             self.screen_worker.invalidate_regions()
         if hasattr(self, 'lbl_roi_coords') and rois:
             r = rois[0]
@@ -8508,7 +8520,9 @@ class ControlPanel(QWidget):
     def clear_rois(self):
         self.config["screen_rois"] = []
         self.config["screen_roi"] = None
-        if self.screen_worker and hasattr(self.screen_worker, "invalidate_regions"):
+        if self.screen_worker and hasattr(self.screen_worker, "update_config"):
+            self.screen_worker.update_config(self.config)
+        elif self.screen_worker and hasattr(self.screen_worker, "invalidate_regions"):
             self.screen_worker.invalidate_regions()
         self.config["roi_configs"] = {}
         if hasattr(self, 'lbl_roi_coords'):

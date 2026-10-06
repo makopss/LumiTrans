@@ -7,7 +7,7 @@ from src.translator import RealtimeTranslator
 
 
 class TestGoogleFallbackPipeline(unittest.TestCase):
-    def test_tier1_dict_chrome_ex_success(self):
+    def test_tier1_mobile_app_success(self):
         translator = RealtimeTranslator({"translation_engine": "google"})
         mock_resp = Mock(status_code=200, text=json.dumps(["테스트 번역 성공"]))
         translator.session.post = Mock(return_value=mock_resp)
@@ -16,25 +16,24 @@ class TestGoogleFallbackPipeline(unittest.TestCase):
         self.assertEqual(result, "테스트 번역 성공")
         self.assertEqual(engine, "Google")
         translator.session.post.assert_called_once()
-        self.assertIn("dict-chrome-ex", translator.session.post.call_args[1]["data"]["client"])
+        self.assertIn("at", translator.session.post.call_args[1]["data"]["client"])
         self.assertNotIn("Test sentence", translator.session.post.call_args[0][0])
 
-    def test_tier1_sorry_block_page_jumps_to_tier3_clients5(self):
+    def test_tier1_sorry_block_page_jumps_to_tier4_clients5(self):
         translator = RealtimeTranslator({"translation_engine": "google"})
         sorry_html = "<html><head><title>Sorry...</title></head><body>Our systems have detected unusual traffic</body></html>"
         mock_block = Mock(status_code=200, text=sorry_html)
         mock_tier2 = Mock(status_code=429, text="error")
-        mock_tier3 = Mock(status_code=200, text=json.dumps(["우회 도메인 번역 성공"]))
+        mock_tier3 = Mock(status_code=429, text="error")
+        mock_tier4 = Mock(status_code=200, text=json.dumps(["우회 도메인 번역 성공"]))
 
-        translator.session.post = Mock(side_effect=[mock_block, mock_tier2, mock_tier3])
+        translator.session.post = Mock(side_effect=[mock_block, mock_tier2, mock_tier3, mock_tier4])
 
         result, engine = translator.translate("Blocked sentence")
         self.assertEqual(result, "우회 도메인 번역 성공")
         self.assertEqual(engine, "Google")
-        # 3 calls: Tier 1 (sorry), Tier 2 (429), Tier 3 (clients5 success)
-        self.assertEqual(translator.session.post.call_count, 3)
-        # Verify 3rd call targeted clients5.google.com
-        called_url = translator.session.post.call_args_list[2][0][0]
+        self.assertEqual(translator.session.post.call_count, 4)
+        called_url = translator.session.post.call_args_list[3][0][0]
         self.assertIn("clients5.google.com", called_url)
 
     def test_concurrency_lock_drops_overlapping_call(self):
@@ -42,7 +41,7 @@ class TestGoogleFallbackPipeline(unittest.TestCase):
         # Acquire the lock manually to simulate an active in-flight request
         translator._google_lock.acquire()
         try:
-            # Should not block and immediately return empty string
+            # Should not block and return empty string after timeout
             res = translator._translate_google_mobile("Overlapping text")
             self.assertEqual(res, "")
         finally:
@@ -67,5 +66,32 @@ class TestGoogleFallbackPipeline(unittest.TestCase):
         self.assertIn("translation.googleapis.com", translator.session.post.call_args[0][0])
 
 
+    def test_tier1_429_falls_through_to_tier2(self):
+        translator = RealtimeTranslator({"translation_engine": "google"})
+        mock_429 = Mock(status_code=429, headers={})
+        mock_tier2 = Mock(status_code=200, text=json.dumps([[["티어2 번역 성공", "Test sentence"]]]))
+        translator.session.post = Mock(side_effect=[mock_429, mock_tier2])
+
+        result, engine = translator.translate("Test sentence")
+        self.assertEqual(result, "티어2 번역 성공")
+        self.assertEqual(engine, "Google")
+        self.assertEqual(translator.session.post.call_count, 2)
+        # Verify 2nd call was Tier 2 with client=at single format
+        self.assertEqual(translator.session.post.call_args_list[1][1]["data"]["client"], "at")
+
+    def test_all_tiers_failed_applies_short_cooldown(self):
+        translator = RealtimeTranslator({"translation_engine": "google"})
+        mock_429 = Mock(status_code=429, text="Rate limited")
+        translator.session.post = Mock(return_value=mock_429)
+
+        start = time.monotonic()
+        res = translator._translate_google_mobile("Test sentence")
+        self.assertEqual(res, "")
+        # Cooldown should be around 2.5s, definitely less than 5.0s (not the old 10s)
+        self.assertGreater(translator._google_cooldown_until, start)
+        self.assertLess(translator._google_cooldown_until, start + 5.0)
+
+
 if __name__ == "__main__":
     unittest.main()
+

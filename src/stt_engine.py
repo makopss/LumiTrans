@@ -1471,7 +1471,7 @@ class STTWorker(threading.Thread):
                         self.subtitle_callback(display_orig, display_trans, engine_tag)
 
                     # 실시간 AI 음성 더빙 대기열 추가 (Edge-TTS, 오디오 통역 더빙 켜짐 시에만)
-                    if self.dubbing_engine and self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_audio", True):
+                    if self.dubbing_engine and self.dubbing_engine.is_enabled():
                         speaker_name_for_dub = f"화자 {spk_info[0]}" if spk_info and spk_info[0] > 0 else ""
                         self.dubbing_engine.enqueue(
                             translated_text=translated,

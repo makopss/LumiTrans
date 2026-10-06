@@ -27,6 +27,7 @@ app = QApplication.instance() or QApplication(sys.argv)
 from src.config import DEFAULT_CONFIG
 from src.subtitle_manager import SubtitleHistoryManager, SubtitleEntry, format_srt_time, format_display_time
 from src.control_panel import ControlPanel
+from src.i18n import tr
 
 
 def test_time_formatters():
@@ -206,9 +207,12 @@ def test_export_srt_and_txt():
         mgr.export_to_txt(txt_path_all, include_timestamps=True, source_filter="all")
         with open(txt_path_all, "r", encoding="utf-8-sig") as f:
             c_txt_all = f.read()
-        assert "[원문]    Hello, nice to meet you." in c_txt_all
-        assert "[번역]    [화자 1] 안녕하세요, 반갑습니다." in c_txt_all
-        assert "[AI 더빙 발화] [ko-KR-InJoonNeural +10%] 안녕하세요, 반갑습니다." in c_txt_all
+        orig_tag = tr("history_col_orig")
+        trans_tag = tr("history_col_trans")
+        dub_tag = tr("history_col_dub")
+        assert f"[{orig_tag}]    Hello, nice to meet you." in c_txt_all or "[원문]    Hello, nice to meet you." in c_txt_all
+        assert f"[{trans_tag}]    [화자 1] 안녕하세요, 반갑습니다." in c_txt_all or "[번역]    [화자 1] 안녕하세요, 반갑습니다." in c_txt_all
+        assert f"[{dub_tag}] [ko-KR-InJoonNeural +10%] 안녕하세요, 반갑습니다." in c_txt_all or "[AI 더빙 발화] [ko-KR-InJoonNeural +10%] 안녕하세요, 반갑습니다." in c_txt_all
 
         txt_path_orig = os.path.join(tmpdir, "test_orig.txt")
         mgr.export_to_txt(txt_path_orig, include_timestamps=True, source_filter="orig_only")
@@ -216,7 +220,7 @@ def test_export_srt_and_txt():
             c_txt_orig = f.read()
         assert "Hello, nice to meet you." in c_txt_orig
         assert "New agenda has started." in c_txt_orig
-        assert "[번역]" not in c_txt_orig
+        assert f"[{trans_tag}]" not in c_txt_orig and "[번역]" not in c_txt_orig
 
         txt_path_dub = os.path.join(tmpdir, "test_dub.txt")
         mgr.export_to_txt(txt_path_dub, include_timestamps=True, source_filter="dub_only")

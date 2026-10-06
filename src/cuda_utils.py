@@ -160,6 +160,19 @@ def _run_nvidia_smi(query: str) -> Optional[str]:
     return None
 
 
+def get_free_vram_mb() -> Optional[int]:
+    """현재 사용 가능한 GPU 여유 VRAM(MiB)을 반환. 실패 시 None."""
+    line = _run_nvidia_smi("memory.free")
+    if line:
+        try:
+            num = "".join(c for c in line if c.isdigit())
+            if num:
+                return int(num)
+        except Exception:
+            pass
+    return None
+
+
 def get_nvidia_driver_info() -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]]:
     """(드라이버 버전, GPU 연산 능력)을 (major, minor) 튜플로 반환. 알 수 없으면 None."""
     if "value" in _NVIDIA_INFO_CACHE:
@@ -319,6 +332,10 @@ def configure_llama_backend() -> Dict[str, Any]:
     _LLAMA_STATE["configured"] = True
     _LLAMA_STATE["restart_required"] = False
     if sel["backend"] == "cuda":
+        # CTranslate2(Faster-Whisper) 등 타 CUDA 라이브러리와의 스트림 충돌 및 abort 방지
+        os.environ.setdefault("GGML_CUDA_DISABLE_GRAPHS", "1")
+        os.environ.setdefault("GGML_CUDA_DISABLE_FUSION", "1")
+        os.environ.setdefault("CUDA_POOL_VMM_MAX_SIZE", "0")
         logger.info(f"[CUDALoader] 로컬 LLM: CUDA 라이브러리 사용 ({sel['kind']}): {sel['path']}")
     else:
         logger.info(f"[CUDALoader] 로컬 LLM: CPU 전용 라이브러리 사용{(' - ' + sel['issue']) if sel['issue'] else ''}")

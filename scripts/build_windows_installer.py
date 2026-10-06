@@ -27,6 +27,9 @@ if sys.platform == "win32":
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 os.chdir(ROOT_DIR)
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+from src.product import get_product
 
 def print_step(step: str):
     print(f"\n{'=' * 60}\n>> {step}\n{'=' * 60}")
@@ -434,8 +437,8 @@ def main():
     parser.add_argument(
         "--product",
         choices=["kr", "global"],
-        default="kr",
-        help="제품 라인 (kr: 한국어, global: 글로벌). 기본값은 kr이며 한국어 Lite/Full만 만든다.",
+        default=get_product(),
+        help="제품 라인 (kr: 한국어, global: 글로벌). 기본값은 edition.json 설정값(현재: %(default)s)입니다.",
     )
     args = parser.parse_args()
 

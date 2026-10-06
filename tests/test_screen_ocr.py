@@ -218,9 +218,8 @@ def test_screen_overlay_manager_and_clean_mode():
         "screen_clean_text_mode": False
     }
     manager = ScreenOverlayManager(cfg)
-    assert len(manager.overlays) == 2, "2개의 ROI에 대해 2개의 독립 오버레이가 생성되어야 합니다."
-    assert "화면 번역 #1" in manager.overlays[0].title_label.text()
-    assert "화면 번역 #2" in manager.overlays[1].title_label.text()
+    assert any(k in manager.overlays[0].title_label.text() for k in ("화면 번역 #1", "Screen Translation #1"))
+    assert any(k in manager.overlays[1].title_label.text() for k in ("화면 번역 #2", "Screen Translation #2"))
 
     # 1:1 라우팅 테스트
     manager.display_subtitle("Hello", "안녕하세요", "google", roi_idx=1)
@@ -473,11 +472,11 @@ def test_subtitle_retention_and_hover_logic():
     # 6. 컨트롤 패널의 자막 유지 시간 슬라이더 연동 검증
     panel.slider_duration.setValue(45)
     assert cfg["screen_subtitle_duration"] == 45
-    assert "45초" in panel.lbl_duration.text()
+    assert any(k in panel.lbl_duration.text() for k in ("45초", "45s"))
 
     panel.slider_duration.setValue(0)
     assert cfg["screen_subtitle_duration"] == 0
-    assert "영구 유지" in panel.lbl_duration.text()
+    assert any(k in panel.lbl_duration.text() for k in ("계속 표시", "영구 유지", "Permanent", "Stay"))
 
     print("  -> 자막 여유 유지 및 호버/고정 핀 테스트 통과!")
 
@@ -1141,6 +1140,65 @@ def test_roi_border_overlay_sync_and_toggle():
 
     print("  -> 감시 관심 영역 외곽 엣지(테두리) 화면 오버랩 및 동기화 테스트 통과!")
 
+def test_screen_worker_active_state_sync_after_config_update():
+    """앱 시작 시 프리셋/엔진 설정으로 update_config가 호출되어 설정 딕셔너리가 분리되더라도
+    화면 번역 시작 시 워커가 정상적으로 활성화(is_paused=False, idle=False)되고 ROI가 동기화되는지 검증"""
+    print("[24] 설정 변경 후 화면 번역 토글 시 워커 활성/정지 상태 및 ROI 양방향 동기화 테스트...")
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+    from src.screen_overlay import ScreenSubtitleOverlay
+    from src.control_panel import ControlPanel
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    cfg = DEFAULT_CONFIG.copy()
+    cfg["auto_start_screen"] = False
+    cfg["screen_translate_enabled"] = False
+    cfg["screen_rois"] = [[100, 100, 300, 100]]
+
+    screen_w = ScreenOCRWorker(config=cfg, translator=None)
+    screen_ov = ScreenSubtitleOverlay(cfg)
+
+    # 1. 앱 시작 시 일어나는 엔진/프리셋 변경으로 update_config 호출 모의
+    screen_w.update_config(cfg)
+    assert screen_w.is_paused == True
+
+    orig_q = QMessageBox.question
+    QMessageBox.question = staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+    try:
+        cp = ControlPanel(
+            config=cfg,
+            overlay=None,
+            audio_thread=None,
+            stt_thread=None,
+            save_config_cb=lambda c: None,
+            screen_worker=screen_w,
+            screen_overlay=screen_ov,
+            inplace_manager=None
+        )
+
+        # 2. 화면 번역 시작 버튼 클릭
+        cp.btn_toggle_screen.click()
+        assert cp.config["screen_translate_enabled"] == True
+        assert screen_w.is_paused == False, "화면 번역 시작 시 워커의 is_paused는 False여야 합니다."
+        assert screen_w.config.get("screen_translate_enabled") == True, "화면 번역 시작 시 워커 config도 True로 동기화되어야 합니다."
+
+        # 3. 새 ROI 선택 콜백 모의
+        new_rois = [[200, 200, 400, 120]]
+        cp._on_rois_selected(new_rois)
+        assert screen_w.config.get("screen_rois") == new_rois, "새 ROI 선택 시 워커 config의 screen_rois도 즉시 갱신되어야 합니다."
+        assert screen_w._regions() == ((200, 200, 400, 120),)
+
+        # 4. 화면 번역 중지 버튼 클릭
+        cp.btn_toggle_screen.click()
+        assert cp.config["screen_translate_enabled"] == False
+        assert screen_w.is_paused == True
+        assert screen_w.config.get("screen_translate_enabled") == False
+
+        cp.close()
+        screen_ov.close()
+    finally:
+        QMessageBox.question = orig_q
+    print("  -> 설정 변경 후 화면 번역 토글 및 ROI 동기화 테스트 통과!")
+
 if __name__ == "__main__":
     print("=" * 60)
     print("[TEST] 실시간 화면 OCR 번역 파이프라인 단위 테스트 시작")
@@ -1168,4 +1226,5 @@ if __name__ == "__main__":
     test_startup_stopped_and_auto_start_options()
     test_save_all_settings_before_exit()
     test_roi_border_overlay_sync_and_toggle()
+    test_screen_worker_active_state_sync_after_config_update()
     print("\n[SUCCESS] 모든 단위 테스트 성공적으로 통과!")

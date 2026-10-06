@@ -1,6 +1,11 @@
 import sys
 import os
 import queue
+import multiprocessing
+
+# Windows multiprocessing 자식 프로세스 즉시 처리 (PyInstaller 및 spawn 호환)
+if sys.platform == "win32":
+    multiprocessing.freeze_support()
 
 # 실행 파일(frozen) 환경에서 앱 설치 경로로 작업 디렉터리 고정 및 기본 디렉터리 보장
 if getattr(sys, "frozen", False):
@@ -88,16 +93,33 @@ if _CONSOLE_MODE and sys.platform == "win32" and sys.stdout is None:
     except Exception:
         _console_stream = None
 
+_out = _open_log("stdout.log")
+_err = _open_log("stderr.log")
 if sys.stdout is None:
-    _out = _open_log("stdout.log")
     sys.stdout = _Tee(_console_stream, _out) if _console_stream else _out
+else:
+    sys.stdout = _Tee(sys.stdout, _out)
+
 if sys.stderr is None:
-    _err = _open_log("stderr.log")
     sys.stderr = _Tee(_console_stream, _err) if _console_stream else _err
+else:
+    sys.stderr = _Tee(sys.stderr, _err)
 
 # ONNX Runtime 및 OpenMP 연산 스레드 상한 제한 (CPU 90% 폭주 방지 및 안정화)
 os.environ["OMP_NUM_THREADS"] = "2"
 os.environ["ORT_NUM_THREADS"] = "2"
+
+# CTranslate2(Faster-Whisper)와 동시 실행 시 CUDA Graph 캡처 충돌로 인한 CRT abort 원천 차단
+os.environ.setdefault("GGML_CUDA_DISABLE_GRAPHS", "1")
+os.environ.setdefault("GGML_CUDA_DISABLE_FUSION", "1")
+os.environ.setdefault("CUDA_POOL_VMM_MAX_SIZE", "0")
+
+# 네이티브 C/C++ 크래시 진단 핸들러 등록
+try:
+    import faulthandler
+    faulthandler.enable(file=_err)
+except Exception:
+    pass
 
 # Windows 콘솔 UTF-8 출력 보장 (cp949 터미널에서도 특수문자/이모지로 인한 UnicodeEncodeError 원천 방지)
 if sys.platform == "win32":
@@ -159,50 +181,50 @@ def _thread_exception_handler(args):
 
 threading.excepthook = _thread_exception_handler
 
-# 1. Qt 애플리케이션을 최우선 초기화 (COM 스레드 충돌 경고 방지)
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QFont
-
-app = QApplication(sys.argv)
-app.setFont(QFont("Malgun Gothic", 11))
-
-# 다크 퓨전 팔레트 및 프리미엄 QSS 전역 적용
-from src.ui_theme import apply_dark_theme
-apply_dark_theme(app)
-
-# 마우스 휠 스크롤로 인한 풀다운(QComboBox) 옵션 변경 전역 원천 차단
-from src.no_wheel_combobox import NoWheelFilter
-app.installEventFilter(NoWheelFilter(app))
-
-# 설정 및 다국어 조기 로드
-from src.config import load_config, save_config
-from src.i18n import set_ui_language, tr
-init_cfg = load_config()
-set_ui_language(init_cfg.get("ui_lang", "ko"))
-
-# 2. 프리미엄 스플래시 스크린 즉시 표시
-from src.splash_screen import LumiSplashScreen
-splash = LumiSplashScreen()
-splash.show()
-splash.set_message(tr("splash_prep_ui"), 5)
-
-# 3. 오디오 및 AI 모듈 로드
-splash.set_message(tr("splash_loading_config_module"), 12)
-splash.set_message(tr("splash_loading_stt_lib"), 20)
-from src.audio_capture import AudioLoopbackCapture
-from src.stt_engine import STTWorker
-splash.set_message(tr("splash_loading_translation_lib"), 28)
-from src.overlay_window import SubtitleOverlay
-from src.screen_overlay_manager import ScreenOverlayManager
-from src.screen_ocr_worker import ScreenOCRWorker
-from src.screen_capture import _ensure_gui_bridge
-_ensure_gui_bridge()
-from src.inplace_translator import InPlaceTranslatorManager
-from src.control_panel import ControlPanel
-from src.roi_border_overlay import ROIBorderManager
-from src.dubbing_engine import DubbingEngine
-
 def main():
+    # 1. Qt 애플리케이션을 최우선 초기화 (COM 스레드 충돌 경고 방지)
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QFont
+
+    app = QApplication(sys.argv)
+    app.setFont(QFont("Malgun Gothic", 11))
+
+    # 다크 퓨전 팔레트 및 프리미엄 QSS 전역 적용
+    from src.ui_theme import apply_dark_theme
+    apply_dark_theme(app)
+
+    # 마우스 휠 스크롤로 인한 풀다운(QComboBox) 옵션 변경 전역 원천 차단
+    from src.no_wheel_combobox import NoWheelFilter
+    app.installEventFilter(NoWheelFilter(app))
+
+    # 설정 및 다국어 조기 로드
+    from src.config import load_config, save_config
+    from src.i18n import set_ui_language, tr
+    init_cfg = load_config()
+    set_ui_language(init_cfg.get("ui_lang", "ko"))
+
+    # 2. 프리미엄 스플래시 스크린 즉시 표시
+    from src.splash_screen import LumiSplashScreen
+    splash = LumiSplashScreen()
+    splash.show()
+    splash.set_message(tr("splash_prep_ui"), 5)
+
+    # 3. 오디오 및 AI 모듈 로드
+    splash.set_message(tr("splash_loading_config_module"), 12)
+    splash.set_message(tr("splash_loading_stt_lib"), 20)
+    from src.audio_capture import AudioLoopbackCapture
+    from src.stt_engine import STTWorker
+    splash.set_message(tr("splash_loading_translation_lib"), 28)
+    from src.overlay_window import SubtitleOverlay
+    from src.screen_overlay_manager import ScreenOverlayManager
+    from src.screen_ocr_worker import ScreenOCRWorker
+    from src.screen_capture import _ensure_gui_bridge
+    _ensure_gui_bridge()
+    from src.inplace_translator import InPlaceTranslatorManager
+    from src.control_panel import ControlPanel
+    from src.roi_border_overlay import ROIBorderManager
+    from src.dubbing_engine import DubbingEngine
+
     print("=" * 60)
     print("[START] 루미트랜스 (LumiTrans) - AI 실시간 음성 & 화면 번역 시작 중...")
     print("=" * 60)
@@ -400,6 +422,11 @@ def main():
                 control_panel._active_worker.stop()
         except Exception:
             pass
+        try:
+            from src.isolated_ocr import shutdown_isolated_ocr
+            shutdown_isolated_ocr()
+        except Exception:
+            pass
         print("[Main] 모든 백그라운드 작업 정상 정지 완료.")
 
     app.aboutToQuit.connect(_graceful_shutdown)
@@ -431,6 +458,8 @@ def main():
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
     try:
         main()
     except Exception as e:

@@ -206,20 +206,10 @@ class ScreenOCRWorker(threading.Thread):
         with self._ocr_lock:
             if self._ocr is None:
                 try:
-                    from rapidocr_onnxruntime import RapidOCR
-                    # CPU 90% 폭주 방지: intra_op_num_threads=2, 각도분류기(use_cls)=False 적용
-                    self._ocr = RapidOCR(
-                        det_limit_side_len=720,
-                        det_db_thresh=0.3,
-                        det_use_dml=True,
-                        rec_use_dml=True,
-                        use_cls=False,
-                        intra_op_num_threads=2,
-                        inter_op_num_threads=1
-                    )
-                    print("[ScreenOCR] DirectML GPU 가속 RapidOCR 엔진 로드 완료!")
+                    from src.isolated_ocr import get_isolated_ocr
+                    self._ocr = get_isolated_ocr()
                 except Exception as e:
-                    print(f"[ScreenOCR] OCR 엔진 초기화 오류: {e}")
+                    print(f"[ScreenOCR] 격리 OCR 엔진 초기화 오류: {e}")
             return self._ocr
 
     def _regions(self):
@@ -233,6 +223,8 @@ class ScreenOCRWorker(threading.Thread):
         """설정(언어, 엔진 등) 변경 시 실시간 반영 및 기존 화면 텍스트 즉시 재번역 유도"""
         with self._request_lock:
             self.config = dict(config)
+            if "screen_translate_enabled" in self.config:
+                self.is_paused = not bool(self.config["screen_translate_enabled"])
             if self.translator and hasattr(self.translator, "update_config"):
                 self.translator.update_config(config)
             self.invalidate_regions()
@@ -262,7 +254,7 @@ class ScreenOCRWorker(threading.Thread):
                         and rois == self._regions() and 0 <= idx < len(rois)
                         and self._latest_requests.get(idx) == serial
                         and engine_signature == self._translation_signature()
-                        and (instant or (not self.is_paused and self.config.get("screen_translate_enabled", False))))
+                        and (instant or not self.is_paused))
 
     def _deliver_result(self, payload):
         # Runs on the GUI thread. Validate again after the queued Qt delivery.
@@ -273,12 +265,18 @@ class ScreenOCRWorker(threading.Thread):
         self.subtitle_signal.emit(original, translated, engine, idx)
         success = bool(translated and "원문" not in engine)
         self.status_signal.emit(tr("ocr_status_done", engine=engine) if success else tr("ocr_status_retrying"))
-        if success and self.dubbing_engine and self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", False):
+        if success and self.dubbing_engine and self.dubbing_engine.is_enabled():
+            instant = bool(token[4]) if len(token) > 4 else False
             spk_trans, pure_trans = extract_speaker_and_dialogue(translated)
             spk_orig, _ = extract_speaker_and_dialogue(original)
-            self.dubbing_engine.enqueue(translated_text=pure_trans or translated,
-                speaker_name=spk_trans or spk_orig or "", orig_text=original,
-                source="screen", region_idx=idx + 1)
+            self.dubbing_engine.enqueue(
+                translated_text=pure_trans or translated,
+                speaker_name=spk_trans or spk_orig or "",
+                orig_text=original,
+                source="screen",
+                region_idx=idx + 1,
+                force_active=instant,
+            )
 
     def _process_region(self, rois, idx, ocr, instant=False):
         generation = self._generation
@@ -312,6 +310,7 @@ class ScreenOCRWorker(threading.Thread):
         if not result:
             # A disappeared dialogue must not suppress the same line when it returns.
             state["last_text"] = ""
+            state["last_trans_time"] = 0.0
             return
         sorted_lines = sorted(result, key=lambda r: (r[0][0][1] // 15, r[0][0][0]))
         text = clean_ocr_text(" ".join(r[1].strip() for r in sorted_lines if r[1]))
@@ -321,8 +320,17 @@ class ScreenOCRWorker(threading.Thread):
             return
         # Preserve numbers, negation and names. Whitespace/case alone is harmless.
         normalized = " ".join(text.casefold().split())
-        if not instant and normalized == " ".join(state["last_text"].casefold().split()):
+        last_norm = " ".join(state.get("last_text", "").casefold().split())
+        if not instant and normalized == last_norm:
             return
+        if not instant and last_norm:
+            # OCR 지터 및 미세 노이즈로 인한 동일 자막 중복 번역 방지 (최근 번역 후 5초 이내 유사도 75% 이상이면 동일 자막 유지)
+            last_trans_time = state.get("last_trans_time", 0.0)
+            if now - last_trans_time < 5.0:
+                import difflib
+                sim = difflib.SequenceMatcher(None, normalized, last_norm).ratio()
+                if sim >= 0.75:
+                    return
         if not instant and retry_at > now and state.get("retry_text") == text:
             return
         token = self._begin_request(rois, idx, instant)
@@ -339,6 +347,7 @@ class ScreenOCRWorker(threading.Thread):
             return
         if translated and engine != "원문 유지":
             state["last_text"] = text
+            state["last_trans_time"] = time.monotonic()
             state["retry_at"] = 0.0
             state.pop("retry_text", None)
         else:
@@ -353,7 +362,7 @@ class ScreenOCRWorker(threading.Thread):
                 return
             if not self.is_running:
                 return
-            if not instant and (self.is_paused or not self.config.get("screen_translate_enabled", False)):
+            if not instant and self.is_paused:
                 return
             rois = self._regions()
             if not rois:
@@ -368,14 +377,14 @@ class ScreenOCRWorker(threading.Thread):
             for idx in range(len(rois)):
                 if not self.is_running or generation != self._generation or rois != self._regions():
                     break
-                if not instant and (self.is_paused or not self.config.get("screen_translate_enabled", False)):
+                if not instant and self.is_paused:
                     break
                 self._process_region(rois, idx, ocr, instant)
 
     def run(self):
         print("[ScreenOCR] 실시간 화면 감시 백그라운드 스레드 시작됨.")
         while self.is_running:
-            idle = self.is_paused or not self.config.get("screen_translate_enabled", False)
+            idle = self.is_paused
             try:
                 if not idle:
                     self._capture_cycle()
@@ -405,7 +414,9 @@ class ScreenOCRWorker(threading.Thread):
             print(f"[ScreenOCR Instant 예외] {error}")
 
     def set_paused(self, paused: bool):
-        self.is_paused = paused
+        with self._request_lock:
+            self.is_paused = bool(paused)
+            self.config["screen_translate_enabled"] = not paused
         self.invalidate_regions()
         self.status_signal.emit(tr("ocr_status_paused") if paused else tr("ocr_status_monitoring"))
 
