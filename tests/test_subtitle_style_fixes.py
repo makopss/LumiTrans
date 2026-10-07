@@ -228,6 +228,72 @@ class TestSubtitleStyleFixes(unittest.TestCase):
             gap = curr.top() - prev.bottom()
             self.assertGreaterEqual(gap, 5, f"화면 자막 박스 간 최소 5px 이상 간격 확보 (현재 gap={gap}px).")
 
+    def test_overlay_btn_box_toggle_and_sync(self):
+        """음성 및 화면 오버레이의 btn_box 토글 및 sync 핸들러 호출 검증"""
+        sync_audio_calls = []
+        sync_screen_calls = []
+
+        cfg = self.config.copy()
+        cfg["audio_clean_box"] = True
+        audio_overlay = SubtitleOverlay(cfg)
+        audio_overlay.set_external_handlers(on_sync_clean_box=lambda val: sync_audio_calls.append(val))
+
+        self.assertTrue(hasattr(audio_overlay, "btn_box"))
+        self.assertEqual(audio_overlay.btn_box.text(), "▣")
+        self.assertTrue(audio_overlay._get_clean_box())
+
+        # Click / toggle btn_box
+        audio_overlay.btn_box.click()
+        self.assertFalse(audio_overlay._get_clean_box())
+        self.assertEqual(sync_audio_calls, [False])
+
+        audio_overlay.btn_box.click()
+        self.assertTrue(audio_overlay._get_clean_box())
+        self.assertEqual(sync_audio_calls, [False, True])
+
+        # Screen overlay
+        cfg_s = self.config.copy()
+        cfg_s["screen_clean_box"] = False
+        screen_overlay = ScreenSubtitleOverlay(cfg_s)
+        screen_overlay.set_external_handlers(on_sync_clean_box=lambda val: sync_screen_calls.append(val))
+
+        self.assertTrue(hasattr(screen_overlay, "btn_box"))
+        self.assertEqual(screen_overlay.btn_box.text(), "▣")
+        self.assertFalse(screen_overlay._get_clean_box())
+
+        screen_overlay.btn_box.click()
+        self.assertTrue(screen_overlay._get_clean_box())
+        self.assertEqual(sync_screen_calls, [True])
+
+    def test_control_panel_sync_clean_box(self):
+        """컨트롤 패널의 sync_audio_clean_box_from_overlay 및 sync_screen_clean_box_from_overlay 검증"""
+        saved = []
+        cp = ControlPanel(self.config, overlay=None, audio_thread=None, stt_thread=None, save_config_cb=lambda c: saved.append(c))
+
+        # Audio clean box sync
+        cp.sync_audio_clean_box_from_overlay(False)
+        self.assertFalse(cp.config["audio_clean_box"])
+        self.assertFalse(cp.config["clean_box"])
+        if hasattr(cp, 'audio_cb_clean_box'):
+            self.assertFalse(cp.audio_cb_clean_box.isChecked())
+
+        cp.sync_audio_clean_box_from_overlay(True)
+        self.assertTrue(cp.config["audio_clean_box"])
+        self.assertTrue(cp.config["clean_box"])
+        if hasattr(cp, 'audio_cb_clean_box'):
+            self.assertTrue(cp.audio_cb_clean_box.isChecked())
+
+        # Screen clean box sync
+        cp.sync_screen_clean_box_from_overlay(False)
+        self.assertFalse(cp.config["screen_clean_box"])
+        if hasattr(cp, 'screen_cb_clean_box'):
+            self.assertFalse(cp.screen_cb_clean_box.isChecked())
+
+        cp.sync_screen_clean_box_from_overlay(True)
+        self.assertTrue(cp.config["screen_clean_box"])
+        if hasattr(cp, 'screen_cb_clean_box'):
+            self.assertTrue(cp.screen_cb_clean_box.isChecked())
+
 
 if __name__ == "__main__":
     unittest.main()

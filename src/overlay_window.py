@@ -370,6 +370,16 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.header_layout.addWidget(self.btn_clean)
         self._update_clean_button_style()
 
+        # 5-2b. 반투명 배경 박스(자막 바) 토글 버튼 (▣)
+        self.btn_box = QPushButton("▣")
+        self.btn_box.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
+        self.btn_box.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_box.setFixedHeight(26)
+        self.btn_box.setFixedWidth(34)
+        self.btn_box.clicked.connect(self.toggle_clean_box)
+        self.header_layout.addWidget(self.btn_box)
+        self._update_box_button_style()
+
         # 5-3. 실시간 AI 음성 더빙 토글 버튼
         self.btn_dubbing = QPushButton("🔊")
         self.btn_dubbing.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
@@ -824,14 +834,35 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
     update_stroke_width = set_stroke_width
     update_letter_spacing = set_letter_spacing
 
+    def toggle_clean_box(self):
+        """반투명 배경 박스 온/오프 토글"""
+        cur = self._get_clean_box()
+        self.set_clean_box(not cur)
+
+    def _update_box_button_style(self):
+        if not hasattr(self, 'btn_box'):
+            return
+        enabled = self._get_clean_box()
+        self.btn_box.setText("▣")
+        self.btn_box.setFixedWidth(34)
+        if enabled:
+            self.btn_box.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #64FFDA; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_box.setToolTip(tr("overlay_tip_clean_box_on"))
+        else:
+            self.btn_box.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #888; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_box.setToolTip(tr("overlay_tip_clean_box_off"))
+
     def set_clean_box(self, enabled: bool):
         """자막 배경 박스(반투명 라운드 박스) 렌더링 온/오프"""
         self.config["audio_clean_box"] = bool(enabled)
         self.config["clean_box"] = bool(enabled)
         self._subtitle_box_cache = None
         self._refresh_current_subtitle()
+        self._update_box_button_style()
         self.update()
         self.repaint()
+        if hasattr(self, 'ext_sync_clean_box') and self.ext_sync_clean_box:
+            self.ext_sync_clean_box(bool(enabled))
         if self.on_config_change:
             self.on_config_change(self.config)
 
@@ -1072,6 +1103,9 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         if hasattr(self, '_update_clean_button_style'):
             self._update_clean_button_style()
 
+        if hasattr(self, '_update_box_button_style'):
+            self._update_box_button_style()
+
         if hasattr(self, '_update_speaker_button_style'):
             self._update_speaker_button_style()
 
@@ -1138,6 +1172,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._update_en_ko_button_styles()
         if hasattr(self, "_update_clean_button_style"):
             self._update_clean_button_style()
+        if hasattr(self, "_update_box_button_style"):
+            self._update_box_button_style()
         if hasattr(self, "_update_speaker_button_style"):
             self._update_speaker_button_style()
         if hasattr(self, "btn_settings") and self.btn_settings:
@@ -1439,7 +1475,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._set_label_html(self.label_translated, "...", self._translated_color())
         self.update()
 
-    def set_external_handlers(self, on_toggle_pause=None, on_change_engine=None, on_open_settings=None, on_sync_opacity=None, on_visibility_change=None, on_sync_font=None, on_sync_click_through=None, on_sync_clean_text=None, on_sync_show_speaker=None, on_toggle_dubbing=None, on_sync_show_original=None, on_sync_show_translated=None):
+    def set_external_handlers(self, on_toggle_pause=None, on_change_engine=None, on_open_settings=None, on_sync_opacity=None, on_visibility_change=None, on_sync_font=None, on_sync_click_through=None, on_sync_clean_text=None, on_sync_clean_box=None, on_sync_show_speaker=None, on_toggle_dubbing=None, on_sync_show_original=None, on_sync_show_translated=None):
         self.ext_toggle_pause = on_toggle_pause
         self.ext_change_engine = on_change_engine
         self.ext_open_settings = on_open_settings
@@ -1448,6 +1484,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.ext_sync_font = on_sync_font
         self.ext_sync_click_through = on_sync_click_through
         self.ext_sync_clean_text = on_sync_clean_text
+        self.ext_sync_clean_box = on_sync_clean_box
         self.ext_sync_show_speaker = on_sync_show_speaker
         self.ext_toggle_dubbing = on_toggle_dubbing
         self.ext_sync_show_original = on_sync_show_original

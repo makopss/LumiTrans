@@ -115,6 +115,7 @@ DEFAULT_CONFIG = {
     "screen_click_through": False,           # 화면 자막 창 마우스 관통 여부
     "screen_snap_to_roi": False,             # 관심 영역 주변 자동 밀착(Snap) 모드 여부
     "screen_ocr_preprocess": True,           # 게임 폰트 CLAHE 적응형 대비 강화 전처리 활성화 여부
+    "screen_ocr_min_confidence": 0.45,       # 화면 OCR 최소 신뢰도 임계값 (배경 노이즈 및 오인식 기호 차단)
     "audio_subtitle_duration": 5,             # 음성 자막 유지 시간 (초, 기본값 5초, 0=무제한)
     "screen_subtitle_duration": 5,           # 화면 자막 유지 시간 (초, 기본값 5초, 0=무제한)
     "subtitle_duration": 5,                  # 공통 자막 유지 시간 (초, 기본값 5초, 0=무제한)
@@ -572,6 +573,7 @@ def load_config(config_file=None):
                     merged["screen_rois"] = []
 
                 merged["screen_roi"] = merged["screen_rois"][0] if merged["screen_rois"] else None
+                merged["dubbing_enabled"] = False  # 프로그램 재시작 시 더빙은 항상 정지(대기) 상태로 시작하도록 정규화
                 return _lock_product_languages(merged, cfg)
         except Exception as e:
             print(f"[Config] 설정 파일 로드 실패, 기본값 사용: {e}")

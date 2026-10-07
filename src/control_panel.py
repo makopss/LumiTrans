@@ -1092,6 +1092,10 @@ class ControlPanel(QWidget):
         if self.roi_border_manager:
             self.roi_border_manager.set_on_rois_changed(self._on_rois_border_adjusted)
         self.dubbing_engine = dubbing_engine
+        # 더빙 런타임 상태 초기화: 프로그램 시작 시 항상 정지(대기) 상태로 시작
+        self.config["dubbing_enabled"] = False
+        if self.dubbing_engine:
+            self.dubbing_engine.set_enabled(False)
 
         # 올라마 미설치 환경에서는 무조건 내장(embedded) 백엔드로 정규화
         from src.llm_model_manager import LLMModelManager
@@ -1461,6 +1465,89 @@ class ControlPanel(QWidget):
     # ----------------------------------------------------------------------
     # 2. 하단 고정 제어 바 빌더 (모든 탭 공통)
     # ----------------------------------------------------------------------
+    @staticmethod
+    def _get_bottom_active_btn_style() -> str:
+        """하단 푸터 버튼 활성화 상태 스타일: 네온 에메랄드 림 보더 및 입체 그라데이션 하이라이트 효과"""
+        return """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #34D399, stop:0.25 #10B981, stop:1 #047857);
+                color: #022C22;
+                font-weight: 800;
+                font-size: 12px;
+                border: 1.5px solid #A7F3D0;
+                border-radius: 6px;
+                padding: 4px 6px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6EE7B7, stop:0.25 #34D399, stop:1 #059669);
+                border: 1.5px solid #FFFFFF;
+                color: #011E17;
+            }
+            QPushButton:pressed {
+                background: #047857;
+                border: 1.5px solid #10B981;
+                color: #ECFDF5;
+            }
+        """
+
+    @staticmethod
+    def _get_bottom_audio_inactive_style() -> str:
+        return """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, stop:1 #4338CA);
+                color: #FFFFFF;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #6366F1;
+                border-radius: 6px;
+                padding: 4px 6px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #4F46E5);
+                border-color: #818CF8;
+            }
+        """
+
+    @staticmethod
+    def _get_bottom_screen_inactive_style() -> str:
+        return """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0369A1);
+                color: #FFFFFF;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #38BDF8;
+                border-radius: 6px;
+                padding: 4px 6px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0EA5E9, stop:1 #0284C7);
+                border-color: #7DD3FC;
+            }
+        """
+
+    @staticmethod
+    def _get_bottom_dubbing_inactive_style() -> str:
+        return """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #DB2777, stop:1 #BE185D);
+                color: #FFFFFF;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #F472B6;
+                border-radius: 6px;
+                padding: 4px 6px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #EC4899, stop:1 #DB2777);
+                border-color: #FB7185;
+            }
+        """
+
     def _build_bottom_persistent_bar(self) -> QWidget:
         bar = QFrame()
         bar.setObjectName("BottomBarFrame")
@@ -1498,23 +1585,8 @@ class ControlPanel(QWidget):
         self.btn_bottom_audio.setCheckable(True)
         self.btn_bottom_audio.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_bottom_audio.setFixedHeight(36)
-        self.btn_bottom_audio.setMinimumWidth(82)
-        self.btn_bottom_audio.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, stop:1 #4338CA);
-                color: #FFFFFF;
-                font-weight: bold;
-                font-size: 12px;
-                border: 1px solid #6366F1;
-                border-radius: 6px;
-                padding: 4px 10px;
-                text-align: center;
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #4F46E5);
-                border-color: #818CF8;
-            }}
-        """)
+        self.btn_bottom_audio.setFixedWidth(88)
+        self.btn_bottom_audio.setStyleSheet(self._get_bottom_audio_inactive_style())
         self.btn_bottom_audio.clicked.connect(self.toggle_translation)
         u1_layout.addWidget(lbl_u1)
         u1_layout.addWidget(self.btn_bottom_audio)
@@ -1532,23 +1604,8 @@ class ControlPanel(QWidget):
         self.btn_bottom_screen.setCheckable(True)
         self.btn_bottom_screen.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_bottom_screen.setFixedHeight(36)
-        self.btn_bottom_screen.setMinimumWidth(82)
-        self.btn_bottom_screen.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0369A1);
-                color: #FFFFFF;
-                font-weight: bold;
-                font-size: 12px;
-                border: 1px solid #38BDF8;
-                border-radius: 6px;
-                padding: 4px 10px;
-                text-align: center;
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0EA5E9, stop:1 #0284C7);
-                border-color: #7DD3FC;
-            }}
-        """)
+        self.btn_bottom_screen.setFixedWidth(88)
+        self.btn_bottom_screen.setStyleSheet(self._get_bottom_screen_inactive_style())
         self.btn_bottom_screen.clicked.connect(self.toggle_screen_translation)
         u2_layout.addWidget(lbl_u2)
         u2_layout.addWidget(self.btn_bottom_screen)
@@ -1566,23 +1623,8 @@ class ControlPanel(QWidget):
         self.btn_bottom_dubbing.setCheckable(True)
         self.btn_bottom_dubbing.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_bottom_dubbing.setFixedHeight(36)
-        self.btn_bottom_dubbing.setMinimumWidth(82)
-        self.btn_bottom_dubbing.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #DB2777, stop:1 #BE185D);
-                color: #FFFFFF;
-                font-weight: bold;
-                font-size: 12px;
-                border: 1px solid #F472B6;
-                border-radius: 6px;
-                padding: 4px 10px;
-                text-align: center;
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #EC4899, stop:1 #DB2777);
-                border-color: #FB7185;
-            }}
-        """)
+        self.btn_bottom_dubbing.setFixedWidth(88)
+        self.btn_bottom_dubbing.setStyleSheet(self._get_bottom_dubbing_inactive_style())
         self.btn_bottom_dubbing.clicked.connect(self.toggle_dubbing)
         u3_layout.addWidget(lbl_u3)
         u3_layout.addWidget(self.btn_bottom_dubbing)
@@ -5457,40 +5499,11 @@ class ControlPanel(QWidget):
             self.btn_bottom_audio.setChecked(is_active)
             if is_active:
                 self._i18n(self.btn_bottom_audio, "pause")
-                self.btn_bottom_audio.setStyleSheet(f"""
-                    QPushButton {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
-                        color: #000000;
-                        font-weight: bold;
-                        font-size: 12px;
-                        border: 1px solid #34D399;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        text-align: center;
-                    }}
-                    QPushButton:hover {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34D399, stop:1 #10B981);
-                    }}
-                """)
+                self.btn_bottom_audio.setStyleSheet(self._get_bottom_active_btn_style())
                 self.update_engine_status("ready", tr("status_audio_started"))
             else:
                 self._i18n(self.btn_bottom_audio, "start_translation")
-                self.btn_bottom_audio.setStyleSheet(f"""
-                    QPushButton {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, stop:1 #4338CA);
-                        color: #FFFFFF;
-                        font-weight: bold;
-                        font-size: 12px;
-                        border: 1px solid #6366F1;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        text-align: center;
-                    }}
-                    QPushButton:hover {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #4F46E5);
-                        border-color: #818CF8;
-                    }}
-                """)
+                self.btn_bottom_audio.setStyleSheet(self._get_bottom_audio_inactive_style())
                 self.update_engine_status("paused", tr("status_audio_paused"))
 
     def set_screen_active_state(self, is_active: bool):
@@ -5530,40 +5543,11 @@ class ControlPanel(QWidget):
             self.btn_bottom_screen.setChecked(is_active)
             if is_active:
                 self._i18n(self.btn_bottom_screen, "pause")
-                self.btn_bottom_screen.setStyleSheet(f"""
-                    QPushButton {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
-                        color: #000000;
-                        font-weight: bold;
-                        font-size: 12px;
-                        border: 1px solid #34D399;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        text-align: center;
-                    }}
-                    QPushButton:hover {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34D399, stop:1 #10B981);
-                    }}
-                """)
+                self.btn_bottom_screen.setStyleSheet(self._get_bottom_active_btn_style())
                 self.update_engine_status("ready", tr("status_screen_started"))
             else:
                 self._i18n(self.btn_bottom_screen, "start_translation")
-                self.btn_bottom_screen.setStyleSheet(f"""
-                    QPushButton {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0369A1);
-                        color: #FFFFFF;
-                        font-weight: bold;
-                        font-size: 12px;
-                        border: 1px solid #38BDF8;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        text-align: center;
-                    }}
-                    QPushButton:hover {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0EA5E9, stop:1 #0284C7);
-                        border-color: #7DD3FC;
-                    }}
-                """)
+                self.btn_bottom_screen.setStyleSheet(self._get_bottom_screen_inactive_style())
                 self.update_engine_status("paused", tr("status_screen_paused"))
 
     def _update_dubbing_toggle_btn_ui(self):
@@ -5572,39 +5556,10 @@ class ControlPanel(QWidget):
             self.btn_bottom_dubbing.setChecked(is_on)
             if is_on:
                 self._i18n(self.btn_bottom_dubbing, "pause")
-                self.btn_bottom_dubbing.setStyleSheet(f"""
-                    QPushButton {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
-                        color: #000000;
-                        font-weight: bold;
-                        font-size: 12px;
-                        border: 1px solid #34D399;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        text-align: center;
-                    }}
-                    QPushButton:hover {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34D399, stop:1 #10B981);
-                    }}
-                """)
+                self.btn_bottom_dubbing.setStyleSheet(self._get_bottom_active_btn_style())
             else:
                 self._i18n(self.btn_bottom_dubbing, "start_dubbing")
-                self.btn_bottom_dubbing.setStyleSheet(f"""
-                    QPushButton {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #DB2777, stop:1 #BE185D);
-                        color: #FFFFFF;
-                        font-weight: bold;
-                        font-size: 12px;
-                        border: 1px solid #F472B6;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        text-align: center;
-                    }}
-                    QPushButton:hover {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #EC4899, stop:1 #DB2777);
-                        border-color: #FB7185;
-                    }}
-                """)
+                self.btn_bottom_dubbing.setStyleSheet(self._get_bottom_dubbing_inactive_style())
 
     def toggle_translation(self):
         self.set_audio_active_state(not self.is_active)
@@ -5618,8 +5573,15 @@ class ControlPanel(QWidget):
         cur = self.config.get("dubbing_enabled", False)
         new_val = not cur
         self.config["dubbing_enabled"] = new_val
+        if new_val:
+            # 음성 더빙과 화면 더빙이 둘 다 꺼진 상태에서 '더빙 시작'을 누르면 두 소스(음성/화면)를 모두 활성화
+            if not self.config.get("dubbing_source_audio", False) and not self.config.get("dubbing_source_screen", False):
+                self.config["dubbing_source_audio"] = True
+                self.config["dubbing_source_screen"] = True
         if self.dubbing_engine:
             self.dubbing_engine.set_enabled(new_val)
+            self.dubbing_engine.set_source_enabled("audio", bool(self.config.get("dubbing_source_audio", True)))
+            self.dubbing_engine.set_source_enabled("screen", bool(self.config.get("dubbing_source_screen", False)))
         if hasattr(self, 'screen_worker') and self.screen_worker and hasattr(self.screen_worker, 'update_config'):
             self.screen_worker.update_config(self.config)
         if hasattr(self, 'stt_thread') and self.stt_thread and hasattr(self.stt_thread, 'update_config'):
@@ -5630,10 +5592,14 @@ class ControlPanel(QWidget):
 
     def _sync_dubbing_overlay_buttons(self):
         """오디오 및 화면 오버레이 창과 컨트롤 패널 토글 스위치 간의 양방향 실시간 동기화"""
-        is_audio_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_audio", True))
-        is_screen_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", False))
+        is_audio_src = bool(self.config.get("dubbing_source_audio", True))
+        is_screen_src = bool(self.config.get("dubbing_source_screen", False))
+        is_dub_enabled = bool(self.config.get("dubbing_enabled", False))
 
-        # 1. 컨트롤 패널 토글 스위치 UI 동기화
+        is_audio_dub = bool(is_dub_enabled and is_audio_src)
+        is_screen_dub = bool(is_dub_enabled and is_screen_src)
+
+        # 1. 컨트롤 패널 토글 스위치 UI 동기화 (실시간 활성 상태와 완벽 일치)
         if hasattr(self, 'toggle_dub_voice') and self.toggle_dub_voice:
             self.toggle_dub_voice.blockSignals(True)
             self.toggle_dub_voice.setChecked(is_audio_dub)
@@ -5644,7 +5610,7 @@ class ControlPanel(QWidget):
             self.toggle_dub_screen.setChecked(is_screen_dub)
             self.toggle_dub_screen.blockSignals(False)
 
-        # 2. 오버레이 창 더빙 아이콘 버튼 동기화
+        # 2. 오버레이 창 더빙 아이콘 버튼 동기화 (현재 실시간 활성 출력 여부 반영)
         if hasattr(self, 'overlay') and self.overlay and hasattr(self.overlay, 'update_dubbing_state'):
             self.overlay.update_dubbing_state(is_audio_dub)
         if hasattr(self, 'screen_overlay') and self.screen_overlay and hasattr(self.screen_overlay, 'update_dubbing_state'):
@@ -5659,13 +5625,20 @@ class ControlPanel(QWidget):
         if new_active:
             self.config["dubbing_enabled"] = True
             self.config["dubbing_source_audio"] = True
+            # 화면 더빙이 켜져 있지 않은 상태였다면 화면 더빙이 함께 켜지지 않도록 안전 격리
+            screen_was_active = False
+            if hasattr(self, 'screen_overlay') and hasattr(self.screen_overlay, 'is_dubbing_enabled'):
+                screen_was_active = self.screen_overlay.is_dubbing_enabled
+            if not screen_was_active:
+                self.config["dubbing_source_screen"] = False
         else:
             self.config["dubbing_source_audio"] = False
             if not self.config.get("dubbing_source_screen", False):
                 self.config["dubbing_enabled"] = False
         if self.dubbing_engine:
             self.dubbing_engine.set_enabled(self.config.get("dubbing_enabled", False))
-            self.dubbing_engine.set_source_enabled("audio", self.config["dubbing_source_audio"])
+            self.dubbing_engine.set_source_enabled("audio", self.config.get("dubbing_source_audio", True))
+            self.dubbing_engine.set_source_enabled("screen", self.config.get("dubbing_source_screen", False))
         if hasattr(self, 'stt_thread') and self.stt_thread and hasattr(self.stt_thread, 'update_config'):
             self.stt_thread.update_config(self.config)
         self._update_dubbing_toggle_btn_ui()
@@ -5679,13 +5652,20 @@ class ControlPanel(QWidget):
         if new_active:
             self.config["dubbing_enabled"] = True
             self.config["dubbing_source_screen"] = True
+            # 음성 더빙이 켜져 있지 않은 상태였다면 음성 더빙이 함께 켜지지 않도록 안전 격리
+            audio_was_active = False
+            if hasattr(self, 'overlay') and hasattr(self.overlay, 'is_dubbing_enabled'):
+                audio_was_active = self.overlay.is_dubbing_enabled
+            if not audio_was_active:
+                self.config["dubbing_source_audio"] = False
         else:
             self.config["dubbing_source_screen"] = False
-            if not self.config.get("dubbing_source_audio", True):
+            if not self.config.get("dubbing_source_audio", False):
                 self.config["dubbing_enabled"] = False
         if self.dubbing_engine:
             self.dubbing_engine.set_enabled(self.config.get("dubbing_enabled", False))
-            self.dubbing_engine.set_source_enabled("screen", self.config["dubbing_source_screen"])
+            self.dubbing_engine.set_source_enabled("screen", self.config.get("dubbing_source_screen", False))
+            self.dubbing_engine.set_source_enabled("audio", self.config.get("dubbing_source_audio", False))
         if hasattr(self, 'screen_worker') and self.screen_worker and hasattr(self.screen_worker, 'update_config'):
             self.screen_worker.update_config(self.config)
         self._update_dubbing_toggle_btn_ui()
@@ -6053,12 +6033,16 @@ class ControlPanel(QWidget):
         self.config["dubbing_source_audio"] = checked
         if checked:
             self.config["dubbing_enabled"] = True
+            # 화면 더빙 스위치가 꺼져 있는 상태라면 화면 더빙이 함께 켜지지 않도록 안전 차단
+            if hasattr(self, 'toggle_dub_screen') and not self.toggle_dub_screen.isChecked():
+                self.config["dubbing_source_screen"] = False
         else:
             if not self.config.get("dubbing_source_screen", False):
                 self.config["dubbing_enabled"] = False
         if self.dubbing_engine:
             self.dubbing_engine.set_enabled(self.config.get("dubbing_enabled", False))
             self.dubbing_engine.set_source_enabled("audio", checked)
+            self.dubbing_engine.set_source_enabled("screen", bool(self.config.get("dubbing_source_screen", False)))
         if hasattr(self, 'stt_thread') and self.stt_thread and hasattr(self.stt_thread, 'update_config'):
             self.stt_thread.update_config(self.config)
         self._sync_dubbing_overlay_buttons()
@@ -6068,12 +6052,16 @@ class ControlPanel(QWidget):
         self.config["dubbing_source_screen"] = checked
         if checked:
             self.config["dubbing_enabled"] = True
+            # 음성 더빙 스위치가 꺼져 있는 상태라면 음성 더빙이 함께 켜지지 않도록 안전 차단
+            if hasattr(self, 'toggle_dub_voice') and not self.toggle_dub_voice.isChecked():
+                self.config["dubbing_source_audio"] = False
         else:
-            if not self.config.get("dubbing_source_audio", True):
+            if not self.config.get("dubbing_source_audio", False):
                 self.config["dubbing_enabled"] = False
         if self.dubbing_engine:
             self.dubbing_engine.set_enabled(self.config.get("dubbing_enabled", False))
             self.dubbing_engine.set_source_enabled("screen", checked)
+            self.dubbing_engine.set_source_enabled("audio", bool(self.config.get("dubbing_source_audio", False)))
         if hasattr(self, 'screen_worker') and self.screen_worker and hasattr(self.screen_worker, 'update_config'):
             self.screen_worker.update_config(self.config)
         self._sync_dubbing_overlay_buttons()
@@ -6299,7 +6287,7 @@ class ControlPanel(QWidget):
     def _on_screen_subtitle_received(self, orig, trans, engine, roi_idx=0):
         if not self._is_screen_active and not str(engine).startswith("즉시·"):
             return
-        is_screen_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", True))
+        is_screen_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", False))
         self.subtitle_history.add_entry(
             source="screen",
             trans_text=trans,
@@ -6927,6 +6915,9 @@ class ControlPanel(QWidget):
             self.lbl_hotkey_status.setText(tr("hotkey_status", key=cur_hk))
         if hasattr(self, "btn_settings_hotkey") and hasattr(self.btn_settings_hotkey, "_update_text"):
             self.btn_settings_hotkey._update_text()
+        if hasattr(self, "inplace_manager") and self.inplace_manager:
+            if hasattr(self.inplace_manager, "_apply_ui_language"):
+                self.inplace_manager._apply_ui_language()
         if hasattr(self, "_populate_display_combo"):
             self._populate_display_combo()
         if hasattr(self, "refresh_roi_settings_cards"):
@@ -6943,6 +6934,16 @@ class ControlPanel(QWidget):
             from src.screen_overlay_manager import ScreenOverlayManager
             if is_worker_paused or is_overlay_paused or (self.lbl_screen_status.text() and ScreenOverlayManager._is_paused_status_text(self.lbl_screen_status.text())):
                 self.lbl_screen_status.setText(tr("ocr_status_paused"))
+        if hasattr(self, "btn_bottom_audio"):
+            is_audio_active = getattr(self, "is_active", False)
+            self._i18n(self.btn_bottom_audio, "pause" if is_audio_active else "start_translation")
+            self.btn_bottom_audio.setStyleSheet(self._get_bottom_active_btn_style() if is_audio_active else self._get_bottom_audio_inactive_style())
+        if hasattr(self, "btn_bottom_screen"):
+            is_screen_active = getattr(self, "_is_screen_active", False)
+            self._i18n(self.btn_bottom_screen, "pause" if is_screen_active else "start_translation")
+            self.btn_bottom_screen.setStyleSheet(self._get_bottom_active_btn_style() if is_screen_active else self._get_bottom_screen_inactive_style())
+        if hasattr(self, "btn_bottom_dubbing"):
+            self._update_dubbing_toggle_btn_ui()
         self._refill_localized_lists()
 
     def _on_ui_lang_changed(self, index):
@@ -8908,6 +8909,16 @@ class ControlPanel(QWidget):
         self.save_config_cb(self.config)
         self._update_subtitle_preview()
 
+    def sync_audio_clean_box_from_overlay(self, checked):
+        self.config["audio_clean_box"] = checked
+        self.config["clean_box"] = checked
+        if hasattr(self, 'audio_cb_clean_box'):
+            self.audio_cb_clean_box.blockSignals(True)
+            self.audio_cb_clean_box.setChecked(checked)
+            self.audio_cb_clean_box.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
     def sync_audio_show_speaker_from_overlay(self, checked):
         self.config["audio_show_speaker"] = checked
         self.config["show_speaker"] = checked
@@ -9164,6 +9175,15 @@ class ControlPanel(QWidget):
         self.save_config_cb(self.config)
         self._update_subtitle_preview()
 
+    def sync_screen_clean_box_from_overlay(self, checked):
+        self.config["screen_clean_box"] = checked
+        if hasattr(self, 'screen_cb_clean_box'):
+            self.screen_cb_clean_box.blockSignals(True)
+            self.screen_cb_clean_box.setChecked(checked)
+            self.screen_cb_clean_box.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
     def sync_screen_show_speaker_from_overlay(self, checked):
         self.config["screen_show_speaker"] = checked
         if hasattr(self, 'screen_cb_show_speaker'):
@@ -9205,6 +9225,10 @@ class ControlPanel(QWidget):
     def sync_clean_text_from_overlay(self, checked):
         self.sync_audio_clean_text_from_overlay(checked)
         self.sync_screen_clean_text_from_overlay(checked)
+
+    def sync_clean_box_from_overlay(self, checked):
+        self.sync_audio_clean_box_from_overlay(checked)
+        self.sync_screen_clean_box_from_overlay(checked)
 
     def on_show_speaker_toggled(self, checked):
         self.on_audio_show_speaker_toggled(checked)

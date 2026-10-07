@@ -17,7 +17,7 @@ from PyQt6.QtGui import (
 )
 
 from src.screen_capture import preprocess_game_image
-from src.screen_ocr_worker import clean_ocr_english_text
+from src.screen_ocr_worker import clean_ocr_english_text, clean_ocr_text, is_valid_ocr_text
 from src.hotkey_utils import parse_hotkey_string, normalize_hotkey_string, VK_MAP, QT_KEY_TO_NAME
 from src.ui_theme import set_windows_dark_mode
 from src.i18n import tr
@@ -484,70 +484,108 @@ class InPlaceOverlayWindow(QWidget):
 
     def _init_ui(self):
         self.banner_widget = QWidget(self)
+        self.banner_widget.setObjectName("inplace_banner")
         banner_layout = QHBoxLayout(self.banner_widget)
-        banner_layout.setContentsMargins(14, 4, 14, 4)
+        banner_layout.setContentsMargins(12, 4, 12, 4)
         banner_layout.setSpacing(6)
 
-        self.banner_label = QLabel(self.banner_widget)
-        self.banner_label.setStyleSheet("color: #ECEFF1; font-size: 12px; font-weight: bold;")
-        banner_layout.addWidget(self.banner_label)
+        # 1. 아이콘
+        self.lbl_icon = QLabel("📸", self.banner_widget)
+        self.lbl_icon.setStyleSheet("font-size: 14px; background: transparent; border: none; padding: 0 2px;")
+        self.lbl_icon.setCursor(Qt.CursorShape.PointingHandCursor)
+        banner_layout.addWidget(self.lbl_icon)
 
-        # 클린 텍스트 모드 토글 버튼
+        # 2. 텍스트만 토글 버튼
         self.btn_clean_mode = QPushButton(self._clean_mode_btn_text(), self.banner_widget)
         self.btn_clean_mode.setToolTip(tr("inplace_clean_mode_tooltip"))
         self.btn_clean_mode.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_clean_mode.setFixedHeight(22)
+        self.btn_clean_mode.setFixedHeight(24)
         self.btn_clean_mode.setStyleSheet("""
             QPushButton {
                 background-color: rgba(0, 150, 136, 0.85);
-                color: #FFF;
-                border: 1px solid #26A69A;
+                color: #FFFFFF;
+                border: none;
                 border-radius: 4px;
-                font-size: 11px;
+                font-size: 11.5px;
                 font-weight: bold;
-                padding: 0 6px;
+                padding: 0 8px;
             }
             QPushButton:hover {
                 background-color: #26A69A;
-                border-color: #80CBC4;
             }
         """)
         self.btn_clean_mode.clicked.connect(self.toggle_clean_mode)
         banner_layout.addWidget(self.btn_clean_mode)
 
-        self.btn_font_dec = QPushButton("A-", self.banner_widget)
-        self.btn_font_dec.setToolTip(tr("inplace_font_dec_tooltip"))
-        self.btn_font_dec.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_font_dec.setFixedSize(28, 22)
-        self.btn_font_dec.setStyleSheet("""
+        # 3. 글자크기 표시 라벨
+        self.lbl_font_size = QLabel(self.banner_widget)
+        self.lbl_font_size.setStyleSheet("color: #ECEFF1; font-size: 11.5px; font-weight: 600; background: transparent; border: none; padding-left: 4px;")
+        banner_layout.addWidget(self.lbl_font_size)
+        self.banner_label = self.lbl_font_size
+
+        # 4. 글자크기 조절 아이콘들 (A-, A+): 34x24px 충분한 크기로 깨짐 방지 및 border 제거
+        btn_font_style = """
             QPushButton {
-                background-color: rgba(45, 55, 72, 0.85);
-                color: #FFF;
-                border: 1px solid #4A5568;
+                background-color: rgba(45, 55, 72, 0.90);
+                color: #FFFFFF;
+                border: none;
                 border-radius: 4px;
-                font-size: 11px;
+                font-size: 12px;
                 font-weight: bold;
+                padding: 0px;
+                text-align: center;
             }
             QPushButton:hover {
                 background-color: #4A5568;
-                border-color: #00E5FF;
+                color: #64FFDA;
             }
-        """)
+        """
+        self.btn_font_dec = QPushButton("A-", self.banner_widget)
+        self.btn_font_dec.setToolTip(tr("inplace_font_dec_tooltip"))
+        self.btn_font_dec.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_font_dec.setFixedSize(34, 24)
+        self.btn_font_dec.setStyleSheet(btn_font_style)
         self.btn_font_dec.clicked.connect(lambda: self.change_font_size(-1))
         banner_layout.addWidget(self.btn_font_dec)
 
         self.btn_font_inc = QPushButton("A+", self.banner_widget)
         self.btn_font_inc.setToolTip(tr("inplace_font_inc_tooltip"))
         self.btn_font_inc.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_font_inc.setFixedSize(28, 22)
-        self.btn_font_inc.setStyleSheet(self.btn_font_dec.styleSheet())
+        self.btn_font_inc.setFixedSize(34, 24)
+        self.btn_font_inc.setStyleSheet(btn_font_style)
         self.btn_font_inc.clicked.connect(lambda: self.change_font_size(+1))
         banner_layout.addWidget(self.btn_font_inc)
 
+        # 5. 닫기 아이콘 버튼: x아이콘 버튼으로 클릭 시 즉시 닫기
+        self.btn_close = QPushButton("✕", self.banner_widget)
+        self.btn_close.setToolTip(tr("inplace_close_hint"))
+        self.btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_close.setFixedSize(26, 24)
+        self.btn_close.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #94A3B8;
+                border: none;
+                border-radius: 4px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 0px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background-color: rgba(239, 68, 68, 0.85);
+                color: #FFFFFF;
+            }
+        """)
+        self.btn_close.clicked.connect(self.hide)
+        banner_layout.addWidget(self.btn_close)
+        self.lbl_close_hint = self.btn_close  # 하위 호환성 유지
+
+        # 컨트롤 패널 박스 아웃라인 제거: 깔끔한 라운드 플로팅 바
         self.banner_widget.setStyleSheet("""
-            QWidget {
-                background-color: rgba(15, 20, 28, 0.95);
-                border: 1px solid #37474F;
+            QWidget#inplace_banner {
+                background-color: rgba(15, 20, 28, 0.92);
+                border: none;
                 border-radius: 17px;
             }
         """)
@@ -555,6 +593,7 @@ class InPlaceOverlayWindow(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._apply_capture_exclusion()
+        self._apply_ui_language()
         self._restart_idle_timer()
 
     def _apply_capture_exclusion(self):
@@ -599,17 +638,27 @@ class InPlaceOverlayWindow(QWidget):
         self._restart_idle_timer()
 
     def _update_banner_text(self):
-        count = len(self.current_items)
-        offset_desc = f"{self.font_offset:+d}" if self.font_offset != 0 else tr("inplace_font_default")
-        self.banner_label.setText(
-            f"📸 [{tr('inplace_banner_title')}] {tr('inplace_paragraphs', count=count)} ({self.current_engine_name})  |  {tr('inplace_font_size', offset=offset_desc)}  |  {tr('inplace_close_hint')}"
-        )
+        font_px = max(8, min(12 + self.font_offset, 24))
+        self.lbl_font_size.setText(f"{tr('inplace_font_size')}: {font_px}px")
+        self.btn_close.setToolTip(tr("inplace_close_hint"))
+        if hasattr(self, 'lbl_close_hint') and self.lbl_close_hint is not self.btn_close:
+            self.lbl_close_hint.setText(tr("inplace_close_hint"))
+        self.btn_clean_mode.setText(self._clean_mode_btn_text())
+        self.btn_clean_mode.setToolTip(tr("inplace_clean_mode_tooltip"))
+        self.btn_font_dec.setToolTip(tr("inplace_font_dec_tooltip"))
+        self.btn_font_inc.setToolTip(tr("inplace_font_inc_tooltip"))
+        cur_hk = self.config.get("inplace_hotkey", "F4")
+        self.lbl_icon.setToolTip(tr("inplace_icon_tooltip", key=cur_hk))
+
         self.banner_widget.adjustSize()
         if self.current_screen_geo:
             bw = self.banner_widget.width() + 10
             self.banner_widget.setGeometry(
-                (self.current_screen_geo.width() - bw) // 2, 20, bw, 34
+                (self.current_screen_geo.width() - bw) // 2, 20, bw, 36
             )
+
+    def _apply_ui_language(self):
+        self._update_banner_text()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -847,13 +896,18 @@ class SnapshotWorkerThread(threading.Thread):
                 return
 
             # 3. 유효 라인 필터링
+            src_lang = str(self.config.get("source_lang", "auto")).strip().lower().split("-")[0]
+            min_conf = float(self.config.get("screen_ocr_min_confidence", 0.45))
             valid_items = []
             for item in ocr_result:
                 box, raw_text, score = item[0], item[1], float(item[2])
-                if score < 0.40 or not raw_text:
+                if score < min_conf or not raw_text:
                     continue
-                cleaned = clean_ocr_english_text(raw_text.strip())
-                if len(re.findall(r'[a-zA-Z]', cleaned)) >= 2:
+                raw_stripped = raw_text.strip()
+                if len(raw_stripped) <= 2 and score < 0.60:
+                    continue
+                cleaned = clean_ocr_text(raw_stripped, source_lang=src_lang)
+                if cleaned and is_valid_ocr_text(cleaned, source_lang=src_lang):
                     valid_items.append((box, cleaned, score))
 
             if not valid_items:
@@ -990,6 +1044,12 @@ class InPlaceTranslatorManager(QObject):
         """단축키 입력 중 또는 일시 정지 시 전역 핫키 가로채기 방지"""
         if hasattr(self, 'hotkey_worker') and self.hotkey_worker:
             self.hotkey_worker.set_enabled(enabled)
+
+    def _apply_ui_language(self):
+        """다국어 언어 변경 시 인플레이스 오버레이 창 UI 갱신"""
+        if hasattr(self, 'overlay_window') and self.overlay_window:
+            if hasattr(self.overlay_window, '_apply_ui_language'):
+                self.overlay_window._apply_ui_language()
 
     def trigger_snapshot(self, from_button: bool = False):
         """GUI 메인 스레드에서 안전하게 화면을 1회 캡처한 뒤 백그라운드 스레드로 전달"""

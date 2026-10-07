@@ -179,7 +179,7 @@ class ScreenOverlayManager(QObject):
                               on_sync_snap=None, on_visibility_change=None,
                               on_sync_font=None, on_sync_opacity=None,
                               on_toggle_border=None, on_sync_click_through=None,
-                              on_sync_clean_text=None, on_sync_show_speaker=None,
+                              on_sync_clean_text=None, on_sync_clean_box=None, on_sync_show_speaker=None,
                               on_toggle_dubbing=None, on_sync_show_original=None, on_sync_show_translated=None):
         self.ext_handlers = {
             "on_toggle_pause": on_toggle_pause,
@@ -194,6 +194,7 @@ class ScreenOverlayManager(QObject):
             "on_toggle_border": on_toggle_border,
             "on_sync_click_through": on_sync_click_through,
             "on_sync_clean_text": on_sync_clean_text,
+            "on_sync_clean_box": on_sync_clean_box,
             "on_sync_show_speaker": on_sync_show_speaker,
             "on_toggle_dubbing": on_toggle_dubbing,
             "on_sync_show_original": on_sync_show_original,
@@ -216,6 +217,7 @@ class ScreenOverlayManager(QObject):
             on_toggle_border=self.ext_handlers.get("on_toggle_border"),
             on_sync_click_through=self.ext_handlers.get("on_sync_click_through"),
             on_sync_clean_text=self.ext_handlers.get("on_sync_clean_text"),
+            on_sync_clean_box=self.ext_handlers.get("on_sync_clean_box"),
             on_sync_show_speaker=self.ext_handlers.get("on_sync_show_speaker"),
             on_toggle_dubbing=self.ext_handlers.get("on_toggle_dubbing"),
             on_sync_show_original=self.ext_handlers.get("on_sync_show_original"),

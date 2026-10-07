@@ -261,10 +261,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_pause.setFixedHeight(26)
         self.btn_pause.setFixedWidth(32)
         if init_paused:
-            self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #FF5252; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #FF5252; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
             self.btn_pause.setToolTip(tr("overlay_pause_on"))
         else:
-            self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
             self.btn_pause.setToolTip(tr("overlay_pause_off"))
         self.btn_pause.clicked.connect(self._on_pause_clicked)
         self.header_layout.addWidget(self.btn_pause)
@@ -278,8 +278,8 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_roi.clicked.connect(self._on_roi_clicked)
         self.header_layout.addWidget(self.btn_roi)
 
-        # 3. 즉시 캡처 번역 버튼
-        self.btn_snap = QPushButton("📷")
+        # 3. 즉시 캡처 번역 버튼 (⚡ 번개 아이콘)
+        self.btn_snap = QPushButton("⚡")
         self.btn_snap.setToolTip(tr("overlay_tip_snap"))
         self.btn_snap.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_snap.setFixedHeight(26)
@@ -287,9 +287,9 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_snap.clicked.connect(self._on_snap_clicked)
         self.header_layout.addWidget(self.btn_snap)
 
-        # 3-0. 전체 화면 즉시 번역 버튼 (⚡)
+        # 3-0. 전체 화면 즉시 번역 버튼 (📷 카메라 아이콘)
         cur_hk = self.config.get("inplace_hotkey", "F4")
-        self.btn_inplace = QPushButton("⚡")
+        self.btn_inplace = QPushButton("📷")
         self.btn_inplace.setToolTip(tr("overlay_tip_inplace", key=cur_hk))
         self.btn_inplace.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_inplace.setFixedHeight(26)
@@ -301,8 +301,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                 font-weight: bold;
                 border: 1px solid #818CF8;
                 border-radius: 4px;
-                padding: 0px 2px;
-                font-size: 11px;
+                padding: 0px;
+                margin: 0px;
+                text-align: center;
+                font-size: 12px;
             }
             QPushButton:hover {
                 background-color: #4F46E5;
@@ -337,6 +339,14 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_clean.setFixedWidth(32)
         self.btn_clean.clicked.connect(self.toggle_clean_mode)
         self.header_layout.addWidget(self.btn_clean)
+
+        # 3-4. 반투명 배경 박스(자막 바) 토글 버튼 (▣)
+        self.btn_box = QPushButton("▣")
+        self.btn_box.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_box.setFixedHeight(26)
+        self.btn_box.setFixedWidth(32)
+        self.btn_box.clicked.connect(self.toggle_clean_box)
+        self.header_layout.addWidget(self.btn_box)
 
         # 4. 실시간 상태 뱃지 (폭을 56px로 엄격히 제한하고 말줄임표 처리하여 겹침 방지)
         self.live_badge = ElidedBadgeLabel(tr("overlay_waiting"))
@@ -464,15 +474,17 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_hide.clicked.connect(self.hide)
         self.header_layout.addWidget(self.btn_hide)
 
-        # 버튼 공통 스타일
+        # 버튼 공통 스타일 (가운데 완벽 정렬)
         btn_style = """
             QPushButton {
                 background-color: rgba(30, 40, 55, 0.75);
                 color: #EEE;
                 border: 1px solid rgba(255, 255, 255, 0.18);
                 border-radius: 4px;
-                padding: 0px 2px;
-                font-size: 11px;
+                padding: 0px;
+                margin: 0px;
+                text-align: center;
+                font-size: 12px;
                 font-weight: bold;
             }
             QPushButton:hover {
@@ -485,6 +497,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             b.setStyleSheet(btn_style)
         self._update_snap_button_style()
         self._update_clean_button_style()
+        self._update_box_button_style()
         self._update_pin_button_style()
         self._update_border_button_style()
         self._update_speaker_button_style()
@@ -605,14 +618,35 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         if hasattr(self, 'live_badge'):
             self.live_badge.setVisible(bool(visible))
 
+    def toggle_clean_box(self):
+        """반투명 배경 박스 온/오프 토글"""
+        cur = self._get_clean_box()
+        self.set_clean_box(not cur)
+
+    def _update_box_button_style(self):
+        if not hasattr(self, 'btn_box'):
+            return
+        enabled = self._get_clean_box()
+        self.btn_box.setText("▣")
+        self.btn_box.setFixedWidth(32)
+        if enabled:
+            self.btn_box.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #64FFDA; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
+            self.btn_box.setToolTip(tr("overlay_tip_clean_box_on"))
+        else:
+            self.btn_box.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #888; font-weight: bold; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
+            self.btn_box.setToolTip(tr("overlay_tip_clean_box_off"))
+
     def set_clean_box(self, enabled: bool):
         """자막 배경 박스(반투명 라운드 박스) 렌더링 온/오프"""
         self.config["screen_clean_box"] = bool(enabled)
         self._subtitle_box_cache = None
         self._refresh_current_subtitle()
+        self._update_box_button_style()
         self.update()
         self.repaint()
         self._notify_config_change()
+        if hasattr(self, 'ext_sync_clean_box') and self.ext_sync_clean_box:
+            self.ext_sync_clean_box(bool(enabled))
 
     def set_show_original(self, enabled: bool):
         """원문 함께 표시 온/오프"""
@@ -667,13 +701,13 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             "QPushButton { background-color: rgba(0, 150, 136, 0.85); "
             "color: #FFFFFF; font-weight: bold; "
             "border: 1.5px solid rgba(0, 230, 200, 0.85); "
-            "border-radius: 4px; padding: 0px 2px; font-size: 13px; }"
+            "border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 13px; }"
         )
         style_off = (
             "QPushButton { background-color: rgba(40, 44, 58, 0.60); "
             "color: rgba(200, 200, 200, 0.40); font-weight: bold; "
             "border: 1px solid rgba(255, 255, 255, 0.12); "
-            "border-radius: 4px; padding: 0px 2px; font-size: 13px; }"
+            "border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 13px; }"
         )
         self.btn_toggle_en.setStyleSheet(style_on if en_on else style_off)
         self.btn_toggle_ko.setStyleSheet(style_on if ko_on else style_off)
@@ -708,10 +742,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_speaker.setText("🗣️")
         self.btn_speaker.setFixedWidth(32)
         if self.show_speaker:
-            self.btn_speaker.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #64FFDA; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_speaker.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #64FFDA; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
             self.btn_speaker.setToolTip(tr("overlay_tip_speaker_on"))
         else:
-            self.btn_speaker.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_speaker.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
             self.btn_speaker.setToolTip(tr("overlay_tip_speaker_off"))
         self.btn_speaker.show()
 
@@ -728,8 +762,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     font-weight: bold;
                     border: 1.5px solid #A78BFA;
                     border-radius: 4px;
-                    padding: 0px 2px;
-                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                    text-align: center;
+                    font-size: 12px;
                 }
                 QPushButton:hover {
                     background-color: rgba(167, 139, 250, 0.95);
@@ -744,14 +780,16 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     color: #EEE;
                     border: 1px solid rgba(255, 255, 255, 0.18);
                     border-radius: 4px;
-                    padding: 0px 2px;
-                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                    text-align: center;
+                    font-size: 12px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
-                    background-color: rgba(75, 82, 110, 0.95);
+                    background-color: rgba(60, 65, 85, 0.95);
                     color: #FFF;
-                    border: 1px solid rgba(255, 255, 255, 0.4);
+                    border: 1px solid rgba(139, 92, 246, 0.5);
                 }
             """)
             self.btn_dubbing.setToolTip(tr("overlay_tip_screen_dubbing_off"))
@@ -864,6 +902,8 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             elif duration_sec > 0 and getattr(self, 'current_translated', None) and not getattr(self, 'is_mouse_hovered', False):
                 self.clear_timer.start(duration_sec * 1000)
 
+        if hasattr(self, '_update_box_button_style'):
+            self._update_box_button_style()
         if hasattr(self, '_update_pin_button_style'):
             self._update_pin_button_style()
         if hasattr(self, '_update_border_button_style'):
@@ -961,6 +1001,8 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._update_speaker_button_style()
         if hasattr(self, "_update_clean_button_style"):
             self._update_clean_button_style()
+        if hasattr(self, "_update_box_button_style"):
+            self._update_box_button_style()
         if hasattr(self, "btn_pin") and self.btn_pin:
             is_pinned = getattr(self, "is_pinned", False)
             self.btn_pin.setToolTip(tr("overlay_tip_pin_pinned") if is_pinned else tr("overlay_tip_pin_unpinned"))
@@ -1008,7 +1050,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                               on_sync_snap=None, on_visibility_change=None,
                               on_sync_font=None, on_sync_opacity=None,
                               on_toggle_border=None, on_sync_click_through=None,
-                              on_sync_clean_text=None, on_sync_show_speaker=None,
+                              on_sync_clean_text=None, on_sync_clean_box=None, on_sync_show_speaker=None,
                               on_toggle_dubbing=None, on_sync_show_original=None, on_sync_show_translated=None):
         self.ext_toggle_pause = on_toggle_pause
         self.ext_trigger_roi = on_trigger_roi
@@ -1022,6 +1064,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.ext_toggle_border = on_toggle_border
         self.ext_sync_click_through = on_sync_click_through
         self.ext_sync_clean_text = on_sync_clean_text
+        self.ext_sync_clean_box = on_sync_clean_box
         self.ext_sync_show_speaker = on_sync_show_speaker
         self.ext_toggle_dubbing = on_toggle_dubbing
         self.ext_sync_show_original = on_sync_show_original
@@ -1059,7 +1102,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         text = re.sub(r'\s+', ' ', text).strip()
 
         # 1. 화자 변경 감지 줄바꿈 (예: "...입니다. 진행자: ..." -> "\n진행자: ...")
-        text = re.sub(r'([.!?~])\s*([가-힣a-zA-Z0-9\s]{2,15}:)', r'\1\n\2', text)
+        text = re.sub(r'([.!?~])\s*([가-힣a-zA-Z0-9\'.\-\s]{2,30}:)', r'\1\n\2', text)
 
         # 2. 다중 영역 태그([영역 N]) 감지 줄바꿈
         text = re.sub(r'([.!?~]|\b)\s*(\[영역\s*\d+\])', r'\1\n\2', text).strip()
@@ -1074,7 +1117,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         res_lines = []
         for ln in lines:
             # 1) 화자 이름 먼저 감지 (예: "[영역 1] 진행자: 다음 순서는...")
-            m = re.match(r'^(.*?)(([가-힣a-zA-Z0-9\s]{2,15}:)\s*)(.*)', ln)
+            m = re.match(r'^(.*?)(([가-힣a-zA-Z0-9\'.\-\s]{2,30}:)\s*)(.*)', ln)
             if m:
                 prefix = m.group(1)
                 speaker = m.group(3)
@@ -1105,7 +1148,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         text = re.sub(r'\s+', ' ', text).strip()
 
         # 1. 화자 변경 감지 줄바꿈 (예: "...hello. Alex Chen: ..." -> "\nAlex Chen: ...")
-        text = re.sub(r'([.!?~])\s*([a-zA-Z0-9\s]{2,15}:)', r'\1\n\2', text)
+        text = re.sub(r'([.!?~])\s*([a-zA-Z0-9\'.\-\s]{2,30}:)', r'\1\n\2', text)
 
         # 2. 다중 영역 태그 감지 줄바꿈 ([Area N], [ROI N], [영역 N])
         text = re.sub(r'([.!?~]|\b)\s*(\[(?:Area|ROI|영역)\s*\d+\])', r'\1\n\2', text, flags=re.IGNORECASE).strip()
@@ -1117,7 +1160,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         lines = text.split('\n')
         res_lines = []
         for ln in lines:
-            m = re.match(r'^(.*?)(([a-zA-Z0-9\s]{2,15}:)\s*)(.*)', ln)
+            m = re.match(r'^(.*?)(([a-zA-Z0-9\'.\-\s]{2,30}:)\s*)(.*)', ln)
             if m:
                 prefix = m.group(1)
                 speaker = m.group(3)
@@ -1166,8 +1209,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     color: #00E676;
                     border: 1.5px solid #00E676;
                     border-radius: 4px;
-                    padding: 0px 2px;
-                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                    text-align: center;
+                    font-size: 12px;
                     font-weight: bold;
                 }
             """)
@@ -1178,8 +1223,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     color: #BBB;
                     border: 1px solid rgba(255, 255, 255, 0.18);
                     border-radius: 4px;
-                    padding: 0px 2px;
-                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                    text-align: center;
+                    font-size: 12px;
                     font-weight: bold;
                 }
             """)
@@ -1197,8 +1244,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     color: #A7FFEB;
                     border: 1.5px solid #64FFDA;
                     border-radius: 4px;
-                    padding: 0px 2px;
-                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                    text-align: center;
+                    font-size: 12px;
                     font-weight: bold;
                 }
             """)
@@ -1209,8 +1258,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     color: #BBB;
                     border: 1px solid rgba(255, 255, 255, 0.18);
                     border-radius: 4px;
-                    padding: 0px 2px;
-                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                    text-align: center;
+                    font-size: 12px;
                     font-weight: bold;
                 }
             """)
@@ -1353,11 +1404,11 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         if hasattr(self, 'btn_pause') and self.btn_pause:
             if is_paused:
                 self.btn_pause.setText("▶")
-                self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #FF5252; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+                self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #FF5252; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
                 self.btn_pause.setToolTip(tr("overlay_pause_on"))
             elif self._is_waiting:
                 self.btn_pause.setText("⏸")
-                self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+                self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
                 self.btn_pause.setToolTip(tr("overlay_pause_off"))
         self.live_badge.setText(status)
 
@@ -1373,7 +1424,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             engine, fallback = translation_badge(engine_badge, self.config)
             fallback_suffix = f" ({tr('badge_fallback')})" if fallback else ""
             if is_instant:
-                self.live_badge.setText(f"📷 {tr('badge_instant')} · {engine}{fallback_suffix}")
+                self.live_badge.setText(f"⚡ {tr('badge_instant')} · {engine}{fallback_suffix}")
             else:
                 self.live_badge.setText(f"OCR + {engine}{fallback_suffix}")
             self.live_badge.setToolTip(
@@ -1714,9 +1765,9 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_clean.setText("✨")
         self.btn_clean.setFixedWidth(32)
         if self.clean_text_mode:
-            self.btn_clean.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #64FFDA; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_clean.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #64FFDA; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
         else:
-            self.btn_clean.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_clean.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px; margin: 0px; text-align: center; font-size: 12px; }")
 
     def toggle_pin(self):
         self.is_pinned = not getattr(self, 'is_pinned', False)
@@ -1739,8 +1790,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     color: #FFF;
                     border: 1.5px solid #FFA726;
                     border-radius: 4px;
-                    padding: 0px 2px;
-                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                    text-align: center;
+                    font-size: 12px;
                     font-weight: bold;
                 }
             """)
@@ -1752,8 +1805,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     color: #EEE;
                     border: 1px solid rgba(255, 255, 255, 0.18);
                     border-radius: 4px;
-                    padding: 0px 2px;
-                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                    text-align: center;
+                    font-size: 12px;
                     font-weight: bold;
                 }
                 QPushButton:hover {

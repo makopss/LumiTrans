@@ -232,6 +232,7 @@ def main():
     # 설정 로드
     splash.set_message(tr("splash_loading_config"), 34)
     config = load_config()
+    config["dubbing_enabled"] = False
     set_ui_language(config.get("ui_lang", "ko"))
 
     # 오디오 큐 생성
@@ -324,6 +325,13 @@ def main():
     init_screen = config.get("auto_start_screen", False) and config.get("screen_translate_enabled", False)
     control_panel.set_screen_active_state(init_screen)
 
+    # 초기 더빙 활성 상태 명시적 동기화 (기본: 정지 상태 시작)
+    control_panel.config["dubbing_enabled"] = False
+    if dubbing_engine:
+        dubbing_engine.set_enabled(False)
+    control_panel._update_dubbing_toggle_btn_ui()
+    control_panel._sync_dubbing_overlay_buttons()
+
 
     # 오버레이 퀵 컨트롤러와 메인 컨트롤 패널 연동 (음성 번역 자막 전용 격리)
     overlay.set_external_handlers(
@@ -335,6 +343,7 @@ def main():
         on_visibility_change=control_panel.sync_audio_overlay_visibility,
         on_sync_click_through=control_panel.sync_audio_click_through_from_overlay,
         on_sync_clean_text=control_panel.sync_audio_clean_text_from_overlay,
+        on_sync_clean_box=control_panel.sync_audio_clean_box_from_overlay,
         on_sync_show_speaker=control_panel.sync_audio_show_speaker_from_overlay,
         on_toggle_dubbing=control_panel.toggle_audio_dubbing_from_overlay,
         on_sync_show_original=control_panel.sync_audio_show_original_from_overlay,
@@ -359,6 +368,7 @@ def main():
         on_toggle_border=control_panel.toggle_roi_border,
         on_sync_click_through=control_panel.sync_screen_click_through_from_overlay,
         on_sync_clean_text=control_panel.sync_screen_clean_text_from_overlay,
+        on_sync_clean_box=control_panel.sync_screen_clean_box_from_overlay,
         on_sync_show_speaker=control_panel.sync_screen_show_speaker_from_overlay,
         on_toggle_dubbing=control_panel.toggle_screen_dubbing_from_overlay,
         on_sync_show_original=control_panel.sync_screen_show_original_from_overlay,

@@ -48,6 +48,10 @@ class ScreenOverlayHoverTests(unittest.TestCase):
         overlay = ScreenSubtitleOverlay(copy.deepcopy(DEFAULT_CONFIG))
         try:
             self.assertTrue(hasattr(overlay, 'btn_inplace'))
+            self.assertTrue(hasattr(overlay, 'btn_snap'))
+            self.assertEqual(overlay.btn_inplace.text(), "📷")
+            self.assertEqual(overlay.btn_snap.text(), "⚡")
+            self.assertIn("text-align: center", overlay.btn_inplace.styleSheet())
             self.assertTrue(
                 "전체 화면 번역 실행" in overlay.btn_inplace.toolTip() or
                 "Translate entire screen" in overlay.btn_inplace.toolTip()
