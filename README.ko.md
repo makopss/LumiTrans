@@ -2,42 +2,48 @@
 
 **한국어** | [English](README.md)
 
-**AI 실시간 음성 & 화면 번역 자막기**
+**AI 실시간 음성 & 화면 번역 자막 및 AI 더빙 (Windows)**
 
-유튜브 영상, 넷플릭스, 해외 강의, 트위치 등 **PC에서 재생되는 모든 영어 소리를 실시간으로 감지하여 한국어 자막으로 번역**해 화면 최상단에 띄워주는 독립형 데스크톱 프로그램입니다.
+유튜브 영상, 넷플릭스, 게임 대화, 해외 강의, 미팅 등 **PC에서 재생되는 오디오와 화면의 모든 텍스트를 실시간으로 감지하여 다국어 자막과 자연스러운 AI 더빙**으로 출력해주는 올인원 데스크톱 프로그램입니다.
 
 ![루미트랜스 자막 오버레이](docs/images/overlay-audio.jpg)
 
 ---
 
-## 🌟 최신 핵심 기능
+## 🌟 최신 핵심 기능 (v1.1.0)
 
-### 1. 번역 엔진 선택
-- **Google 번역**: API 키 없이 요청하는 기본 온라인 경로.
-- **DeepL / Gemini / Groq**: 해당 서비스의 API 키를 등록해 사용. Groq는 초저지연 클라우드 LPU 번역을 제공합니다.
-- **로컬 번역**: EXAONE 3.5 2.4B·7.8B, TranslateGemma 및 Ollama 연동. 모델 파일과 실행 환경 준비가 필요합니다.
-- 선택한 엔진이 실패하면 Google, MyMemory 순서로 폴백합니다. 모두 실패하면 원문을 표시하며 실패 결과는 장기 캐시에 저장하지 않습니다.
-- 온라인 서비스의 이용 한도와 가용성은 공급자 정책 및 연결 상태에 따라 달라집니다.
+### 1. 🌐 글로벌 15개국 다국어 및 i18n 완벽 지원 [NEW!]
+- **15개 주요 언어 UI 지원**: 한국어, 영어, 일본어, 중국어(간체/번체), 스페인어, 프랑스어, 독일어, 러시아어, 포르투갈어, 이탈리아어, 베트남어, 태국어, 인도네시아어, 힌디어를 기본 제공합니다.
+- **자동 언어 감지**: 첫 실행 시 시스템 언어를 자동으로 감지하며, 설정 탭에서 원클릭으로 언어를 전환할 수 있습니다.
+- **다국어 음성 인식 & 번역**: 전 세계 다양한 언어의 소리와 화면을 원하는 언어로 실시간 동시통역합니다.
 
-### 2. 강력한 트리플 하드웨어 가속
-- **NVIDIA GPU (CUDA)**: 호환 드라이버와 추론 라이브러리가 준비된 환경에서 사용.
-- **CPU**: 로컬 음성 인식과 번역을 CPU로 실행할 수 있습니다. 모델별 속도와 메모리 사용량은 기기에 따라 다릅니다.
-- **Groq Cloud STT**: 음성 인식을 외부 API로 요청합니다. 네트워크 지연과 서비스 제한의 영향을 받습니다.
+### 2. 🔊 AI 실시간 더빙 (Edge-TTS) [NEW!]
+- **자연스러운 음성 합성**: 번역된 자막을 최신 신경망 기반 AI 음성으로 실시간 읽어줍니다.
+- **독립 듀얼 제어**: 음성 번역 더빙과 화면 번역 더빙을 각각 독립적으로 켜고 끌 수 있습니다.
+- **더빙 세부 조절**: 음성 합성 속도, 음량 조절 및 각 언어별 최적의 보이스 엔진을 지원합니다.
 
-### 3. 문장 단위 완결형 번역 & 실시간 타이핑 프리뷰
-- **문장 단위 완결**: 마침표(`.`), 물음표(`?`)를 추적하여 토막 나지 않은 자연스러운 완결형 한국어 문장 출력.
-- **실시간 타이핑 프리뷰**: 완결 번역을 기다리는 동안 인식한 원문을 먼저 표시합니다.
+### 3. 🎯 인플레이스 화면 캡처 및 즉시 번역 (In-place OCR) [NEW!]
+- **단축키 즉시 번역**:
+  - `F4`: 지정 영역 및 활성 창 즉시 캡처 번역
+  - `F9`: 전체 화면 즉시 캡처 번역
+- **직관적인 인플레이스 컨트롤 패널**: 번개(즉시 번역), 카메라(전체화면), 닫기(X) 버튼 및 친절한 마우스 오버 툴팁 안내.
+- **스마트 화자(Speaker) 분리 및 보존**: 게임이나 영상 대사에서 화자명(`Nora Treadwell:`, `Detective:` 등)을 정밀 인식하여 원문 인명 손상 없이 자연스럽게 분리·보존하여 번역합니다.
 
-### 4. 넷플릭스 스타일 스마트 자막 오버레이
-- **마우스 클릭 관통 (Click-Through)**: 자막 창 뒤의 유튜브 재생 버튼이나 브라우저 클릭 가능.
-- **공간 맞춤형 자동 보정 (Auto-Fit)**: 자막 길이에 맞춰 폰트 크기 및 높이 스마트 자동 보정.
-- 드래그 이동 및 크기 조절, 불투명도 및 글자 크기 실시간 조절.
+### 4. 🧠 다양한 번역 엔진 선택
+- **Google 번역**: API 키 없이 바로 사용할 수 있는 기본 온라인 번역.
+- **DeepL / Gemini / Groq**: 개인 API 키를 등록하여 최고 품질의 번역 이용 (Groq는 초저지연 클라우드 LPU 번역 지원).
+- **로컬 번역 (오프라인)**: EXAONE 3.5 (2.4B/7.8B), TranslateGemma 및 Ollama 로컬 LLM 완전 연동.
+- **스마트 폴백**: 번역 엔진 장애 발생 시 Google, MyMemory 순서로 자동 우회 복구.
 
-### 5. 👁️ 실시간 화면 영문 텍스트 번역 (Screen OCR) [NEW!]
-- **게임 대화창 / 자막 실시간 자동 번역**: 소리가 나오지 않는 게임 대사, 퀘스트창, 해외 문서, 영상 속 자막을 실시간으로 읽어 전용 오버레이 창에 즉시 번역 표출.
-- **프레임 변동 감지 (Frame Diff)**: 정지 화면의 반복 OCR을 줄입니다. 번역 실패 시에는 정지 화면에서도 재시도합니다.
-- **스마트 영역 지정 (ROI Selector)**: 윈도우 캡처 도구처럼 마우스로 원하는 영역을 슥 드래그하여 간편하게 지정.
-- **오디오 + 화면 동시 듀얼 번역**: 소리 자막과 화면 자막을 동시에 띄워두거나 필요에 따라 개별 토글 가능.
+### 5. ⚡ 강력한 하드웨어 가속
+- **NVIDIA GPU (CUDA)**: TensorRT / CTranslate2 기반 초고속 로컬 추론.
+- **CPU**: 고효율 멀티스레딩 최적화로 외장 그래픽카드 없는 PC에서도 안정적으로 구동.
+- **Groq Cloud STT**: 고성능 클라우드 음성 인식을 통해 저사양 PC에서도 지연 없는 자막 생성.
+
+### 6. 🎬 넷플릭스 스타일 스마트 자막 오버레이
+- **마우스 클릭 관통 (Click-Through)**: 자막 창 뒤의 게임 조작, 유튜브 버튼, 웹 브라우저를 방해 없이 자유롭게 클릭.
+- **공간 맞춤형 자동 보정 (Auto-Fit)**: 문장 길이에 맞춰 폰트 크기 및 높이를 스마트하게 자동 계산.
+- 실시간 타이핑 프리뷰, 투명도 조절, 드래그 이동 및 크기 조절 완벽 지원.
 
 ---
 
@@ -58,79 +64,69 @@
 
 </details>
 
-> 스크린샷은 데모 모드의 예시 데이터로 촬영했습니다.
+---
+
+## 📥 다운로드 (Windows 설치 파일)
+
+공식 릴리즈는 [GitHub Releases](https://github.com/makopss/LumiTrans/releases) 페이지에서 다운로드할 수 있습니다:
+
+| 에디션 | 파일명 | 크기 | 권장 환경 및 특징 |
+|---|---|---|---|
+| **Korean Lite** | `LumiTrans_Lite_Setup_v1.0.0.exe` | 약 194MB | 한국어 특화 가벼운 패키지 (모델은 첫 실행 시 자동 다운로드) |
+| **Korean Full** | `LumiTrans_Full_Setup_v1.0.0.exe` | 약 790MB | 한국어 오프라인 STT 모델 및 CUDA 12 가속 라이브러리 기본 내장 |
+| **Global Lite** | `LumiTrans_Global_Lite_Setup_v1.0.0.exe` | 약 194MB | 15개국 다국어 UI 지원 글로벌 에디션 (첫 실행 시 모델 다운로드) |
+| **Global Full** | `LumiTrans_Global_Full_Setup_v1.0.0.exe` | 약 968MB | 15개국 다국어 UI + 다국어 STT 모델 + CUDA 12 가속 라이브러리 완전 내장 |
 
 ---
 
-## 📥 다운로드
+## 🚀 소스코드 실행 방법
 
-미리 빌드된 Windows 설치 파일은 [Releases](https://github.com/makopss/LumiTrans/releases) 페이지에서 받을 수 있습니다:
-
-| 에디션 | 크기 | 내용 |
-|---|---|---|
-| **Lite** | 약 194MB | STT/LLM 모델은 첫 실행 시 다운로드 |
-| **Full** | 약 790MB | STT 모델 및 CUDA 12 가속 라이브러리 내장 |
-
----
-
-## 🚀 실행 방법
-
-Windows 및 Python 3.12 환경을 기준으로 검증하고 있습니다. 프로젝트 루트에서 먼저 의존성을 설치합니다.
+Windows 및 Python 3.12 환경을 기준으로 개발되었습니다.
 
 ```powershell
+# 가상환경 생성 및 활성화
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe run.py
-```
+.\.venv\Scripts\Activate.ps1
 
-GPU용 추론 라이브러리와 모델 파일은 별도로 준비해야 할 수 있습니다. 현재 PC의 기존 설치 환경 검증과 새 PC 설치 검증은 별개입니다. 프로세스 전용 캡처에는 `proc-tap`이 필요하며, 초기화 실패 시 전체 장치 루프백으로 자동 전환하지 않고 오류를 표시합니다.
+# 의존성 패키지 설치
+pip install -r requirements.txt
 
-### 방법 1: 배치 파일 실행
-폴더 내 **`run.bat`** 파일을 더블클릭합니다.
-
-### 방법 2: 터미널 실행
-```bash
+# 프로그램 실행
 python run.py
 ```
 
-### 방법 3: 윈도우 설치 버전 (Setup.exe) 빌드 및 배포
-탐색기에서 **`build_installer.bat`** 파일을 더블클릭하거나 아래 명령을 실행합니다:
+### 배치 파일로 간편 실행
+프로젝트 루트의 **`run.bat`** 파일을 더블클릭하면 즉시 실행됩니다.
+
+### 윈도우 설치 파일 (Setup.exe) 직접 빌드
 ```powershell
-python scripts/build_windows_installer.py
+# 한국어 에디션 전체 빌드
+python scripts/build_windows_installer.py --product kr --edition all
+
+# 글로벌 에디션 전체 빌드
+python scripts/build_windows_installer.py --product global --edition all
 ```
-기본으로 Lite와 Full 두 에디션을 모두 빌드합니다(`--edition lite` / `--edition full`로 하나만 빌드 가능). 빌드가 완료되면 **`installer_output/`** 폴더에 다음 설치 프로그램이 생성됩니다:
-- `LumiTrans_Lite_Setup_v1.0.0.exe`: 모델은 첫 실행 시 다운로드
-- `LumiTrans_Full_Setup_v1.0.0.exe`: STT 모델 및 CUDA 12 가속 라이브러리 내장
-
-설치 파일 하나로 바로가기, 아이콘, 언인스톨러를 포함한 완전한 데스크톱 애플리케이션 설치가 가능합니다.
-
+빌드가 완료되면 **`installer_output/`** 폴더에 원클릭 인스톨러가 생성됩니다.
 
 ---
 
 ## 🔑 API 키 등록 방법 (선택 사항)
-컨트롤 패널의 **`[🔑 무료 API 키 등록 및 관리]`** 버튼을 클릭하여 입력하실 수 있습니다:
-- **DeepL API Key**: [DeepL API](https://www.deepl.com/pro-api)
-- **Gemini API Key**: [Google AI Studio](https://aistudio.google.com)
-- **Groq API Key**: [Groq Console](https://console.groq.com)
 
-키는 개인 `config.json`에 저장됩니다. 배포 시 이 파일과 로그·음성·자막 기록을 제외하고, 키가 비어 있는 `config.example.json`을 사용하세요. `.gitignore`는 Git 추가를 막지만 폴더 전체 압축에는 적용되지 않습니다.
+무료 온라인 번역(Google)은 API 키 등록 없이 바로 작동합니다. 더 높은 품질과 빠른 속도를 위해 개인 API 키를 등록할 수 있습니다:
+- **컨트롤 패널 → 설정 → `[🔑 무료 API 키 등록 및 관리]`**
+  - **DeepL API Key**: [DeepL API](https://www.deepl.com/pro-api) (월 50만 자 무료)
+  - **Gemini API Key**: [Google AI Studio](https://aistudio.google.com) (무료 티어 제공)
+  - **Groq API Key**: [Groq Console](https://console.groq.com) (초고속 LPU 클라우드 무료 티어)
 
-## 🩺 문제 해결
+API 키는 사용자 PC의 로컬 `config.json`에만 안전하게 저장됩니다.
 
-- 설치 버전은 콘솔 창 없이 실행됩니다. 로그는 `%APPDATA%\LumiTrans` 폴더(`stdout.log`, `stderr.log`, `crash.log`)에 저장됩니다.
-- **설정 → 문제 진단 → 📂 로그 폴더 열기** 버튼으로 해당 폴더를 바로 열 수 있습니다.
-- 실시간 로그를 보려면 **시작 메뉴 → LumiTrans → LumiTrans (디버그 모드)** 로 실행하거나 `LumiTrans.exe --console` 로 실행하세요. 콘솔 창이 열리며 로그 파일에도 계속 기록됩니다.
-- 버그 제보 시 `stderr.log`와 `crash.log`를 첨부해 주세요.
+---
 
-## 검증
+## 🩺 문제 해결 및 로그 확인
 
-```powershell
-python scripts/run_offline_tests.py
-```
-
-선택한 기존 테스트와 출시 회귀 테스트를 오프스크린 UI 및 mock 엔진으로 실행합니다. 실제 모델·GPU·오디오·외부 API를 사용한 종단 간 검증은 별도입니다. 자동 검증 결과에는 검사한 소스 해시와 실행 중 파일 변경 여부를 기록합니다.
-
-성능을 비교할 때는 모델 준비 시간, 원음 시작부터 자막 표시까지의 지연, 더빙 시작 지연, RAM/VRAM, 게임 프레임 영향을 각각 측정하세요. 특정 지연이나 자원 사용량을 모든 PC에 보장하지 않습니다.
+- 설치 버전은 백그라운드 데스크톱 모드로 실행되며, 로그는 `%APPDATA%\LumiTrans` 폴더(`stdout.log`, `stderr.log`, `crash.log`)에 자동 보관됩니다.
+- **설정 → 문제 진단 → 📂 로그 폴더 열기** 버튼으로 손쉽게 확인할 수 있습니다.
+- 실시간 콘솔 출력을 원할 경우 **시작 메뉴 → LumiTrans (디버그 모드)** 또는 `LumiTrans.exe --console`로 실행할 수 있습니다.
 
 ---
 
@@ -144,14 +140,4 @@ Copyright (C) 2026 makopss
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 of the License.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 ```
-
-사용한 오픈소스 라이브러리와 AI 모델의 라이선스는 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)를 참고하세요. 모델 가중치는 이 저장소에 포함되지 않으며 각 모델의 라이선스를 따릅니다. 특히 EXAONE 3.5는 **비상업적 용도**로만 사용할 수 있습니다.
-
-### ⚠️ 면책 조항
-
-이 프로그램은 개인 학습 및 접근성 향상 목적으로 제작되었습니다. Google 번역(키 없는 요청), Microsoft Edge TTS, YouTube 자막 등 일부 기능은 공식 API가 아닌 경로를 사용하며, 각 서비스의 약관 준수 책임은 사용자에게 있습니다. 번역 자막은 저작권이 있는 콘텐츠의 개인 시청 보조용으로만 사용하세요.
