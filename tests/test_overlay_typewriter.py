@@ -38,14 +38,16 @@ def load_subtitle_methods():
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef)
                and n.name == 'SubtitleOverlay')
     names = {'display_subtitle', 'fade_or_clear_subtitles',
-             '_html_body', '_set_label_html', '_translated_color', '_original_color'}
+             '_html_body', '_set_label_html', '_translated_color', '_original_color',
+             '_get_subtitle_duration'}
     methods = [n for n in cls.body if isinstance(n, ast.FunctionDef)
                and n.name in names]
-    from src.subtitle_manager import smart_break_sentences, break_korean_sentences
+    from src.subtitle_manager import smart_break_sentences, break_korean_sentences, break_subtitle_text
     namespace = {
         're': re, 'time': time, 'QTimer': ManualTimer,
         'smart_break_sentences': smart_break_sentences,
         'break_korean_sentences': break_korean_sentences,
+        'break_subtitle_text': break_subtitle_text,
     }
     exec(compile(ast.Module(body=methods, type_ignores=[]), str(source), 'exec'), namespace)
     return type('SubtitleHarness', (), {name: namespace[name] for name in names
@@ -61,6 +63,7 @@ class TestOverlayTypewriter(unittest.TestCase):
         self.overlay.label_translated = Mock()
         self.overlay._auto_fit_text = Mock()
         self.overlay.update_badge = Mock()
+        self.overlay.update = Mock()
         self.overlay.clear_timer = ManualTimer()
 
     def display(self, text):

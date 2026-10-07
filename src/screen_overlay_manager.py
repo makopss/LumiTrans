@@ -179,7 +179,8 @@ class ScreenOverlayManager(QObject):
                               on_sync_snap=None, on_visibility_change=None,
                               on_sync_font=None, on_sync_opacity=None,
                               on_toggle_border=None, on_sync_click_through=None,
-                              on_sync_clean_text=None, on_sync_show_speaker=None):
+                              on_sync_clean_text=None, on_sync_show_speaker=None,
+                              on_toggle_dubbing=None, on_sync_show_original=None, on_sync_show_translated=None):
         self.ext_handlers = {
             "on_toggle_pause": on_toggle_pause,
             "on_trigger_roi": on_trigger_roi,
@@ -193,7 +194,10 @@ class ScreenOverlayManager(QObject):
             "on_toggle_border": on_toggle_border,
             "on_sync_click_through": on_sync_click_through,
             "on_sync_clean_text": on_sync_clean_text,
-            "on_sync_show_speaker": on_sync_show_speaker
+            "on_sync_show_speaker": on_sync_show_speaker,
+            "on_toggle_dubbing": on_toggle_dubbing,
+            "on_sync_show_original": on_sync_show_original,
+            "on_sync_show_translated": on_sync_show_translated,
         }
         for o in self.overlays:
             self._apply_handlers_to(o)
@@ -212,7 +216,10 @@ class ScreenOverlayManager(QObject):
             on_toggle_border=self.ext_handlers.get("on_toggle_border"),
             on_sync_click_through=self.ext_handlers.get("on_sync_click_through"),
             on_sync_clean_text=self.ext_handlers.get("on_sync_clean_text"),
-            on_sync_show_speaker=self.ext_handlers.get("on_sync_show_speaker")
+            on_sync_show_speaker=self.ext_handlers.get("on_sync_show_speaker"),
+            on_toggle_dubbing=self.ext_handlers.get("on_toggle_dubbing"),
+            on_sync_show_original=self.ext_handlers.get("on_sync_show_original"),
+            on_sync_show_translated=self.ext_handlers.get("on_sync_show_translated")
         )
 
     def update_inplace_hotkey_tooltip(self, hotkey_str: str):
@@ -231,6 +238,7 @@ class ScreenOverlayManager(QObject):
             o.set_paused_state(is_paused)
 
     def set_click_through(self, enabled: bool):
+        self.config["screen_click_through"] = bool(enabled)
         for o in self.overlays:
             o.set_click_through(enabled)
 
@@ -282,6 +290,7 @@ class ScreenOverlayManager(QObject):
             o.display_status(status)
 
     def set_clean_mode(self, enabled: bool):
+        self.config["screen_clean_text_mode"] = bool(enabled)
         for o in self.overlays:
             o.set_clean_mode(enabled)
 
@@ -291,14 +300,30 @@ class ScreenOverlayManager(QObject):
 
     def set_show_original(self, enabled: bool):
         """관리 중인 모든 화면 자막 오버레이 창에 영문 원문 표시 여부 동기화"""
+        self.config["screen_show_original"] = bool(enabled)
         self.config["show_original"] = bool(enabled)
         for o in self.overlays:
             if hasattr(o, "set_show_original"):
                 o.set_show_original(enabled)
             else:
+                o.config["screen_show_original"] = bool(enabled)
                 o.config["show_original"] = bool(enabled)
                 if hasattr(o, "label_original"):
                     o.label_original.setVisible(bool(enabled))
+                o.update()
+
+    def set_show_translated(self, enabled: bool):
+        """관리 중인 모든 화면 자막 오버레이 창에 번역문 표시 여부 동기화"""
+        self.config["screen_show_translated"] = bool(enabled)
+        self.config["show_translated"] = bool(enabled)
+        for o in self.overlays:
+            if hasattr(o, "set_show_translated"):
+                o.set_show_translated(enabled)
+            else:
+                o.config["screen_show_translated"] = bool(enabled)
+                o.config["show_translated"] = bool(enabled)
+                if hasattr(o, "label_translated"):
+                    o.label_translated.setVisible(bool(enabled))
                 o.update()
 
     def apply_config(self, apply_geometry=False):
@@ -325,10 +350,14 @@ class ScreenOverlayManager(QObject):
             o.update()
 
     def set_stroke_width(self, val: int):
+        self.config["screen_subtitle_stroke_width"] = int(val)
+        self.config["subtitle_stroke_width"] = int(val)
         for o in self.overlays:
             o.set_stroke_width(val)
 
     def set_letter_spacing(self, val: float):
+        self.config["screen_letter_spacing"] = float(val)
+        self.config["letter_spacing"] = float(val)
         for o in self.overlays:
             o.set_letter_spacing(val)
 
@@ -336,6 +365,7 @@ class ScreenOverlayManager(QObject):
     update_letter_spacing = set_letter_spacing
 
     def set_badge_visible(self, visible: bool):
+        self.config["screen_show_engine_badge"] = visible
         self.config["show_engine_badge"] = visible
         for o in self.overlays:
             if hasattr(o, "set_badge_visible"):
@@ -353,6 +383,7 @@ class ScreenOverlayManager(QObject):
                 o.update()
 
     def set_show_speaker(self, enabled: bool):
+        self.config["screen_show_speaker"] = bool(enabled)
         self.config["show_speaker"] = bool(enabled)
         for o in self.overlays:
             if hasattr(o, "set_show_speaker"):
@@ -364,26 +395,63 @@ class ScreenOverlayManager(QObject):
             if hasattr(o, "set_speaker_diarization_enabled"):
                 o.set_speaker_diarization_enabled(enabled)
 
+    def update_dubbing_state(self, enabled: bool):
+        for o in self.overlays:
+            if hasattr(o, "update_dubbing_state"):
+                o.update_dubbing_state(enabled)
+
     def update_font_size(self, val: int):
-        self.config["font_size"] = val
+        self.config["screen_font_size"] = int(val)
+        self.config["font_size"] = int(val)
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["font_size"] = int(val)
         for o in self.overlays:
             if hasattr(o, "update_font_size"):
                 o.update_font_size(val)
             else:
                 o._apply_config(apply_geometry=False)
+                o.update()
 
     set_font_size = update_font_size
 
     def update_opacity(self, pct: float):
         val = pct / 100.0 if float(pct) > 1.0 else float(pct)
-        self.config["overlay_bg_opacity"] = max(0.0, min(1.0, val))
+        norm = max(0.0, min(1.0, val))
+        self.config["screen_overlay_bg_opacity"] = norm
+        self.config["overlay_bg_opacity"] = norm
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["opacity"] = int(norm * 100)
         for o in self.overlays:
             if hasattr(o, "update_opacity"):
-                o.update_opacity(self.config["overlay_bg_opacity"])
+                o.update_opacity(norm)
             else:
                 o._apply_config(apply_geometry=False)
+                o.update()
 
     set_bg_opacity = update_opacity
+
+    def set_subtitle_duration(self, val: int):
+        self.config["screen_subtitle_duration"] = int(val)
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["duration"] = int(val)
+        for o in self.overlays:
+            if hasattr(o, "update_duration"):
+                o.update_duration(val)
+            elif hasattr(o, "set_subtitle_duration"):
+                o.set_subtitle_duration(val)
+            else:
+                o.config["screen_subtitle_duration"] = int(val)
+
+    update_duration = set_subtitle_duration
 
     def update_snap_button_style(self):
         for o in self.overlays:

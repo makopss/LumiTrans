@@ -325,20 +325,23 @@ def main():
     control_panel.set_screen_active_state(init_screen)
 
 
-    # 오버레이 퀵 컨트롤러와 메인 컨트롤 패널 연동
+    # 오버레이 퀵 컨트롤러와 메인 컨트롤 패널 연동 (음성 번역 자막 전용 격리)
     overlay.set_external_handlers(
         on_toggle_pause=control_panel.toggle_translation,
         on_change_engine=control_panel.set_engine_by_key,
         on_open_settings=control_panel.open_from_overlay,
-        on_sync_opacity=control_panel.sync_opacity_from_overlay,
-        on_sync_font=control_panel.sync_font_from_overlay,
+        on_sync_opacity=control_panel.sync_audio_opacity_from_overlay,
+        on_sync_font=control_panel.sync_audio_font_from_overlay,
         on_visibility_change=control_panel.sync_audio_overlay_visibility,
-        on_sync_click_through=control_panel.sync_click_through_from_overlay,
-        on_sync_clean_text=control_panel.sync_clean_text_from_overlay,
-        on_sync_show_speaker=control_panel.sync_show_speaker_from_overlay
+        on_sync_click_through=control_panel.sync_audio_click_through_from_overlay,
+        on_sync_clean_text=control_panel.sync_audio_clean_text_from_overlay,
+        on_sync_show_speaker=control_panel.sync_audio_show_speaker_from_overlay,
+        on_toggle_dubbing=control_panel.toggle_audio_dubbing_from_overlay,
+        on_sync_show_original=control_panel.sync_audio_show_original_from_overlay,
+        on_sync_show_translated=control_panel.sync_audio_show_translated_from_overlay
     )
 
-    # 화면 번역 오버레이 퀵 컨트롤러 연동
+    # 화면 번역 오버레이 퀵 컨트롤러 연동 (화면 번역 자막 전용 격리)
     def _toggle_screen_pause_from_overlay():
         control_panel.toggle_screen_translation()
         return not config.get("screen_translate_enabled", False)
@@ -351,12 +354,15 @@ def main():
         on_open_settings=control_panel.open_from_overlay,
         on_sync_snap=control_panel.sync_snap_from_overlay,
         on_visibility_change=control_panel.sync_screen_overlay_visibility,
-        on_sync_font=control_panel.sync_font_from_overlay,
-        on_sync_opacity=control_panel.sync_opacity_from_overlay,
+        on_sync_font=control_panel.sync_screen_font_from_overlay,
+        on_sync_opacity=control_panel.sync_screen_opacity_from_overlay,
         on_toggle_border=control_panel.toggle_roi_border,
-        on_sync_click_through=control_panel.sync_click_through_from_overlay,
-        on_sync_clean_text=control_panel.sync_clean_text_from_overlay,
-        on_sync_show_speaker=control_panel.sync_show_speaker_from_overlay
+        on_sync_click_through=control_panel.sync_screen_click_through_from_overlay,
+        on_sync_clean_text=control_panel.sync_screen_clean_text_from_overlay,
+        on_sync_show_speaker=control_panel.sync_screen_show_speaker_from_overlay,
+        on_toggle_dubbing=control_panel.toggle_screen_dubbing_from_overlay,
+        on_sync_show_original=control_panel.sync_screen_show_original_from_overlay,
+        on_sync_show_translated=control_panel.sync_screen_show_translated_from_overlay
     )
 
     # 백그라운드 스레드 시작

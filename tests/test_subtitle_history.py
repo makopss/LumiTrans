@@ -288,9 +288,10 @@ def test_control_panel_tab_integration():
     assert cp.subtitle_history.count() == 2
     assert cp.lbl_sub_count.text() == "총 2개"
     html = cp.text_sub_history.toHtml()
-    assert "원문" in html
-    assert "번역" in html
-    assert ("실제 더빙" in html or "AI 음성 더빙" in html)
+    assert not cp.header_sub_history.isHidden()
+    assert "원문" in cp.lbl_th_orig.text()
+    assert "번역" in cp.lbl_th_trans.text()
+    assert ("실제 더빙" in cp.lbl_th_dub.text() or "AI 음성 더빙" in cp.lbl_th_dub.text())
 
     # 1) 필터: 영문 원문만
     idx_orig = filter_keys.index("orig_only")
@@ -328,6 +329,15 @@ def test_control_panel_tab_integration():
     cp.refresh_subtitle_view()
     app.processEvents()
     assert cp.subtitle_history.count() == 0
+
+    # 5) 상단 고정 헤더 바(Fixed Header Bar) 상시 노출 검증
+    assert hasattr(cp, 'header_sub_history')
+    assert not cp.header_sub_history.isHidden()
+    assert hasattr(cp, 'lbl_th_time')
+    assert hasattr(cp, 'lbl_th_source')
+    assert hasattr(cp, 'lbl_th_orig')
+    assert hasattr(cp, 'lbl_th_trans')
+    assert hasattr(cp, 'lbl_th_dub')
 
     print("  -> ControlPanel 자막 탭 및 실시간 시그널 연동 검증 100% 통과!")
 

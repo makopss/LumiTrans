@@ -439,6 +439,7 @@ class SubtitlePreviewWidget(QWidget):
         self.stroke_width = 0
         self.letter_spacing = 0.0
         self.show_original = True
+        self.show_translated = True
         self.show_badge = True
         self.clean_box = True
         self.clean_text_mode = False
@@ -446,16 +447,30 @@ class SubtitlePreviewWidget(QWidget):
         self.setMinimumHeight(80)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-    def update_params(self, font_size, opacity, stroke_width, letter_spacing, show_original, show_badge, clean_box, clean_text_mode=False, show_speaker=True):
+    def update_params(self, font_size, opacity, stroke_width, letter_spacing, show_original, show_badge, clean_box, clean_text_mode=False, show_speaker=True, show_translated=True,
+                      screen_font_size=None, screen_opacity=None, screen_stroke_width=None, screen_letter_spacing=None,
+                      screen_show_original=None, screen_show_badge=None, screen_clean_box=None, screen_clean_text_mode=None, screen_show_speaker=None, screen_show_translated=None):
         self.font_size = font_size
         self.opacity = opacity
         self.stroke_width = stroke_width
         self.letter_spacing = letter_spacing
         self.show_original = show_original
+        self.show_translated = show_translated
         self.show_badge = show_badge
         self.clean_box = clean_box
         self.clean_text_mode = clean_text_mode
         self.show_speaker = show_speaker
+
+        self.screen_font_size = screen_font_size if screen_font_size is not None else font_size
+        self.screen_opacity = screen_opacity if screen_opacity is not None else opacity
+        self.screen_stroke_width = screen_stroke_width if screen_stroke_width is not None else stroke_width
+        self.screen_letter_spacing = screen_letter_spacing if screen_letter_spacing is not None else letter_spacing
+        self.screen_show_original = screen_show_original if screen_show_original is not None else show_original
+        self.screen_show_translated = screen_show_translated if screen_show_translated is not None else show_translated
+        self.screen_show_badge = screen_show_badge if screen_show_badge is not None else show_badge
+        self.screen_clean_box = screen_clean_box if screen_clean_box is not None else clean_box
+        self.screen_clean_text_mode = screen_clean_text_mode if screen_clean_text_mode is not None else clean_text_mode
+        self.screen_show_speaker = screen_show_speaker if screen_show_speaker is not None else show_speaker
         self.update()
 
     def paintEvent(self, event):
@@ -474,7 +489,7 @@ class SubtitlePreviewWidget(QWidget):
             p.fillRect(0, 0, w, h, QColor("#0E1626"))
 
         # 텍스트 전용 모드 상단 상태 안내 배지
-        if self.clean_text_mode:
+        if self.clean_text_mode or getattr(self, "screen_clean_text_mode", False):
             info_font = QFont("Malgun Gothic", 8, QFont.Weight.Bold)
             p.setFont(info_font)
             fm_info = QFontMetrics(info_font)
@@ -489,7 +504,8 @@ class SubtitlePreviewWidget(QWidget):
 
         audio_orig = "[Speaker 1] We should leave before sunset." if self.show_speaker else "We should leave before sunset."
         audio_trans = tr("sample_line")
-        screen_orig = "Carter: We should leave before sunset." if self.show_speaker else "We should leave before sunset."
+        screen_speaker_on = getattr(self, "screen_show_speaker", self.show_speaker)
+        screen_orig = "Carter: We should leave before sunset." if screen_speaker_on else "We should leave before sunset."
         screen_trans = tr("sample_line")
 
         # 2. 음성 자막 박스 렌더링 (상단부)
@@ -498,30 +514,61 @@ class SubtitlePreviewWidget(QWidget):
                               badge_text=tr("badge_ready"), badge_dot_color="#00E5FF",
                               orig=audio_orig,
                               trans=audio_trans,
-                              is_clean_text=self.clean_text_mode)
+                              is_clean_text=self.clean_text_mode,
+                              font_size=self.font_size,
+                              opacity=self.opacity,
+                              stroke_width=self.stroke_width,
+                              letter_spacing=self.letter_spacing,
+                              show_original=self.show_original,
+                              show_badge=self.show_badge,
+                              clean_box=self.clean_box,
+                              show_translated=getattr(self, 'show_translated', True))
 
         # 3. 화면 자막 박스 렌더링 (하단부)
+        screen_clean_text = getattr(self, "screen_clean_text_mode", self.clean_text_mode)
         self._draw_sample_box(p, cx=w // 2, cy=int(h * 0.74),
                               tag=tr("section_screen"), tag_color="#A78BFA",
                               badge_text=tr("status_watching"), badge_dot_color="#69F0AE",
                               orig=screen_orig,
                               trans=screen_trans,
-                              is_clean_text=self.clean_text_mode)
+                              is_clean_text=screen_clean_text,
+                              font_size=getattr(self, "screen_font_size", self.font_size),
+                              opacity=getattr(self, "screen_opacity", self.opacity),
+                              stroke_width=getattr(self, "screen_stroke_width", self.stroke_width),
+                              letter_spacing=getattr(self, "screen_letter_spacing", self.letter_spacing),
+                              show_original=getattr(self, "screen_show_original", self.show_original),
+                              show_badge=getattr(self, "screen_show_badge", self.show_badge),
+                              clean_box=getattr(self, "screen_clean_box", self.clean_box),
+                              show_translated=getattr(self, "screen_show_translated", getattr(self, 'show_translated', True)))
 
     def _draw_sample_box(self, p: QPainter, cx: int, cy: int, tag: str, tag_color: str,
                           badge_text: str, badge_dot_color: str,
-                          orig: str, trans: str, is_clean_text: bool = False):
+                          orig: str, trans: str, is_clean_text: bool = False,
+                          font_size=None, opacity=None, stroke_width=None, letter_spacing=None,
+                          show_original=None, show_badge=None, clean_box=None, show_translated=None):
+        f_size = font_size if font_size is not None else self.font_size
+        op = opacity if opacity is not None else self.opacity
+        st_w = stroke_width if stroke_width is not None else self.stroke_width
+        spc = letter_spacing if letter_spacing is not None else self.letter_spacing
+        s_orig = show_original if show_original is not None else self.show_original
+        s_badge = show_badge if show_badge is not None else self.show_badge
+        c_box = clean_box if clean_box is not None else self.clean_box
+        s_trans = show_translated if show_translated is not None else getattr(self, 'show_translated', True)
+
+        if not s_orig and not s_trans:
+            s_trans = True
+
         # 1. 폰트 및 텍스트 치수 정밀 측정
-        orig_font = QFont("Malgun Gothic", max(10, self.font_size - 6))
-        if self.letter_spacing > 0:
-            orig_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, self.letter_spacing * 0.5)
+        orig_font = QFont("Malgun Gothic", max(10, f_size - 6))
+        if spc > 0:
+            orig_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spc * 0.5)
         fm_orig = QFontMetrics(orig_font)
         orig_w = fm_orig.horizontalAdvance(orig)
         orig_h = fm_orig.height()
 
-        trans_font = QFont("Malgun Gothic", max(12, self.font_size - 2), QFont.Weight.Bold)
-        if self.letter_spacing > 0:
-            trans_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, self.letter_spacing)
+        trans_font = QFont("Malgun Gothic", max(12, f_size - 2), QFont.Weight.Bold)
+        if spc > 0:
+            trans_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spc)
         fm_trans = QFontMetrics(trans_font)
         trans_w = fm_trans.horizontalAdvance(trans)
         trans_h = fm_trans.height()
@@ -537,23 +584,34 @@ class SubtitlePreviewWidget(QWidget):
         trans_box_w = min(self.width() - 50, trans_w + pad_x_trans * 2)
         trans_box_h = trans_h + pad_y_trans * 2
 
-        content_w = max(orig_box_w if self.show_original else 0, trans_box_w)
+        content_w = max(orig_box_w if s_orig else 0, trans_box_w if s_trans else 0)
+        if content_w == 0:
+            content_w = 200
 
         if not is_clean_text:
             # [일반 모드]: 헤더 바(타이틀+배지) + 창 프레임 배경
             header_h = 24
-            content_h = trans_box_h
-            if self.show_original:
-                content_h += orig_box_h + 6
+            content_h = 0
+            if s_trans:
+                content_h += trans_box_h
+            if s_orig:
+                content_h += orig_box_h + (6 if s_trans else 0)
+            if content_h == 0:
+                content_h = trans_box_h
             win_h = header_h + content_h + 14
             win_w = min(self.width() - 30, max(content_w + 32, 300))
             win_rect = QRectF(cx - win_w / 2, cy - win_h / 2, win_w, win_h)
 
-            # 창 프레임 배경 (불투명도 적용)
-            alpha = int(self.opacity * 255)
-            p.setBrush(QBrush(QColor(14, 20, 32, alpha)))
-            p.setPen(QPen(QColor(255, 255, 255, 20), 1.0))
-            p.drawRoundedRect(win_rect, 8, 8)
+            # 창 프레임 배경 (op > 0.001일 때 채움, c_box와 무관)
+            if op > 0.001:
+                alpha = int(op * 255)
+                p.setBrush(QBrush(QColor(14, 20, 32, alpha)))
+                p.setPen(QPen(QColor(255, 255, 255, 20), 1.0))
+                p.drawRoundedRect(win_rect, 8, 8)
+            else:
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.setPen(QPen(QColor(255, 255, 255, 15), 1.0, Qt.PenStyle.DashLine))
+                p.drawRoundedRect(win_rect, 8, 8)
 
             # 헤더 바 (타이틀)
             header_y = win_rect.y() + 4
@@ -564,8 +622,8 @@ class SubtitlePreviewWidget(QWidget):
             p.setPen(QColor(tag_color))
             p.drawText(QRectF(win_rect.x() + 10, header_y, title_w + 6, 18), Qt.AlignmentFlag.AlignVCenter, tag)
 
-            # 엔진 상태 배지 그리기 (self.show_badge가 켜져 있을 때만!)
-            if self.show_badge and badge_text:
+            # 엔진 상태 배지 그리기 (s_badge가 켜져 있을 때만!)
+            if s_badge and badge_text:
                 badge_x = win_rect.x() + 10 + title_w + 10
                 badge_font = QFont("Malgun Gothic", 7, QFont.Weight.Bold)
                 p.setFont(badge_font)
@@ -595,10 +653,13 @@ class SubtitlePreviewWidget(QWidget):
             body_top = win_rect.y() + header_h + 2
         else:
             # [텍스트 전용 모드]: 창 프레임 및 헤더 바 완전히 숨김!
-            # 자막 구분을 위해 상단에 미니 캡슐 라벨만 가볍게 표시
-            total_text_h = trans_box_h
-            if self.show_original:
-                total_text_h += orig_box_h + 4
+            total_text_h = 0
+            if s_trans:
+                total_text_h += trans_box_h
+            if s_orig:
+                total_text_h += orig_box_h + (4 if s_trans else 0)
+            if total_text_h == 0:
+                total_text_h = trans_box_h
 
             tag_font = QFont("Malgun Gothic", 7, QFont.Weight.Bold)
             p.setFont(tag_font)
@@ -614,13 +675,13 @@ class SubtitlePreviewWidget(QWidget):
             body_top = cy - total_text_h / 2 + 2
 
         # 4. 자막 텍스트 및 반투명 배경 박스(clean_box) 렌더링
-        if self.show_original:
+        if s_orig and s_trans:
             rect_orig = QRectF(cx - orig_box_w / 2, body_top, orig_box_w, orig_box_h)
             rect_trans = QRectF(cx - trans_box_w / 2, body_top + orig_box_h + 4, trans_box_w, trans_box_h)
 
-            # 반투명 배경 박스 (self.clean_box가 켜져 있을 때만 자막 뒤 밀착 박스 렌더링)
-            if self.clean_box:
-                box_alpha = 185 if is_clean_text else max(120, int(self.opacity * 255) + 35)
+            # 반투명 배경 박스 (c_box가 켜져 있을 때만 자막 뒤 밀착 박스 렌더링)
+            if c_box:
+                box_alpha = 185 if is_clean_text else max(120, int(op * 255) + 35)
                 box_brush = QBrush(QColor(8, 12, 20, min(240, box_alpha)))
                 p.setBrush(box_brush)
                 p.setPen(Qt.PenStyle.NoPen)
@@ -634,22 +695,35 @@ class SubtitlePreviewWidget(QWidget):
 
             # 번역문 텍스트
             p.setFont(trans_font)
-            if self.stroke_width > 0:
+            if st_w > 0:
                 path = QPainterPath()
                 tx = rect_trans.x() + (trans_box_w - trans_w) / 2
                 ty = rect_trans.y() + (trans_box_h - trans_h) / 2 + fm_trans.ascent()
                 path.addText(tx, ty, trans_font, trans)
-                p.strokePath(path, QPen(QColor(0, 0, 0, 230), self.stroke_width * 1.5))
+                p.strokePath(path, QPen(QColor(0, 0, 0, 230), st_w * 1.5))
                 p.fillPath(path, QBrush(QColor("#FFFFFF")))
             else:
                 p.setPen(QColor("#FFFFFF"))
                 p.drawText(rect_trans, Qt.AlignmentFlag.AlignCenter, trans)
+        elif s_orig and not s_trans:
+            rect_orig = QRectF(cx - orig_box_w / 2, body_top, orig_box_w, orig_box_h)
+
+            if c_box:
+                box_alpha = 185 if is_clean_text else max(120, int(op * 255) + 35)
+                box_brush = QBrush(QColor(8, 12, 20, min(240, box_alpha)))
+                p.setBrush(box_brush)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawRoundedRect(rect_orig, 5, 5)
+
+            p.setFont(orig_font)
+            p.setPen(QColor("#94A3B8"))
+            p.drawText(rect_orig, Qt.AlignmentFlag.AlignCenter, orig)
         else:
             rect_trans = QRectF(cx - trans_box_w / 2, body_top, trans_box_w, trans_box_h)
 
             # 반투명 배경 박스
-            if self.clean_box:
-                box_alpha = 185 if is_clean_text else max(120, int(self.opacity * 255) + 35)
+            if c_box:
+                box_alpha = 185 if is_clean_text else max(120, int(op * 255) + 35)
                 box_brush = QBrush(QColor(8, 12, 20, min(240, box_alpha)))
                 p.setBrush(box_brush)
                 p.setPen(Qt.PenStyle.NoPen)
@@ -657,12 +731,12 @@ class SubtitlePreviewWidget(QWidget):
 
             # 번역문 텍스트
             p.setFont(trans_font)
-            if self.stroke_width > 0:
+            if st_w > 0:
                 path = QPainterPath()
                 tx = rect_trans.x() + (trans_box_w - trans_w) / 2
                 ty = rect_trans.y() + (trans_box_h - trans_h) / 2 + fm_trans.ascent()
                 path.addText(tx, ty, trans_font, trans)
-                p.strokePath(path, QPen(QColor(0, 0, 0, 230), self.stroke_width * 1.5))
+                p.strokePath(path, QPen(QColor(0, 0, 0, 230), st_w * 1.5))
                 p.fillPath(path, QBrush(QColor("#FFFFFF")))
             else:
                 p.setPen(QColor("#FFFFFF"))
@@ -1015,6 +1089,8 @@ class ControlPanel(QWidget):
         self.screen_overlay = screen_overlay
         self.inplace_manager = inplace_manager
         self.roi_border_manager = roi_border_manager
+        if self.roi_border_manager:
+            self.roi_border_manager.set_on_rois_changed(self._on_rois_border_adjusted)
         self.dubbing_engine = dubbing_engine
 
         # 올라마 미설치 환경에서는 무조건 내장(embedded) 백엔드로 정규화
@@ -1041,6 +1117,7 @@ class ControlPanel(QWidget):
             try:
                 from src.roi_border_overlay import ROIBorderManager
                 self.roi_border_manager = ROIBorderManager(self.config)
+                self.roi_border_manager.set_on_rois_changed(self._on_rois_border_adjusted)
             except Exception:
                 self.roi_border_manager = None
 
@@ -1071,6 +1148,8 @@ class ControlPanel(QWidget):
             self.screen_worker.subtitle_signal.connect(self._on_screen_subtitle_received)
 
         if self.dubbing_engine:
+            if hasattr(self.dubbing_engine, 'register_playback_callback'):
+                self.dubbing_engine.register_playback_callback(self._on_dubbing_playback_received)
             self.dubbing_engine.on_playback_status = self._on_dubbing_playback_received
 
         self.engine_status_signal.connect(self._do_update_engine_status)
@@ -1219,6 +1298,8 @@ class ControlPanel(QWidget):
                 self.subtitle_history.entries.append(entry)
             self.refresh_subtitle_view()
             self.refresh_speaker_mgmt_ui(force=True)
+            self._sync_dubbing_overlay_buttons()
+            self._populate_dubbing_voice_combos()
 
     def _init_ui(self):
         # 전역 스타일시트 적용
@@ -2055,9 +2136,12 @@ class ControlPanel(QWidget):
             self.config["model_size"] = model_id
 
         is_multi = STTModelManager.is_multilingual_model(model_id, cur_p)
+        src_lang = self.config.get("source_lang", "auto")
         if is_multi:
-            if self.config.get("stt_language", "en") == "en":
-                self.config["stt_language"] = "auto"
+            if src_lang and src_lang != "auto":
+                self.config["stt_language"] = src_lang
+            else:
+                self.config["stt_language"] = self.config.get("stt_language", "auto")
         else:
             self.config["stt_language"] = "en"
 
@@ -2598,25 +2682,66 @@ class ControlPanel(QWidget):
         out_dev_row.addWidget(self.combo_dub_out_dev, stretch=6)
         dub_layout.addLayout(out_dev_row)
 
-        # 2. 핵심 더빙 소스 선택 (음성 / 화면)
-        top_opts = [
-            ("dub_voice", "dubbing_source_audio", self.on_dubbing_source_audio_toggled, True),
-            ("dub_screen", "dubbing_source_screen", self.on_dubbing_source_screen_toggled, False),
-        ]
-        for name, key, cb, default_val in top_opts:
-            t_row = QHBoxLayout()
-            t_row.setContentsMargins(0, 0, 0, 0)
-            lbl_t = QLabel()
-            self._i18n(lbl_t, name)
-            lbl_t.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
-            tgl = ModernToggle(active_color=COLOR_ACCENT_MINT)
-            tgl.setFixedHeight(24)
-            tgl.setChecked(self.config.get(key, default_val))
-            tgl.toggled.connect(cb)
-            t_row.addWidget(lbl_t)
-            t_row.addStretch(1)
-            t_row.addWidget(tgl)
-            dub_layout.addLayout(t_row)
+        # 2. 핵심 더빙 소스 선택 (음성 / 화면) 및 개별 목소리 설정
+        # 2-1. 음성 번역 더빙 토글
+        row_voice = QHBoxLayout()
+        row_voice.setContentsMargins(0, 0, 0, 0)
+        lbl_v = QLabel()
+        self._i18n(lbl_v, "dub_voice")
+        lbl_v.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
+        self.toggle_dub_voice = ModernToggle(active_color=COLOR_ACCENT_MINT)
+        self.toggle_dub_voice.setFixedHeight(24)
+        is_audio_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_audio", True))
+        self.toggle_dub_voice.setChecked(is_audio_dub)
+        self.toggle_dub_voice.toggled.connect(self.on_dubbing_source_audio_toggled)
+        row_voice.addWidget(lbl_v)
+        row_voice.addStretch(1)
+        row_voice.addWidget(self.toggle_dub_voice)
+        dub_layout.addLayout(row_voice)
+
+        # 음성 번역 더빙 목소리 선택 드롭다운
+        row_v_voice = QHBoxLayout()
+        row_v_voice.setContentsMargins(12, 0, 0, 2)
+        lbl_v_voice = QLabel()
+        self._i18n(lbl_v_voice, "dub_voice_select_audio")
+        lbl_v_voice.setStyleSheet("font-size: 11px; color: #94A3B8;")
+        self.combo_dub_voice_audio = NoWheelComboBox()
+        self.combo_dub_voice_audio.setFixedHeight(26)
+        self.combo_dub_voice_audio.currentIndexChanged.connect(self.on_dubbing_voice_audio_changed)
+        row_v_voice.addWidget(lbl_v_voice, stretch=3)
+        row_v_voice.addWidget(self.combo_dub_voice_audio, stretch=6)
+        dub_layout.addLayout(row_v_voice)
+
+        # 2-2. 화면 번역 더빙 토글
+        row_screen = QHBoxLayout()
+        row_screen.setContentsMargins(0, 4, 0, 0)
+        lbl_s = QLabel()
+        self._i18n(lbl_s, "dub_screen")
+        lbl_s.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #ECEFF1;")
+        self.toggle_dub_screen = ModernToggle(active_color=COLOR_ACCENT_MINT)
+        self.toggle_dub_screen.setFixedHeight(24)
+        is_screen_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", False))
+        self.toggle_dub_screen.setChecked(is_screen_dub)
+        self.toggle_dub_screen.toggled.connect(self.on_dubbing_source_screen_toggled)
+        row_screen.addWidget(lbl_s)
+        row_screen.addStretch(1)
+        row_screen.addWidget(self.toggle_dub_screen)
+        dub_layout.addLayout(row_screen)
+
+        # 화면 번역 더빙 목소리 선택 드롭다운
+        row_s_voice = QHBoxLayout()
+        row_s_voice.setContentsMargins(12, 0, 0, 4)
+        lbl_s_voice = QLabel()
+        self._i18n(lbl_s_voice, "dub_voice_select_screen")
+        lbl_s_voice.setStyleSheet("font-size: 11px; color: #94A3B8;")
+        self.combo_dub_voice_screen = NoWheelComboBox()
+        self.combo_dub_voice_screen.setFixedHeight(26)
+        self.combo_dub_voice_screen.currentIndexChanged.connect(self.on_dubbing_voice_screen_changed)
+        row_s_voice.addWidget(lbl_s_voice, stretch=3)
+        row_s_voice.addWidget(self.combo_dub_voice_screen, stretch=6)
+        dub_layout.addLayout(row_s_voice)
+
+        self._populate_dubbing_voice_combos()
 
         # 3. 슬라이더: 더빙 음량
         dub_vol_row = QHBoxLayout()
@@ -3118,7 +3243,49 @@ class ControlPanel(QWidget):
         tb_row.addWidget(self.btn_clear_sub)
         log_layout.addLayout(tb_row)
 
-        # 5열 자막 뷰어 테이블
+        # 고정 헤더 바 (스크롤되지 않고 상단에 항상 고정)
+        self.header_sub_history = QFrame()
+        self.header_sub_history.setObjectName("SubHistoryHeader")
+        self.header_sub_history.setFixedHeight(34)
+        self.header_sub_history.setStyleSheet("""
+            QFrame#SubHistoryHeader {
+                background-color: #101726;
+                border: 1px solid #1C273E;
+                border-bottom: 2px solid #1E2A42;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                border-bottom-left-radius: 0px;
+                border-bottom-right-radius: 0px;
+            }
+            QLabel {
+                color: #94A3B8;
+                font-size: 11px;
+                font-weight: bold;
+                font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+            }
+        """)
+        self.header_sub_layout = QHBoxLayout(self.header_sub_history)
+        self.header_sub_layout.setContentsMargins(12, 0, 24, 0)
+        self.header_sub_layout.setSpacing(0)
+
+        self.lbl_th_time = QLabel()
+        self._i18n(self.lbl_th_time, "history_th_time")
+        self.lbl_th_source = QLabel()
+        self._i18n(self.lbl_th_source, "history_th_source")
+        self.lbl_th_orig = QLabel()
+        self._i18n(self.lbl_th_orig, "original")
+        self.lbl_th_trans = QLabel()
+        self._i18n(self.lbl_th_trans, "translation")
+        self.lbl_th_dub = QLabel()
+        self._i18n(self.lbl_th_dub, "history_th_dub")
+
+        self.header_sub_layout.addWidget(self.lbl_th_time, stretch=12)
+        self.header_sub_layout.addWidget(self.lbl_th_source, stretch=15)
+        self.header_sub_layout.addWidget(self.lbl_th_orig, stretch=28)
+        self.header_sub_layout.addWidget(self.lbl_th_trans, stretch=25)
+        self.header_sub_layout.addWidget(self.lbl_th_dub, stretch=20)
+
+        # 5열 자막 뷰어 테이블 (본문만 스크롤됨)
         self.text_sub_history = QTextBrowser()
         self.text_sub_history.setOpenExternalLinks(False)
         self.text_sub_history.setReadOnly(True)
@@ -3127,13 +3294,23 @@ class ControlPanel(QWidget):
                 background-color: #0E1422;
                 color: #ECEFF1;
                 border: 1px solid #1C273E;
-                border-radius: 8px;
-                padding: 10px;
+                border-top: none;
+                border-top-left-radius: 0px;
+                border-top-right-radius: 0px;
+                border-bottom-left-radius: 8px;
+                border-bottom-right-radius: 8px;
+                padding: 2px 4px 6px 4px;
                 font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
             }
         """)
         self.text_sub_history.setHtml(SubtitleHistoryManager.format_html_table([]))
-        log_layout.addWidget(self.text_sub_history, stretch=1)
+
+        table_container = QVBoxLayout()
+        table_container.setContentsMargins(0, 0, 0, 0)
+        table_container.setSpacing(0)
+        table_container.addWidget(self.header_sub_history)
+        table_container.addWidget(self.text_sub_history, stretch=1)
+        log_layout.addLayout(table_container, stretch=1)
 
         main_layout.addWidget(log_card, stretch=7)
 
@@ -3322,174 +3499,464 @@ class ControlPanel(QWidget):
         line0.setStyleSheet(f"background-color: {COLOR_BORDER}; max-height: 1px;")
         s_layout.addWidget(line0)
 
-        # 섹션 2: 자막 스타일
-        sec1_title = QLabel()
-        self._i18n(sec1_title, "subtitle_style")
-        sec1_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        s_layout.addWidget(sec1_title)
+        # ==============================================================
+        # 서브탭 전환 버튼: [ 🎙️ 음성 번역 자막 ]  |  [ 👁️ 화면 번역 자막 ]
+        # ==============================================================
+        self._current_subtab = "audio"
 
-        style_box = QVBoxLayout()
-        style_box.setSpacing(6)
+        subtab_layout = QHBoxLayout()
+        subtab_layout.setContentsMargins(0, 2, 0, 4)
+        subtab_layout.setSpacing(6)
+
+        self.btn_subtab_audio = QPushButton()
+        self._i18n(self.btn_subtab_audio, "subtab_audio_subtitles")
+        self.btn_subtab_audio.setCheckable(True)
+        self.btn_subtab_audio.setChecked(True)
+        self.btn_subtab_audio.setFixedHeight(34)
+        self.btn_subtab_audio.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.btn_subtab_screen = QPushButton()
+        self._i18n(self.btn_subtab_screen, "subtab_screen_subtitles")
+        self.btn_subtab_screen.setCheckable(True)
+        self.btn_subtab_screen.setChecked(False)
+        self.btn_subtab_screen.setFixedHeight(34)
+        self.btn_subtab_screen.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.btn_subtab_audio.clicked.connect(lambda: self._on_subtab_switched("audio"))
+        self.btn_subtab_screen.clicked.connect(lambda: self._on_subtab_switched("screen"))
+
+        subtab_layout.addWidget(self.btn_subtab_audio, 1)
+        subtab_layout.addWidget(self.btn_subtab_screen, 1)
+        s_layout.addLayout(subtab_layout)
+
+        # 독립 스택 위젯 (0: 음성 자막 패널, 1: 화면 자막 패널)
+        self.sub_stack = QStackedWidget()
+
+        # --------------------------------------------------------------
+        # 서브패널 1: 음성 번역 자막 설정
+        # --------------------------------------------------------------
+        self.panel_sub_audio = QWidget()
+        audio_layout = QVBoxLayout(self.panel_sub_audio)
+        audio_layout.setContentsMargins(0, 0, 0, 0)
+        audio_layout.setSpacing(8)
+
+        # 음성 - 섹션 1: 자막 스타일
+        sec1_audio_title = QLabel()
+        self._i18n(sec1_audio_title, "subtitle_style")
+        sec1_audio_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
+        audio_layout.addWidget(sec1_audio_title)
+
+        audio_style_box = QVBoxLayout()
+        audio_style_box.setSpacing(6)
 
         # 글꼴 크기
-        r_font = QHBoxLayout()
-        r_font.setContentsMargins(0, 1, 0, 1)
-        lbl_font = QLabel()
-        self._i18n(lbl_font, "font_size")
-        lbl_font.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
-        lbl_font.setFixedWidth(84)
-        self.font_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.font_slider.setRange(14, 40)
-        self.font_slider.setValue(self.config.get("font_size", 24))
-        self.font_label = QLabel(f"{self.font_slider.value()}px")
-        self.font_label.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
-        self.font_label.setFixedWidth(52)
-        self.font_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.font_slider.valueChanged.connect(lambda v: (self.on_font_slider_changed(v, None), self.font_label.setText(f"{v}px"), self._update_subtitle_preview()))
-        r_font.addWidget(lbl_font)
-        r_font.addWidget(self.font_slider, stretch=1)
-        r_font.addWidget(self.font_label)
-        style_box.addLayout(r_font)
+        r_a_font = QHBoxLayout()
+        r_a_font.setContentsMargins(0, 1, 0, 1)
+        lbl_a_font = QLabel()
+        self._i18n(lbl_a_font, "font_size")
+        lbl_a_font.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_a_font.setFixedWidth(84)
+        _v = self.config.get("audio_font_size")
+        cur_a_font = int(_v) if _v is not None else int(self.config.get("font_size", 24))
+        self.audio_font_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.audio_font_slider.setRange(14, 40)
+        self.audio_font_slider.setValue(cur_a_font)
+        self.audio_font_label = QLabel(f"{cur_a_font}px")
+        self.audio_font_label.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.audio_font_label.setFixedWidth(52)
+        self.audio_font_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.audio_font_slider.valueChanged.connect(lambda v: (self.on_audio_font_slider_changed(v, None), self.audio_font_label.setText(f"{v}px"), self._update_subtitle_preview()))
+        r_a_font.addWidget(lbl_a_font)
+        r_a_font.addWidget(self.audio_font_slider, stretch=1)
+        r_a_font.addWidget(self.audio_font_label)
+        audio_style_box.addLayout(r_a_font)
 
         # 배경 불투명도
-        r_op = QHBoxLayout()
-        r_op.setContentsMargins(0, 1, 0, 1)
-        lbl_op = QLabel()
-        self._i18n(lbl_op, "opacity")
-        lbl_op.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
-        lbl_op.setFixedWidth(84)
-        cur_op = int(self.config.get("overlay_bg_opacity", 0.66) * 100)
-        self.opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.opacity_slider.setRange(0, 100)
-        self.opacity_slider.setValue(cur_op)
-        self.opacity_label = QLabel(f"{cur_op}%")
-        self.opacity_label.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
-        self.opacity_label.setFixedWidth(52)
-        self.opacity_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.opacity_slider.valueChanged.connect(lambda v: (self.on_opacity_slider_changed(v, None), self.opacity_label.setText(f"{v}%"), self._update_subtitle_preview()))
-        r_op.addWidget(lbl_op)
-        r_op.addWidget(self.opacity_slider, stretch=1)
-        r_op.addWidget(self.opacity_label)
-        style_box.addLayout(r_op)
+        r_a_op = QHBoxLayout()
+        r_a_op.setContentsMargins(0, 1, 0, 1)
+        lbl_a_op = QLabel()
+        self._i18n(lbl_a_op, "opacity")
+        lbl_a_op.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_a_op.setFixedWidth(84)
+        _v = self.config.get("audio_overlay_bg_opacity")
+        cur_a_op = int(float(_v) * 100) if _v is not None else int(float(self.config.get("overlay_bg_opacity", 0.66)) * 100)
+        self.audio_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.audio_opacity_slider.setRange(0, 100)
+        self.audio_opacity_slider.setValue(cur_a_op)
+        self.audio_opacity_label = QLabel(f"{cur_a_op}%")
+        self.audio_opacity_label.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.audio_opacity_label.setFixedWidth(52)
+        self.audio_opacity_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.audio_opacity_slider.valueChanged.connect(lambda v: (self.on_audio_opacity_slider_changed(v, None), self.audio_opacity_label.setText(f"{v}%"), self._update_subtitle_preview()))
+        r_a_op.addWidget(lbl_a_op)
+        r_a_op.addWidget(self.audio_opacity_slider, stretch=1)
+        r_a_op.addWidget(self.audio_opacity_label)
+        audio_style_box.addLayout(r_a_op)
 
         # 외곽선 두께
-        r_str = QHBoxLayout()
-        r_str.setContentsMargins(0, 1, 0, 1)
-        lbl_str = QLabel()
-        self._i18n(lbl_str, "stroke")
-        lbl_str.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
-        lbl_str.setFixedWidth(84)
-        cur_str = self.config.get("subtitle_stroke_width", 0)
-        self.slider_stroke = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.slider_stroke.setRange(0, 5)
-        self.slider_stroke.setValue(cur_str)
-        self.lbl_stroke = QLabel(f"{cur_str}px")
-        self.lbl_stroke.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
-        self.lbl_stroke.setFixedWidth(52)
-        self.lbl_stroke.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.slider_stroke.valueChanged.connect(lambda v: (self.on_stroke_slider_changed(v), self.lbl_stroke.setText(f"{v}px"), self._update_subtitle_preview()))
-        r_str.addWidget(lbl_str)
-        r_str.addWidget(self.slider_stroke, stretch=1)
-        r_str.addWidget(self.lbl_stroke)
-        style_box.addLayout(r_str)
+        r_a_str = QHBoxLayout()
+        r_a_str.setContentsMargins(0, 1, 0, 1)
+        lbl_a_str = QLabel()
+        self._i18n(lbl_a_str, "stroke")
+        lbl_a_str.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_a_str.setFixedWidth(84)
+        _v = self.config.get("audio_subtitle_stroke_width")
+        cur_a_str = int(_v) if _v is not None else int(self.config.get("subtitle_stroke_width", 0))
+        self.audio_slider_stroke = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.audio_slider_stroke.setRange(0, 5)
+        self.audio_slider_stroke.setValue(cur_a_str)
+        self.audio_lbl_stroke = QLabel(f"{cur_a_str}px")
+        self.audio_lbl_stroke.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.audio_lbl_stroke.setFixedWidth(52)
+        self.audio_lbl_stroke.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.audio_slider_stroke.valueChanged.connect(lambda v: (self.on_audio_stroke_slider_changed(v), self.audio_lbl_stroke.setText(f"{v}px"), self._update_subtitle_preview()))
+        r_a_str.addWidget(lbl_a_str)
+        r_a_str.addWidget(self.audio_slider_stroke, stretch=1)
+        r_a_str.addWidget(self.audio_lbl_stroke)
+        audio_style_box.addLayout(r_a_str)
 
         # 글자 자간
-        r_spc = QHBoxLayout()
-        r_spc.setContentsMargins(0, 1, 0, 1)
-        lbl_spc = QLabel()
-        self._i18n(lbl_spc, "letter_spacing")
-        lbl_spc.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
-        lbl_spc.setFixedWidth(84)
-        cur_spc = float(self.config.get("letter_spacing", 0.0))
-        self.slider_spacing = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.slider_spacing.setRange(0, 40)
-        self.slider_spacing.setValue(int(cur_spc * 10))
-        self.lbl_spacing = QLabel(f"{cur_spc:.1f}px")
-        self.lbl_spacing.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
-        self.lbl_spacing.setFixedWidth(52)
-        self.lbl_spacing.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.slider_spacing.valueChanged.connect(lambda v: (self.on_spacing_slider_changed(v), self.lbl_spacing.setText(f"{v/10.0:.1f}px"), self._update_subtitle_preview()))
-        r_spc.addWidget(lbl_spc)
-        r_spc.addWidget(self.slider_spacing, stretch=1)
-        r_spc.addWidget(self.lbl_spacing)
-        style_box.addLayout(r_spc)
+        r_a_spc = QHBoxLayout()
+        r_a_spc.setContentsMargins(0, 1, 0, 1)
+        lbl_a_spc = QLabel()
+        self._i18n(lbl_a_spc, "letter_spacing")
+        lbl_a_spc.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_a_spc.setFixedWidth(84)
+        _v = self.config.get("audio_letter_spacing")
+        cur_a_spc = float(_v) if _v is not None else float(self.config.get("letter_spacing", 0.0))
+        self.audio_slider_spacing = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.audio_slider_spacing.setRange(0, 40)
+        self.audio_slider_spacing.setValue(int(cur_a_spc * 10))
+        self.audio_lbl_spacing = QLabel(f"{cur_a_spc:.1f}px")
+        self.audio_lbl_spacing.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.audio_lbl_spacing.setFixedWidth(52)
+        self.audio_lbl_spacing.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.audio_slider_spacing.valueChanged.connect(lambda v: (self.on_audio_spacing_slider_changed(v), self.audio_lbl_spacing.setText(f"{v/10.0:.1f}px"), self._update_subtitle_preview()))
+        r_a_spc.addWidget(lbl_a_spc)
+        r_a_spc.addWidget(self.audio_slider_spacing, stretch=1)
+        r_a_spc.addWidget(self.audio_lbl_spacing)
+        audio_style_box.addLayout(r_a_spc)
 
-        # 유지 시간
-        r_dur = QHBoxLayout()
-        r_dur.setContentsMargins(0, 1, 0, 1)
-        lbl_dur = QLabel()
-        self._i18n(lbl_dur, "duration")
-        lbl_dur.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
-        lbl_dur.setFixedWidth(84)
-        cur_dur = self.config.get("screen_subtitle_duration", 10)
-        self.slider_duration = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.slider_duration.setRange(0, 90)
-        self.slider_duration.setValue(cur_dur)
-        self.lbl_duration = QLabel(self._duration_text(cur_dur))
-        self.lbl_duration.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
-        self.lbl_duration.setFixedWidth(52)
-        self.lbl_duration.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.slider_duration.valueChanged.connect(lambda v: (self.on_duration_slider_changed(v), self.lbl_duration.setText(self._duration_text(v))))
-        r_dur.addWidget(lbl_dur)
-        r_dur.addWidget(self.slider_duration, stretch=1)
-        r_dur.addWidget(self.lbl_duration)
-        style_box.addLayout(r_dur)
+        # 유지 시간 (음성 번역 전용)
+        r_a_dur = QHBoxLayout()
+        r_a_dur.setContentsMargins(0, 1, 0, 1)
+        lbl_a_dur = QLabel()
+        self._i18n(lbl_a_dur, "duration")
+        lbl_a_dur.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_a_dur.setFixedWidth(84)
+        _v_a = self.config.get("audio_subtitle_duration")
+        if _v_a is None:
+            _v_a = self.config.get("subtitle_duration")
+        cur_a_dur = int(_v_a) if _v_a is not None else 5
+        self.audio_slider_duration = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.audio_slider_duration.setRange(0, 90)
+        self.audio_slider_duration.setValue(cur_a_dur)
+        self.audio_lbl_duration = QLabel(self._duration_text(cur_a_dur))
+        self.audio_lbl_duration.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.audio_lbl_duration.setFixedWidth(52)
+        self.audio_lbl_duration.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.audio_slider_duration.valueChanged.connect(lambda v: (self.on_audio_duration_slider_changed(v), self.audio_lbl_duration.setText(self._duration_text(v))))
+        r_a_dur.addWidget(lbl_a_dur)
+        r_a_dur.addWidget(self.audio_slider_duration, stretch=1)
+        r_a_dur.addWidget(self.audio_lbl_duration)
+        audio_style_box.addLayout(r_a_dur)
 
-        s_layout.addLayout(style_box)
+        audio_layout.addLayout(audio_style_box)
 
-        line2 = QFrame()
-        line2.setFrameShape(QFrame.Shape.HLine)
-        line2.setStyleSheet(f"background-color: {COLOR_BORDER}; max-height: 1px;")
-        s_layout.addWidget(line2)
+        line_a = QFrame()
+        line_a.setFrameShape(QFrame.Shape.HLine)
+        line_a.setStyleSheet(f"background-color: {COLOR_BORDER}; max-height: 1px;")
+        audio_layout.addWidget(line_a)
 
-        # 섹션 3: 표시 설정
-        sec2_title = QLabel()
-        self._i18n(sec2_title, "display_settings")
-        sec2_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
-        s_layout.addWidget(sec2_title)
+        # 음성 - 섹션 2: 표시 설정
+        sec2_audio_title = QLabel()
+        self._i18n(sec2_audio_title, "display_settings")
+        sec2_audio_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
+        audio_layout.addWidget(sec2_audio_title)
 
-        disp_box = QVBoxLayout()
-        disp_box.setSpacing(6)
+        audio_disp_box = QVBoxLayout()
+        audio_disp_box.setSpacing(6)
 
-        disp_opts = [
-            ("opt_show_speaker", "show_speaker", self.on_show_speaker_toggled, True),
-            ("opt_show_original", "show_original", self.on_show_original_toggled, True),
-            ("opt_show_badge", "show_engine_badge", self.on_show_badge_toggled, True),
-            ("opt_click_through", "click_through", self.on_click_through_toggled, False),
-            ("opt_clean_text", "screen_clean_text_mode", self.on_clean_text_toggled, False),
-            ("opt_clean_box", "screen_clean_box", self.on_clean_box_toggled, True),
+        audio_disp_opts = [
+            ("opt_show_speaker", "audio_show_speaker", "show_speaker", self.on_audio_show_speaker_toggled, True),
+            ("opt_show_original", "audio_show_original", "show_original", self.on_audio_show_original_toggled, True),
+            ("opt_show_translated", "audio_show_translated", "show_translated", self.on_audio_show_translated_toggled, True),
+            ("opt_show_badge", "audio_show_engine_badge", "show_engine_badge", self.on_audio_show_badge_toggled, True),
+            ("opt_click_through", "audio_click_through", "click_through", self.on_audio_click_through_toggled, False),
+            ("opt_clean_text", "audio_clean_text_mode", "clean_text_mode", self.on_audio_clean_text_toggled, False),
+            ("opt_clean_box", "audio_clean_box", "clean_box", self.on_audio_clean_box_toggled, True),
         ]
-        for opt_key, key, cb, default_val in disp_opts:
+        for opt_key, primary_key, fallback_key, cb, default_val in audio_disp_opts:
             row = QHBoxLayout()
             row.setContentsMargins(0, 1, 0, 1)
             lbl = QLabel()
             self._i18n(lbl, opt_key)
             lbl.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
             tgl = ModernToggle(active_color=COLOR_ACCENT_MINT)
-            tgl.setChecked(self.config.get(key, default_val))
+            _val = self.config.get(primary_key)
+            if _val is None:
+                _val = self.config.get(fallback_key)
+            if _val is None:
+                _val = default_val
+            tgl.setChecked(bool(_val))
             tgl.toggled.connect(lambda checked, fn=cb: (fn(checked), self._update_subtitle_preview()))
-            if key == "screen_clean_box":
-                self.cb_clean_box = tgl
-            elif key == "screen_clean_text_mode":
-                self.cb_clean_text = tgl
-            elif key == "show_original":
-                self.cb_show_original = tgl
-            elif key == "show_engine_badge":
-                self.cb_show_badge = tgl
-            elif key == "click_through":
-                self.cb_click_through = tgl
-            elif key == "show_speaker":
-                self.cb_show_speaker = tgl
+            if opt_key == "opt_clean_box":
+                self.audio_cb_clean_box = tgl
+            elif opt_key == "opt_clean_text":
+                self.audio_cb_clean_text = tgl
+            elif opt_key == "opt_show_original":
+                self.audio_cb_show_original = tgl
+            elif opt_key == "opt_show_translated":
+                self.audio_cb_show_translated = tgl
+            elif opt_key == "opt_show_badge":
+                self.audio_cb_show_badge = tgl
+            elif opt_key == "opt_click_through":
+                self.audio_cb_click_through = tgl
+            elif opt_key == "opt_show_speaker":
+                self.audio_cb_show_speaker = tgl
             row.addWidget(lbl)
             row.addStretch(1)
             row.addWidget(tgl)
-            disp_box.addLayout(row)
+            audio_disp_box.addLayout(row)
 
-        s_layout.addLayout(disp_box)
+        audio_layout.addLayout(audio_disp_box)
+        audio_layout.addStretch(1)
+        self.sub_stack.addWidget(self.panel_sub_audio)
 
-        # 하위 호환성 (테스트 및 레거시 모듈 연동용 슬라이더 별칭)
+        # --------------------------------------------------------------
+        # 서브패널 2: 화면 번역 자막 설정
+        # --------------------------------------------------------------
+        self.panel_sub_screen = QWidget()
+        screen_layout = QVBoxLayout(self.panel_sub_screen)
+        screen_layout.setContentsMargins(0, 0, 0, 0)
+        screen_layout.setSpacing(8)
+
+        # 화면 - 섹션 1: 자막 스타일
+        sec1_screen_title = QLabel()
+        self._i18n(sec1_screen_title, "subtitle_style")
+        sec1_screen_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
+        screen_layout.addWidget(sec1_screen_title)
+
+        screen_style_box = QVBoxLayout()
+        screen_style_box.setSpacing(6)
+
+        # 글꼴 크기
+        r_s_font = QHBoxLayout()
+        r_s_font.setContentsMargins(0, 1, 0, 1)
+        lbl_s_font = QLabel()
+        self._i18n(lbl_s_font, "font_size")
+        lbl_s_font.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_s_font.setFixedWidth(84)
+        _v = self.config.get("screen_font_size")
+        cur_s_font = int(_v) if _v is not None else int(self.config.get("font_size", 24))
+        self.screen_font_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.screen_font_slider.setRange(14, 40)
+        self.screen_font_slider.setValue(cur_s_font)
+        self.screen_font_label = QLabel(f"{cur_s_font}px")
+        self.screen_font_label.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.screen_font_label.setFixedWidth(52)
+        self.screen_font_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.screen_font_slider.valueChanged.connect(lambda v: (self.on_screen_font_slider_changed(v, None), self.screen_font_label.setText(f"{v}px"), self._update_subtitle_preview()))
+        r_s_font.addWidget(lbl_s_font)
+        r_s_font.addWidget(self.screen_font_slider, stretch=1)
+        r_s_font.addWidget(self.screen_font_label)
+        screen_style_box.addLayout(r_s_font)
+
+        # 배경 불투명도
+        r_s_op = QHBoxLayout()
+        r_s_op.setContentsMargins(0, 1, 0, 1)
+        lbl_s_op = QLabel()
+        self._i18n(lbl_s_op, "opacity")
+        lbl_s_op.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_s_op.setFixedWidth(84)
+        _v = self.config.get("screen_overlay_bg_opacity")
+        cur_s_op = int(float(_v) * 100) if _v is not None else int(float(self.config.get("overlay_bg_opacity", 0.66)) * 100)
+        self.screen_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.screen_opacity_slider.setRange(0, 100)
+        self.screen_opacity_slider.setValue(cur_s_op)
+        self.screen_opacity_label = QLabel(f"{cur_s_op}%")
+        self.screen_opacity_label.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.screen_opacity_label.setFixedWidth(52)
+        self.screen_opacity_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.screen_opacity_slider.valueChanged.connect(lambda v: (self.on_screen_opacity_slider_changed(v, None), self.screen_opacity_label.setText(f"{v}%"), self._update_subtitle_preview()))
+        r_s_op.addWidget(lbl_s_op)
+        r_s_op.addWidget(self.screen_opacity_slider, stretch=1)
+        r_s_op.addWidget(self.screen_opacity_label)
+        screen_style_box.addLayout(r_s_op)
+
+        # 외곽선 두께
+        r_s_str = QHBoxLayout()
+        r_s_str.setContentsMargins(0, 1, 0, 1)
+        lbl_s_str = QLabel()
+        self._i18n(lbl_s_str, "stroke")
+        lbl_s_str.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_s_str.setFixedWidth(84)
+        _v = self.config.get("screen_subtitle_stroke_width")
+        cur_s_str = int(_v) if _v is not None else int(self.config.get("subtitle_stroke_width", 0))
+        self.screen_slider_stroke = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.screen_slider_stroke.setRange(0, 5)
+        self.screen_slider_stroke.setValue(cur_s_str)
+        self.screen_lbl_stroke = QLabel(f"{cur_s_str}px")
+        self.screen_lbl_stroke.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.screen_lbl_stroke.setFixedWidth(52)
+        self.screen_lbl_stroke.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.screen_slider_stroke.valueChanged.connect(lambda v: (self.on_screen_stroke_slider_changed(v), self.screen_lbl_stroke.setText(f"{v}px"), self._update_subtitle_preview()))
+        r_s_str.addWidget(lbl_s_str)
+        r_s_str.addWidget(self.screen_slider_stroke, stretch=1)
+        r_s_str.addWidget(self.screen_lbl_stroke)
+        screen_style_box.addLayout(r_s_str)
+
+        # 글자 자간
+        r_s_spc = QHBoxLayout()
+        r_s_spc.setContentsMargins(0, 1, 0, 1)
+        lbl_s_spc = QLabel()
+        self._i18n(lbl_s_spc, "letter_spacing")
+        lbl_s_spc.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_s_spc.setFixedWidth(84)
+        _v = self.config.get("screen_letter_spacing")
+        cur_s_spc = float(_v) if _v is not None else float(self.config.get("letter_spacing", 0.0))
+        self.screen_slider_spacing = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.screen_slider_spacing.setRange(0, 40)
+        self.screen_slider_spacing.setValue(int(cur_s_spc * 10))
+        self.screen_lbl_spacing = QLabel(f"{cur_s_spc:.1f}px")
+        self.screen_lbl_spacing.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.screen_lbl_spacing.setFixedWidth(52)
+        self.screen_lbl_spacing.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.screen_slider_spacing.valueChanged.connect(lambda v: (self.on_screen_spacing_slider_changed(v), self.screen_lbl_spacing.setText(f"{v/10.0:.1f}px"), self._update_subtitle_preview()))
+        r_s_spc.addWidget(lbl_s_spc)
+        r_s_spc.addWidget(self.screen_slider_spacing, stretch=1)
+        r_s_spc.addWidget(self.screen_lbl_spacing)
+        screen_style_box.addLayout(r_s_spc)
+
+        # 유지 시간 (화면 번역 전용)
+        r_s_dur = QHBoxLayout()
+        r_s_dur.setContentsMargins(0, 1, 0, 1)
+        lbl_s_dur = QLabel()
+        self._i18n(lbl_s_dur, "duration")
+        lbl_s_dur.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+        lbl_s_dur.setFixedWidth(84)
+        _v = self.config.get("screen_subtitle_duration")
+        cur_s_dur = int(_v) if _v is not None else 5
+        self.screen_slider_duration = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.screen_slider_duration.setRange(0, 90)
+        self.screen_slider_duration.setValue(cur_s_dur)
+        self.screen_lbl_duration = QLabel(self._duration_text(cur_s_dur))
+        self.screen_lbl_duration.setStyleSheet(f"color: {COLOR_ACCENT_CYAN}; font-weight: bold; font-size: 11.5px;")
+        self.screen_lbl_duration.setFixedWidth(52)
+        self.screen_lbl_duration.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.screen_slider_duration.valueChanged.connect(lambda v: (self.on_screen_duration_slider_changed(v), self.screen_lbl_duration.setText(self._duration_text(v))))
+        r_s_dur.addWidget(lbl_s_dur)
+        r_s_dur.addWidget(self.screen_slider_duration, stretch=1)
+        r_s_dur.addWidget(self.screen_lbl_duration)
+        screen_style_box.addLayout(r_s_dur)
+
+        screen_layout.addLayout(screen_style_box)
+
+        line_s = QFrame()
+        line_s.setFrameShape(QFrame.Shape.HLine)
+        line_s.setStyleSheet(f"background-color: {COLOR_BORDER}; max-height: 1px;")
+        screen_layout.addWidget(line_s)
+
+        # 화면 - 섹션 2: 표시 설정
+        sec2_screen_title = QLabel()
+        self._i18n(sec2_screen_title, "display_settings")
+        sec2_screen_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #ECEFF1;")
+        screen_layout.addWidget(sec2_screen_title)
+
+        screen_disp_box = QVBoxLayout()
+        screen_disp_box.setSpacing(6)
+
+        screen_disp_opts = [
+            ("opt_show_speaker", "screen_show_speaker", "show_speaker", self.on_screen_show_speaker_toggled, True),
+            ("opt_show_original", "screen_show_original", "show_original", self.on_screen_show_original_toggled, True),
+            ("opt_show_translated", "screen_show_translated", "show_translated", self.on_screen_show_translated_toggled, True),
+            ("opt_show_badge", "screen_show_engine_badge", "show_engine_badge", self.on_screen_show_badge_toggled, True),
+            ("opt_click_through", "screen_click_through", "click_through", self.on_screen_click_through_toggled, False),
+            ("opt_clean_text", "screen_clean_text_mode", "screen_clean_text_mode", self.on_screen_clean_text_toggled, False),
+            ("opt_clean_box", "screen_clean_box", "screen_clean_box", self.on_screen_clean_box_toggled, True),
+        ]
+        for opt_key, primary_key, fallback_key, cb, default_val in screen_disp_opts:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 1, 0, 1)
+            lbl = QLabel()
+            self._i18n(lbl, opt_key)
+            lbl.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-size: 12px;")
+            tgl = ModernToggle(active_color=COLOR_ACCENT_PURPLE)
+            _val = self.config.get(primary_key)
+            if _val is None:
+                _val = self.config.get(fallback_key)
+            if _val is None:
+                _val = default_val
+            tgl.setChecked(bool(_val))
+            tgl.toggled.connect(lambda checked, fn=cb: (fn(checked), self._update_subtitle_preview()))
+            if opt_key == "opt_clean_box":
+                self.screen_cb_clean_box = tgl
+            elif opt_key == "opt_clean_text":
+                self.screen_cb_clean_text = tgl
+            elif opt_key == "opt_show_original":
+                self.screen_cb_show_original = tgl
+            elif opt_key == "opt_show_translated":
+                self.screen_cb_show_translated = tgl
+            elif opt_key == "opt_show_badge":
+                self.screen_cb_show_badge = tgl
+            elif opt_key == "opt_click_through":
+                self.screen_cb_click_through = tgl
+            elif opt_key == "opt_show_speaker":
+                self.screen_cb_show_speaker = tgl
+            row.addWidget(lbl)
+            row.addStretch(1)
+            row.addWidget(tgl)
+            screen_disp_box.addLayout(row)
+
+        screen_layout.addLayout(screen_disp_box)
+        screen_layout.addStretch(1)
+        self.sub_stack.addWidget(self.panel_sub_screen)
+
+        s_layout.addWidget(self.sub_stack)
+
+        # 하위 호환성 (테스트 및 레거시 모듈 연동용 슬라이더 및 체크박스 별칭)
+        cur_f = int(self.config.get("font_size", 24))
+        self.font_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.font_slider.setRange(14, 40)
+        self.font_slider.setValue(cur_f)
+        self.font_label = QLabel(f"{cur_f}px")
+        self.font_slider.valueChanged.connect(lambda v: (self.on_font_slider_changed(v, None), self.font_label.setText(f"{v}px"), self._update_subtitle_preview()))
+
+        cur_op = int(float(self.config.get("overlay_bg_opacity", 0.66)) * 100)
+        self.opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(0, 100)
+        self.opacity_slider.setValue(cur_op)
+        self.opacity_label = QLabel(f"{cur_op}%")
+        self.opacity_slider.valueChanged.connect(lambda v: (self.on_opacity_slider_changed(v, None), self.opacity_label.setText(f"{v}%"), self._update_subtitle_preview()))
+
+        cur_str = int(self.config.get("subtitle_stroke_width", 0))
+        self.slider_stroke = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.slider_stroke.setRange(0, 5)
+        self.slider_stroke.setValue(cur_str)
+        self.lbl_stroke = QLabel(f"{cur_str}px")
+        self.slider_stroke.valueChanged.connect(lambda v: (self.on_stroke_slider_changed(v), self.lbl_stroke.setText(f"{v}px"), self._update_subtitle_preview()))
+
+        cur_spc = float(self.config.get("letter_spacing", 0.0))
+        self.slider_spacing = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.slider_spacing.setRange(0, 40)
+        self.slider_spacing.setValue(int(cur_spc * 10))
+        self.lbl_spacing = QLabel(f"{cur_spc:.1f}px")
+        self.slider_spacing.valueChanged.connect(lambda v: (self.on_spacing_slider_changed(v), self.lbl_spacing.setText(f"{v/10.0:.1f}px"), self._update_subtitle_preview()))
+
+        self.slider_duration = self.screen_slider_duration
+        self.lbl_duration = self.screen_lbl_duration
+
+        self.cb_show_speaker = self.audio_cb_show_speaker
+        self.cb_show_original = self.audio_cb_show_original
+        self.cb_show_badge = self.audio_cb_show_badge
+        self.cb_click_through = self.audio_cb_click_through
+        self.cb_clean_text = self.screen_cb_clean_text
+        self.cb_clean_box = self.screen_cb_clean_box
+
         self.slider_spacing_sec4 = self.slider_spacing
         self.lbl_spacing_sec4 = self.lbl_spacing
+
+        self._update_subtab_button_styles()
 
         s_layout.addStretch(1)
 
@@ -3522,37 +3989,215 @@ class ControlPanel(QWidget):
         self._update_subtitle_preview()
         return container
 
+    def _update_subtab_button_styles(self):
+        is_audio = getattr(self, "_current_subtab", "audio") == "audio"
+        if is_audio:
+            self.btn_subtab_audio.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: rgba(0, 242, 254, 0.16);
+                    color: {COLOR_ACCENT_CYAN};
+                    border: 1.5px solid {COLOR_ACCENT_CYAN};
+                    border-radius: 6px;
+                    font-size: 11.5px;
+                    font-weight: bold;
+                    padding: 4px 8px;
+                }}
+            """)
+            self.btn_subtab_screen.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {COLOR_CARD_INNER};
+                    color: {COLOR_TEXT_SECONDARY};
+                    border: 1px solid {COLOR_BORDER};
+                    border-radius: 6px;
+                    font-size: 11.5px;
+                    font-weight: normal;
+                    padding: 4px 8px;
+                }}
+                QPushButton:hover {{
+                    background-color: rgba(255, 255, 255, 0.08);
+                    color: {COLOR_TEXT_PRIMARY};
+                }}
+            """)
+        else:
+            self.btn_subtab_audio.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {COLOR_CARD_INNER};
+                    color: {COLOR_TEXT_SECONDARY};
+                    border: 1px solid {COLOR_BORDER};
+                    border-radius: 6px;
+                    font-size: 11.5px;
+                    font-weight: normal;
+                    padding: 4px 8px;
+                }}
+                QPushButton:hover {{
+                    background-color: rgba(255, 255, 255, 0.08);
+                    color: {COLOR_TEXT_PRIMARY};
+                }}
+            """)
+            self.btn_subtab_screen.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: rgba(168, 85, 247, 0.16);
+                    color: {COLOR_ACCENT_PURPLE};
+                    border: 1.5px solid {COLOR_ACCENT_PURPLE};
+                    border-radius: 6px;
+                    font-size: 11.5px;
+                    font-weight: bold;
+                    padding: 4px 8px;
+                }}
+            """)
+
+    def _on_subtab_switched(self, tab_type: str):
+        self._current_subtab = tab_type
+        if tab_type == "audio":
+            self.btn_subtab_audio.setChecked(True)
+            self.btn_subtab_screen.setChecked(False)
+            self.sub_stack.setCurrentIndex(0)
+        else:
+            self.btn_subtab_audio.setChecked(False)
+            self.btn_subtab_screen.setChecked(True)
+            self.sub_stack.setCurrentIndex(1)
+        self._update_subtab_button_styles()
+        self._update_subtitle_preview()
+
     def _update_subtitle_preview(self):
-        font_size = self.config.get("font_size", 24)
-        opacity = self.config.get("overlay_bg_opacity", 0.66)
-        stroke_width = self.config.get("subtitle_stroke_width", 0)
-        letter_spacing = float(self.config.get("letter_spacing", 0.0))
-        show_original = self.cb_show_original.isChecked() if hasattr(self, 'cb_show_original') else self.config.get("show_original", True)
-        show_badge = self.cb_show_badge.isChecked() if hasattr(self, 'cb_show_badge') else self.config.get("show_engine_badge", True)
-        clean_box = self.cb_clean_box.isChecked() if hasattr(self, 'cb_clean_box') else self.config.get("screen_clean_box", True)
-        clean_text_mode = self.cb_clean_text.isChecked() if hasattr(self, 'cb_clean_text') else self.config.get("screen_clean_text_mode", False)
-        show_speaker = self.cb_show_speaker.isChecked() if hasattr(self, 'cb_show_speaker') else self.config.get("show_speaker", True)
+        # Audio params
+        _v = self.audio_font_slider.value() if hasattr(self, 'audio_font_slider') else self.config.get("audio_font_size")
+        a_font = _v if _v is not None else self.config.get("font_size", 24)
+
+        _v = (self.audio_opacity_slider.value() / 100.0) if hasattr(self, 'audio_opacity_slider') else self.config.get("audio_overlay_bg_opacity")
+        a_op = _v if _v is not None else self.config.get("overlay_bg_opacity", 0.66)
+
+        _v = self.audio_slider_stroke.value() if hasattr(self, 'audio_slider_stroke') else self.config.get("audio_subtitle_stroke_width")
+        a_stroke = _v if _v is not None else self.config.get("subtitle_stroke_width", 0)
+
+        _v = (self.audio_slider_spacing.value() / 10.0) if hasattr(self, 'audio_slider_spacing') else self.config.get("audio_letter_spacing")
+        a_spacing = _v if _v is not None else float(self.config.get("letter_spacing", 0.0))
+
+        if hasattr(self, 'audio_cb_show_original'):
+            a_orig = self.audio_cb_show_original.isChecked()
+        else:
+            _v = self.config.get("audio_show_original")
+            a_orig = _v if _v is not None else self.config.get("show_original", True)
+
+        if hasattr(self, 'audio_cb_show_translated'):
+            a_trans = self.audio_cb_show_translated.isChecked()
+        else:
+            _v = self.config.get("audio_show_translated")
+            a_trans = _v if _v is not None else self.config.get("show_translated", True)
+
+        if hasattr(self, 'audio_cb_show_badge'):
+            a_badge = self.audio_cb_show_badge.isChecked()
+        else:
+            _v = self.config.get("audio_show_engine_badge")
+            a_badge = _v if _v is not None else self.config.get("show_engine_badge", True)
+
+        if hasattr(self, 'audio_cb_clean_box'):
+            a_clean_box = self.audio_cb_clean_box.isChecked()
+        else:
+            _v = self.config.get("audio_clean_box")
+            a_clean_box = _v if _v is not None else self.config.get("clean_box", True)
+
+        if hasattr(self, 'audio_cb_clean_text'):
+            a_clean_text = self.audio_cb_clean_text.isChecked()
+        else:
+            _v = self.config.get("audio_clean_text_mode")
+            a_clean_text = _v if _v is not None else self.config.get("clean_text_mode", False)
+
+        if hasattr(self, 'audio_cb_show_speaker'):
+            a_speaker = self.audio_cb_show_speaker.isChecked()
+        else:
+            _v = self.config.get("audio_show_speaker")
+            a_speaker = _v if _v is not None else self.config.get("show_speaker", True)
+
+        # Screen params
+        _v = self.screen_font_slider.value() if hasattr(self, 'screen_font_slider') else self.config.get("screen_font_size")
+        s_font = _v if _v is not None else self.config.get("font_size", 24)
+
+        _v = (self.screen_opacity_slider.value() / 100.0) if hasattr(self, 'screen_opacity_slider') else self.config.get("screen_overlay_bg_opacity")
+        s_op = _v if _v is not None else self.config.get("overlay_bg_opacity", 0.66)
+
+        _v = self.screen_slider_stroke.value() if hasattr(self, 'screen_slider_stroke') else self.config.get("screen_subtitle_stroke_width")
+        s_stroke = _v if _v is not None else self.config.get("subtitle_stroke_width", 0)
+
+        _v = (self.screen_slider_spacing.value() / 10.0) if hasattr(self, 'screen_slider_spacing') else self.config.get("screen_letter_spacing")
+        s_spacing = _v if _v is not None else float(self.config.get("letter_spacing", 0.0))
+
+        if hasattr(self, 'screen_cb_show_original'):
+            s_orig = self.screen_cb_show_original.isChecked()
+        else:
+            _v = self.config.get("screen_show_original")
+            s_orig = _v if _v is not None else self.config.get("show_original", True)
+
+        if hasattr(self, 'screen_cb_show_translated'):
+            s_trans = self.screen_cb_show_translated.isChecked()
+        else:
+            _v = self.config.get("screen_show_translated")
+            s_trans = _v if _v is not None else self.config.get("show_translated", True)
+
+        if hasattr(self, 'screen_cb_show_badge'):
+            s_badge = self.screen_cb_show_badge.isChecked()
+        else:
+            _v = self.config.get("screen_show_engine_badge")
+            s_badge = _v if _v is not None else self.config.get("show_engine_badge", True)
+
+        if hasattr(self, 'screen_cb_clean_box'):
+            s_clean_box = self.screen_cb_clean_box.isChecked()
+        else:
+            _v = self.config.get("screen_clean_box")
+            s_clean_box = _v if _v is not None else True
+
+        if hasattr(self, 'screen_cb_clean_text'):
+            s_clean_text = self.screen_cb_clean_text.isChecked()
+        else:
+            _v = self.config.get("screen_clean_text_mode")
+            s_clean_text = _v if _v is not None else False
+
+        if hasattr(self, 'screen_cb_show_speaker'):
+            s_speaker = self.screen_cb_show_speaker.isChecked()
+        else:
+            _v = self.config.get("screen_show_speaker")
+            s_speaker = _v if _v is not None else self.config.get("show_speaker", True)
+
+        # Readability preview shows the currently selected subtab's style
+        is_audio = getattr(self, "_current_subtab", "audio") == "audio"
+        cur_font = a_font if is_audio else s_font
+        cur_op = a_op if is_audio else s_op
+        cur_stroke = a_stroke if is_audio else s_stroke
+        cur_spacing = a_spacing if is_audio else s_spacing
+        cur_orig = a_orig if is_audio else s_orig
+        cur_clean_box = a_clean_box if is_audio else s_clean_box
 
         if hasattr(self, 'preview_canvas'):
             self.preview_canvas.update_params(
-                font_size=font_size,
-                opacity=opacity,
-                stroke_width=stroke_width,
-                letter_spacing=letter_spacing,
-                show_original=show_original,
-                show_badge=show_badge,
-                clean_box=clean_box,
-                clean_text_mode=clean_text_mode,
-                show_speaker=show_speaker
+                font_size=a_font,
+                opacity=a_op,
+                stroke_width=a_stroke,
+                letter_spacing=a_spacing,
+                show_original=a_orig,
+                show_badge=a_badge,
+                clean_box=a_clean_box,
+                clean_text_mode=a_clean_text,
+                show_speaker=a_speaker,
+                show_translated=a_trans,
+                screen_font_size=s_font,
+                screen_opacity=s_op,
+                screen_stroke_width=s_stroke,
+                screen_letter_spacing=s_spacing,
+                screen_show_original=s_orig,
+                screen_show_badge=s_badge,
+                screen_clean_box=s_clean_box,
+                screen_clean_text_mode=s_clean_text,
+                screen_show_speaker=s_speaker,
+                screen_show_translated=s_trans
             )
         if hasattr(self, 'readability_widget'):
             self.readability_widget.update_params(
-                font_size=font_size,
-                opacity=opacity,
-                stroke_width=stroke_width,
-                letter_spacing=letter_spacing,
-                show_original=show_original,
-                clean_box=clean_box
+                font_size=cur_font,
+                opacity=cur_op,
+                stroke_width=cur_stroke,
+                letter_spacing=cur_spacing,
+                show_original=cur_orig,
+                clean_box=cur_clean_box
             )
 
     # ----------------------------------------------------------------------
@@ -4980,6 +5625,71 @@ class ControlPanel(QWidget):
         if hasattr(self, 'stt_thread') and self.stt_thread and hasattr(self.stt_thread, 'update_config'):
             self.stt_thread.update_config(self.config)
         self._update_dubbing_toggle_btn_ui()
+        self._sync_dubbing_overlay_buttons()
+        self.save_config_cb(self.config)
+
+    def _sync_dubbing_overlay_buttons(self):
+        """오디오 및 화면 오버레이 창과 컨트롤 패널 토글 스위치 간의 양방향 실시간 동기화"""
+        is_audio_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_audio", True))
+        is_screen_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", False))
+
+        # 1. 컨트롤 패널 토글 스위치 UI 동기화
+        if hasattr(self, 'toggle_dub_voice') and self.toggle_dub_voice:
+            self.toggle_dub_voice.blockSignals(True)
+            self.toggle_dub_voice.setChecked(is_audio_dub)
+            self.toggle_dub_voice.blockSignals(False)
+
+        if hasattr(self, 'toggle_dub_screen') and self.toggle_dub_screen:
+            self.toggle_dub_screen.blockSignals(True)
+            self.toggle_dub_screen.setChecked(is_screen_dub)
+            self.toggle_dub_screen.blockSignals(False)
+
+        # 2. 오버레이 창 더빙 아이콘 버튼 동기화
+        if hasattr(self, 'overlay') and self.overlay and hasattr(self.overlay, 'update_dubbing_state'):
+            self.overlay.update_dubbing_state(is_audio_dub)
+        if hasattr(self, 'screen_overlay') and self.screen_overlay and hasattr(self.screen_overlay, 'update_dubbing_state'):
+            self.screen_overlay.update_dubbing_state(is_screen_dub)
+
+        self._update_dubbing_toggle_btn_ui()
+
+    def toggle_audio_dubbing_from_overlay(self):
+        """음성 번역 오버레이 헤더의 더빙 버튼 클릭 핸들러"""
+        cur_active = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_audio", True))
+        new_active = not cur_active
+        if new_active:
+            self.config["dubbing_enabled"] = True
+            self.config["dubbing_source_audio"] = True
+        else:
+            self.config["dubbing_source_audio"] = False
+            if not self.config.get("dubbing_source_screen", False):
+                self.config["dubbing_enabled"] = False
+        if self.dubbing_engine:
+            self.dubbing_engine.set_enabled(self.config.get("dubbing_enabled", False))
+            self.dubbing_engine.set_source_enabled("audio", self.config["dubbing_source_audio"])
+        if hasattr(self, 'stt_thread') and self.stt_thread and hasattr(self.stt_thread, 'update_config'):
+            self.stt_thread.update_config(self.config)
+        self._update_dubbing_toggle_btn_ui()
+        self._sync_dubbing_overlay_buttons()
+        self.save_config_cb(self.config)
+
+    def toggle_screen_dubbing_from_overlay(self):
+        """화면 번역 오버레이 헤더의 더빙 버튼 클릭 핸들러"""
+        cur_active = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", False))
+        new_active = not cur_active
+        if new_active:
+            self.config["dubbing_enabled"] = True
+            self.config["dubbing_source_screen"] = True
+        else:
+            self.config["dubbing_source_screen"] = False
+            if not self.config.get("dubbing_source_audio", True):
+                self.config["dubbing_enabled"] = False
+        if self.dubbing_engine:
+            self.dubbing_engine.set_enabled(self.config.get("dubbing_enabled", False))
+            self.dubbing_engine.set_source_enabled("screen", self.config["dubbing_source_screen"])
+        if hasattr(self, 'screen_worker') and self.screen_worker and hasattr(self.screen_worker, 'update_config'):
+            self.screen_worker.update_config(self.config)
+        self._update_dubbing_toggle_btn_ui()
+        self._sync_dubbing_overlay_buttons()
         self.save_config_cb(self.config)
 
     def on_auto_start_audio_toggled(self, checked: bool):
@@ -5341,18 +6051,76 @@ class ControlPanel(QWidget):
 
     def on_dubbing_source_audio_toggled(self, checked):
         self.config["dubbing_source_audio"] = checked
+        if checked:
+            self.config["dubbing_enabled"] = True
+        else:
+            if not self.config.get("dubbing_source_screen", False):
+                self.config["dubbing_enabled"] = False
         if self.dubbing_engine:
+            self.dubbing_engine.set_enabled(self.config.get("dubbing_enabled", False))
             self.dubbing_engine.set_source_enabled("audio", checked)
         if hasattr(self, 'stt_thread') and self.stt_thread and hasattr(self.stt_thread, 'update_config'):
             self.stt_thread.update_config(self.config)
+        self._sync_dubbing_overlay_buttons()
         self.save_config_cb(self.config)
 
     def on_dubbing_source_screen_toggled(self, checked):
         self.config["dubbing_source_screen"] = checked
+        if checked:
+            self.config["dubbing_enabled"] = True
+        else:
+            if not self.config.get("dubbing_source_audio", True):
+                self.config["dubbing_enabled"] = False
         if self.dubbing_engine:
+            self.dubbing_engine.set_enabled(self.config.get("dubbing_enabled", False))
             self.dubbing_engine.set_source_enabled("screen", checked)
         if hasattr(self, 'screen_worker') and self.screen_worker and hasattr(self.screen_worker, 'update_config'):
             self.screen_worker.update_config(self.config)
+        self._sync_dubbing_overlay_buttons()
+        self.save_config_cb(self.config)
+
+    def _populate_dubbing_voice_combos(self):
+        if not hasattr(self, 'combo_dub_voice_audio') or not hasattr(self, 'combo_dub_voice_screen'):
+            return
+        tgt_code = str(self.config.get("target_lang", "ko")).strip().lower().split("-")[0]
+        from src.dubbing_engine import get_available_voices
+        voices = get_available_voices(tgt_code)
+
+        cur_audio_v = self.config.get("dubbing_voice_audio", "auto")
+        cur_screen_v = self.config.get("dubbing_voice_screen", "auto")
+
+        self.combo_dub_voice_audio.blockSignals(True)
+        self.combo_dub_voice_audio.clear()
+        for v_id, v_label in voices:
+            self.combo_dub_voice_audio.addItem(v_label, v_id)
+        idx_a = self.combo_dub_voice_audio.findData(cur_audio_v)
+        self.combo_dub_voice_audio.setCurrentIndex(max(0, idx_a))
+        self.combo_dub_voice_audio.blockSignals(False)
+
+        self.combo_dub_voice_screen.blockSignals(True)
+        self.combo_dub_voice_screen.clear()
+        for v_id, v_label in voices:
+            self.combo_dub_voice_screen.addItem(v_label, v_id)
+        idx_s = self.combo_dub_voice_screen.findData(cur_screen_v)
+        self.combo_dub_voice_screen.setCurrentIndex(max(0, idx_s))
+        self.combo_dub_voice_screen.blockSignals(False)
+
+    def on_dubbing_voice_audio_changed(self, idx: int):
+        if idx < 0 or not hasattr(self, 'combo_dub_voice_audio'):
+            return
+        v_id = self.combo_dub_voice_audio.itemData(idx)
+        self.config["dubbing_voice_audio"] = v_id
+        if self.dubbing_engine and hasattr(self.dubbing_engine, 'config'):
+            self.dubbing_engine.config["dubbing_voice_audio"] = v_id
+        self.save_config_cb(self.config)
+
+    def on_dubbing_voice_screen_changed(self, idx: int):
+        if idx < 0 or not hasattr(self, 'combo_dub_voice_screen'):
+            return
+        v_id = self.combo_dub_voice_screen.itemData(idx)
+        self.config["dubbing_voice_screen"] = v_id
+        if self.dubbing_engine and hasattr(self.dubbing_engine, 'config'):
+            self.dubbing_engine.config["dubbing_voice_screen"] = v_id
         self.save_config_cb(self.config)
 
     def on_dubbing_interrupt_toggled(self, checked):
@@ -5515,12 +6283,14 @@ class ControlPanel(QWidget):
         speaker = ""
         if self.stt_thread and hasattr(self.stt_thread, 'last_detected_speaker'):
             speaker = getattr(self.stt_thread, 'last_detected_speaker', '') or ""
+        is_audio_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_audio", True))
         self.subtitle_history.add_entry(
             source="audio",
             trans_text=trans,
             orig_text=orig,
             speaker=speaker,
-            engine=engine
+            engine=engine,
+            dub_status="waiting" if is_audio_dub else "none"
         )
         self.subtitle_entry_signal.emit(None)
         clean_trans = trans.strip() if trans else ""
@@ -5529,13 +6299,15 @@ class ControlPanel(QWidget):
     def _on_screen_subtitle_received(self, orig, trans, engine, roi_idx=0):
         if not self._is_screen_active and not str(engine).startswith("즉시·"):
             return
+        is_screen_dub = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_screen", True))
         self.subtitle_history.add_entry(
             source="screen",
             trans_text=trans,
             orig_text=orig,
             speaker=f"ROI {roi_idx + 1}" if roi_idx is not None else "",
             engine=engine,
-            region_idx=roi_idx if roi_idx is not None else 0
+            region_idx=roi_idx if roi_idx is not None else 0,
+            dub_status="waiting" if is_screen_dub else "none"
         )
         self.subtitle_entry_signal.emit(None)
         clean_trans = trans.strip() if trans else ""
@@ -5621,6 +6393,38 @@ class ControlPanel(QWidget):
                 btn.setChecked(key == cur_key)
         self.refresh_subtitle_view()
 
+    def _update_sub_history_header(self, filter_mode: str = "all"):
+        if not hasattr(self, 'header_sub_history'):
+            return
+        is_grid_mode = filter_mode not in ("orig_only", "trans_only", "dub_only")
+        self.header_sub_history.setVisible(is_grid_mode)
+        if is_grid_mode:
+            self.text_sub_history.setStyleSheet("""
+                QTextBrowser {
+                    background-color: #0E1422;
+                    color: #ECEFF1;
+                    border: 1px solid #1C273E;
+                    border-top: none;
+                    border-top-left-radius: 0px;
+                    border-top-right-radius: 0px;
+                    border-bottom-left-radius: 8px;
+                    border-bottom-right-radius: 8px;
+                    padding: 2px 4px 6px 4px;
+                    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+                }
+            """)
+        else:
+            self.text_sub_history.setStyleSheet("""
+                QTextBrowser {
+                    background-color: #0E1422;
+                    color: #ECEFF1;
+                    border: 1px solid #1C273E;
+                    border-radius: 8px;
+                    padding: 8px;
+                    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+                }
+            """)
+
     def refresh_subtitle_view(self):
         if not hasattr(self, 'text_sub_history'):
             return
@@ -5628,8 +6432,10 @@ class ControlPanel(QWidget):
             filter_mode = self.combo_sub_filter.currentData() or "all"
             search_kw = self.input_sub_search.text().strip() if hasattr(self, 'input_sub_search') else ""
             filtered = self.subtitle_history.get_entries(source_filter=filter_mode, keyword=search_kw)
-            html = SubtitleHistoryManager.format_html_table(filtered, filter_mode=filter_mode)
+            is_single_view = filter_mode in ("orig_only", "trans_only", "dub_only")
+            html = SubtitleHistoryManager.format_html_table(filtered, filter_mode=filter_mode, include_header=is_single_view)
             self.text_sub_history.setHtml(html)
+            self._update_sub_history_header(filter_mode)
             if hasattr(self, 'lbl_sub_count'):
                 total_cnt = self.subtitle_history.count()
                 if (filter_mode and filter_mode != "all") or search_kw:
@@ -6027,6 +6833,12 @@ class ControlPanel(QWidget):
         if hasattr(self, "lbl_duration"):
             value = self.slider_duration.value() if hasattr(self, "slider_duration") else 0
             self.lbl_duration.setText(self._duration_text(value))
+        if hasattr(self, "audio_lbl_duration"):
+            value = self.audio_slider_duration.value() if hasattr(self, "audio_slider_duration") else 0
+            self.audio_lbl_duration.setText(self._duration_text(value))
+        if hasattr(self, "screen_lbl_duration"):
+            value = self.screen_slider_duration.value() if hasattr(self, "screen_slider_duration") else 0
+            self.screen_lbl_duration.setText(self._duration_text(value))
         if hasattr(self, "lbl_speaker_status"):
             self.lbl_speaker_status.setText(self._speaker_status_text())
 
@@ -6246,6 +7058,7 @@ class ControlPanel(QWidget):
             d_engine.update_config(self.config)
             if hasattr(d_engine, "clear_queue"):
                 d_engine.clear_queue()
+        self._populate_dubbing_voice_combos()
 
         # 5. 파이프라인 칩 및 상태 UI 갱신
         if hasattr(self, "_sync_all_pipeline_status"):
@@ -7249,9 +8062,12 @@ class ControlPanel(QWidget):
                     self.stt_thread.compute_type = "float16"
 
         cur_p = self.config.get("stt_provider", "local")
+        src_lang = self.config.get("source_lang", "auto")
         if STTModelManager.is_multilingual_model(model_id, cur_p):
-            if self.config.get("stt_language", "en") == "en":
-                self.config["stt_language"] = "auto"
+            if src_lang and src_lang != "auto":
+                self.config["stt_language"] = src_lang
+            else:
+                self.config["stt_language"] = self.config.get("stt_language", "auto")
         else:
             self.config["stt_language"] = "en"
 
@@ -7847,9 +8663,12 @@ class ControlPanel(QWidget):
                     self.stt_thread.compute_type = "float16"
 
         cur_p = self.config.get("stt_provider", "local")
+        src_lang = self.config.get("source_lang", "auto")
         if STTModelManager.is_multilingual_model(m, cur_p):
-            if self.config.get("stt_language", "en") == "en":
-                self.config["stt_language"] = "auto"
+            if src_lang and src_lang != "auto":
+                self.config["stt_language"] = src_lang
+            else:
+                self.config["stt_language"] = self.config.get("stt_language", "auto")
         else:
             self.config["stt_language"] = "en"
 
@@ -7860,132 +8679,653 @@ class ControlPanel(QWidget):
         self.save_config_cb(self.config)
         self._sync_all_pipeline_status()
 
-    def on_click_through_toggled(self, checked):
-        self.config["click_through"] = checked
-        self.config["screen_click_through"] = checked
+    # ------------------------------------------------------------------
+    # 음성 번역 자막 전용 컨트롤 핸들러
+    # ------------------------------------------------------------------
+    def on_audio_font_slider_changed(self, val, label=None):
+        self.config["audio_font_size"] = val
+        self.config["font_size"] = val
+        if hasattr(self, 'audio_font_slider') and self.audio_font_slider.value() != val:
+            self.audio_font_slider.blockSignals(True)
+            self.audio_font_slider.setValue(val)
+            self.audio_font_slider.blockSignals(False)
+        if hasattr(self, 'audio_font_label'):
+            self.audio_font_label.setText(f"{val}px")
         if self.overlay:
-            self.overlay.set_click_through(checked)
-        if self.screen_overlay:
-            self.screen_overlay.set_click_through(checked)
-        self.save_config_cb(self.config)
-
-    def sync_click_through_from_overlay(self, checked):
-        """오버레이 🔒 관통 버튼 → 컨트롤 패널 토글 UI 동기화 (무한 루프 방지)"""
-        if hasattr(self, 'cb_click_through'):
-            self.cb_click_through.blockSignals(True)
-            self.cb_click_through.setChecked(checked)
-            self.cb_click_through.blockSignals(False)
-
-    def sync_clean_text_from_overlay(self, checked):
-        """오버레이 ✨ 텍스트만 버튼 → 컨트롤 패널 토글 UI 동기화 (무한 루프 방지)"""
-        self.config["screen_clean_text_mode"] = checked
-        if hasattr(self, 'cb_clean_text'):
-            self.cb_clean_text.blockSignals(True)
-            self.cb_clean_text.setChecked(checked)
-            self.cb_clean_text.blockSignals(False)
-        if self.overlay and hasattr(self.overlay, "clean_text_mode") and self.overlay.clean_text_mode != checked:
-            if hasattr(self.overlay, "set_clean_mode"):
-                self.overlay.set_clean_mode(checked)
-        if self.screen_overlay and hasattr(self.screen_overlay, "clean_text_mode") and self.screen_overlay.clean_text_mode != checked:
-            if hasattr(self.screen_overlay, "set_clean_mode"):
-                self.screen_overlay.set_clean_mode(checked)
+            if hasattr(self.overlay, "update_font_size"):
+                self.overlay.update_font_size(val)
+            elif hasattr(self.overlay, "set_font_size"):
+                self.overlay.set_font_size(val)
+        elif self.screen_overlay:
+            if hasattr(self.screen_overlay, "update_font_size"):
+                self.screen_overlay.update_font_size(val)
+            elif hasattr(self.screen_overlay, "set_font_size"):
+                self.screen_overlay.set_font_size(val)
         self.save_config_cb(self.config)
         self._update_subtitle_preview()
 
-    def on_show_speaker_toggled(self, checked):
+    def on_audio_opacity_slider_changed(self, val, label=None):
+        pct = val / 100.0
+        self.config["audio_overlay_bg_opacity"] = pct
+        self.config["overlay_bg_opacity"] = pct
+        if hasattr(self, 'audio_opacity_slider') and self.audio_opacity_slider.value() != val:
+            self.audio_opacity_slider.blockSignals(True)
+            self.audio_opacity_slider.setValue(val)
+            self.audio_opacity_slider.blockSignals(False)
+        if hasattr(self, 'audio_opacity_label'):
+            self.audio_opacity_label.setText(f"{val}%")
+        if self.overlay:
+            if hasattr(self.overlay, "update_opacity"):
+                self.overlay.update_opacity(pct)
+            elif hasattr(self.overlay, "set_bg_opacity"):
+                self.overlay.set_bg_opacity(pct)
+        elif self.screen_overlay:
+            if hasattr(self.screen_overlay, "update_opacity"):
+                self.screen_overlay.update_opacity(pct)
+            elif hasattr(self.screen_overlay, "set_bg_opacity"):
+                self.screen_overlay.set_bg_opacity(pct)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_audio_stroke_slider_changed(self, val: int):
+        self.config["audio_subtitle_stroke_width"] = val
+        self.config["subtitle_stroke_width"] = val
+        if hasattr(self, 'audio_lbl_stroke'):
+            self.audio_lbl_stroke.setText(f"{val}px")
+        if self.overlay:
+            self.overlay.set_stroke_width(val)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_audio_spacing_slider_changed(self, int_val: int):
+        val = int_val / 10.0
+        self.config["audio_letter_spacing"] = val
+        self.config["letter_spacing"] = val
+        if hasattr(self, 'audio_lbl_spacing'):
+            self.audio_lbl_spacing.setText(f"{val:.1f}px")
+        if self.overlay:
+            self.overlay.set_letter_spacing(val)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_audio_duration_slider_changed(self, val: int):
+        self.config["audio_subtitle_duration"] = val
+        self.config["subtitle_duration"] = val
+        if hasattr(self, 'audio_slider_duration') and self.audio_slider_duration.value() != val:
+            self.audio_slider_duration.blockSignals(True)
+            self.audio_slider_duration.setValue(val)
+            self.audio_slider_duration.blockSignals(False)
+        if hasattr(self, 'audio_lbl_duration'):
+            self.audio_lbl_duration.setText(self._duration_text(val))
+        if self.overlay:
+            if hasattr(self.overlay, "set_subtitle_duration"):
+                self.overlay.set_subtitle_duration(val)
+            elif hasattr(self.overlay, "update_duration"):
+                self.overlay.update_duration(val)
+            elif hasattr(self.overlay, "apply_config"):
+                self.overlay.apply_config(apply_geometry=False)
+            elif hasattr(self.overlay, "_apply_config"):
+                self.overlay._apply_config(apply_geometry=False)
+        self.save_config_cb(self.config)
+
+    def on_audio_show_speaker_toggled(self, checked: bool):
+        self.config["audio_show_speaker"] = checked
         self.config["show_speaker"] = checked
+        if hasattr(self, 'audio_cb_show_speaker') and self.audio_cb_show_speaker.isChecked() != checked:
+            self.audio_cb_show_speaker.blockSignals(True)
+            self.audio_cb_show_speaker.setChecked(checked)
+            self.audio_cb_show_speaker.blockSignals(False)
         if self.overlay and hasattr(self.overlay, "set_show_speaker"):
             self.overlay.set_show_speaker(checked)
-        if self.screen_overlay and hasattr(self.screen_overlay, "set_show_speaker"):
-            self.screen_overlay.set_show_speaker(checked)
         self.save_config_cb(self.config)
         self._update_subtitle_preview()
 
-    def sync_show_speaker_from_overlay(self, checked):
-        """오버레이 🗣️ 화자 표시 버튼 → 컨트롤 패널 토글 UI 및 다른 오버레이 동기화"""
-        self.config["show_speaker"] = checked
-        if hasattr(self, 'cb_show_speaker'):
-            self.cb_show_speaker.blockSignals(True)
-            self.cb_show_speaker.setChecked(checked)
-            self.cb_show_speaker.blockSignals(False)
-        if self.overlay and hasattr(self.overlay, "set_show_speaker"):
-            if getattr(self.overlay, "show_speaker", None) != checked:
-                self.overlay.set_show_speaker(checked)
-        if self.screen_overlay and hasattr(self.screen_overlay, "set_show_speaker"):
-            self.screen_overlay.set_show_speaker(checked)
-        self.save_config_cb(self.config)
-        self._update_subtitle_preview()
-
-    def on_show_original_toggled(self, checked):
+    def on_audio_show_original_toggled(self, checked: bool):
+        self.config["audio_show_original"] = checked
         self.config["show_original"] = checked
+        if hasattr(self, 'audio_cb_show_original') and self.audio_cb_show_original.isChecked() != checked:
+            self.audio_cb_show_original.blockSignals(True)
+            self.audio_cb_show_original.setChecked(checked)
+            self.audio_cb_show_original.blockSignals(False)
         if self.overlay:
             if hasattr(self.overlay, "set_show_original"):
                 self.overlay.set_show_original(checked)
             else:
                 self.overlay.show_original = checked
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_audio_show_translated_toggled(self, checked: bool):
+        self.config["audio_show_translated"] = checked
+        self.config["show_translated"] = checked
+        if hasattr(self, 'audio_cb_show_translated') and self.audio_cb_show_translated.isChecked() != checked:
+            self.audio_cb_show_translated.blockSignals(True)
+            self.audio_cb_show_translated.setChecked(checked)
+            self.audio_cb_show_translated.blockSignals(False)
+        if self.overlay:
+            if hasattr(self.overlay, "set_show_translated"):
+                self.overlay.set_show_translated(checked)
+            else:
+                self.overlay.show_translated = checked
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_audio_show_badge_toggled(self, checked: bool):
+        self.config["audio_show_engine_badge"] = checked
+        self.config["show_engine_badge"] = checked
+        if hasattr(self, 'audio_cb_show_badge') and self.audio_cb_show_badge.isChecked() != checked:
+            self.audio_cb_show_badge.blockSignals(True)
+            self.audio_cb_show_badge.setChecked(checked)
+            self.audio_cb_show_badge.blockSignals(False)
+        if self.overlay:
+            if hasattr(self.overlay, "set_badge_visible"):
+                self.overlay.set_badge_visible(checked)
+            else:
+                self.overlay.show_engine_badge = checked
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_audio_click_through_toggled(self, checked: bool):
+        self.config["audio_click_through"] = checked
+        self.config["click_through"] = checked
+        if hasattr(self, 'audio_cb_click_through') and self.audio_cb_click_through.isChecked() != checked:
+            self.audio_cb_click_through.blockSignals(True)
+            self.audio_cb_click_through.setChecked(checked)
+            self.audio_cb_click_through.blockSignals(False)
+        if self.overlay:
+            self.overlay.set_click_through(checked)
+        self.save_config_cb(self.config)
+
+    def on_audio_clean_text_toggled(self, checked: bool):
+        self.config["audio_clean_text_mode"] = checked
+        self.config["clean_text_mode"] = checked
+        if hasattr(self, 'audio_cb_clean_text') and self.audio_cb_clean_text.isChecked() != checked:
+            self.audio_cb_clean_text.blockSignals(True)
+            self.audio_cb_clean_text.setChecked(checked)
+            self.audio_cb_clean_text.blockSignals(False)
+        if self.overlay and hasattr(self.overlay, "set_clean_mode"):
+            self.overlay.set_clean_mode(checked)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_audio_clean_box_toggled(self, checked: bool):
+        self.config["audio_clean_box"] = checked
+        self.config["clean_box"] = checked
+        if hasattr(self, 'audio_cb_clean_box') and self.audio_cb_clean_box.isChecked() != checked:
+            self.audio_cb_clean_box.blockSignals(True)
+            self.audio_cb_clean_box.setChecked(checked)
+            self.audio_cb_clean_box.blockSignals(False)
+        if self.overlay and hasattr(self.overlay, "set_clean_box"):
+            self.overlay.set_clean_box(checked)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_audio_font_from_overlay(self, val):
+        self.config["audio_font_size"] = val
+        self.config["font_size"] = val
+        if hasattr(self, 'audio_font_slider'):
+            self.audio_font_slider.blockSignals(True)
+            self.audio_font_slider.setValue(val)
+            self.audio_font_slider.blockSignals(False)
+        if hasattr(self, 'audio_font_label'):
+            self.audio_font_label.setText(f"{val}px")
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_audio_opacity_from_overlay(self, pct):
+        val = float(pct)
+        if val <= 1.0:
+            val = val * 100.0
+        val_int = int(round(val))
+        pct_float = val_int / 100.0
+        self.config["audio_overlay_bg_opacity"] = pct_float
+        self.config["overlay_bg_opacity"] = pct_float
+        if hasattr(self, 'audio_opacity_slider'):
+            self.audio_opacity_slider.blockSignals(True)
+            self.audio_opacity_slider.setValue(val_int)
+            self.audio_opacity_slider.blockSignals(False)
+        if hasattr(self, 'audio_opacity_label'):
+            self.audio_opacity_label.setText(f"{val_int}%")
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_audio_click_through_from_overlay(self, checked):
+        self.config["audio_click_through"] = checked
+        self.config["click_through"] = checked
+        if hasattr(self, 'audio_cb_click_through'):
+            self.audio_cb_click_through.blockSignals(True)
+            self.audio_cb_click_through.setChecked(checked)
+            self.audio_cb_click_through.blockSignals(False)
+        self.save_config_cb(self.config)
+
+    def sync_audio_clean_text_from_overlay(self, checked):
+        self.config["audio_clean_text_mode"] = checked
+        self.config["clean_text_mode"] = checked
+        if hasattr(self, 'audio_cb_clean_text'):
+            self.audio_cb_clean_text.blockSignals(True)
+            self.audio_cb_clean_text.setChecked(checked)
+            self.audio_cb_clean_text.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_audio_show_speaker_from_overlay(self, checked):
+        self.config["audio_show_speaker"] = checked
+        self.config["show_speaker"] = checked
+        if hasattr(self, 'audio_cb_show_speaker'):
+            self.audio_cb_show_speaker.blockSignals(True)
+            self.audio_cb_show_speaker.setChecked(checked)
+            self.audio_cb_show_speaker.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_audio_show_original_from_overlay(self, checked):
+        self.config["audio_show_original"] = checked
+        self.config["show_original"] = checked
+        if hasattr(self, 'audio_cb_show_original'):
+            self.audio_cb_show_original.blockSignals(True)
+            self.audio_cb_show_original.setChecked(checked)
+            self.audio_cb_show_original.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_audio_show_translated_from_overlay(self, checked):
+        self.config["audio_show_translated"] = checked
+        self.config["show_translated"] = checked
+        if hasattr(self, 'audio_cb_show_translated'):
+            self.audio_cb_show_translated.blockSignals(True)
+            self.audio_cb_show_translated.setChecked(checked)
+            self.audio_cb_show_translated.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    # ------------------------------------------------------------------
+    # 화면 번역 자막 전용 컨트롤 핸들러
+    # ------------------------------------------------------------------
+    def on_screen_font_slider_changed(self, val, label=None):
+        self.config["screen_font_size"] = val
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["font_size"] = val
+        if hasattr(self, 'screen_font_slider') and self.screen_font_slider.value() != val:
+            self.screen_font_slider.blockSignals(True)
+            self.screen_font_slider.setValue(val)
+            self.screen_font_slider.blockSignals(False)
+        if hasattr(self, 'screen_font_label'):
+            self.screen_font_label.setText(f"{val}px")
+        if self.screen_overlay:
+            if hasattr(self.screen_overlay, "update_font_size"):
+                self.screen_overlay.update_font_size(val)
+            elif hasattr(self.screen_overlay, "set_font_size"):
+                self.screen_overlay.set_font_size(val)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_screen_opacity_slider_changed(self, val, label=None):
+        pct = val / 100.0
+        self.config["screen_overlay_bg_opacity"] = pct
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["opacity"] = val
+        if hasattr(self, 'screen_opacity_slider') and self.screen_opacity_slider.value() != val:
+            self.screen_opacity_slider.blockSignals(True)
+            self.screen_opacity_slider.setValue(val)
+            self.screen_opacity_slider.blockSignals(False)
+        if hasattr(self, 'screen_opacity_label'):
+            self.screen_opacity_label.setText(f"{val}%")
+        if self.screen_overlay:
+            if hasattr(self.screen_overlay, "update_opacity"):
+                self.screen_overlay.update_opacity(pct)
+            elif hasattr(self.screen_overlay, "set_bg_opacity"):
+                self.screen_overlay.set_bg_opacity(pct)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_screen_stroke_slider_changed(self, val: int):
+        self.config["screen_subtitle_stroke_width"] = val
+        if hasattr(self, 'screen_lbl_stroke'):
+            self.screen_lbl_stroke.setText(f"{val}px")
+        if self.screen_overlay:
+            self.screen_overlay.set_stroke_width(val)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_screen_spacing_slider_changed(self, int_val: int):
+        val = int_val / 10.0
+        self.config["screen_letter_spacing"] = val
+        if hasattr(self, 'screen_lbl_spacing'):
+            self.screen_lbl_spacing.setText(f"{val:.1f}px")
+        if self.screen_overlay:
+            self.screen_overlay.set_letter_spacing(val)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_screen_duration_slider_changed(self, val: int):
+        self.config["screen_subtitle_duration"] = val
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["duration"] = val
+        if hasattr(self, 'screen_slider_duration') and self.screen_slider_duration.value() != val:
+            self.screen_slider_duration.blockSignals(True)
+            self.screen_slider_duration.setValue(val)
+            self.screen_slider_duration.blockSignals(False)
+        if hasattr(self, 'screen_lbl_duration'):
+            self.screen_lbl_duration.setText(self._duration_text(val))
+        if self.screen_overlay:
+            if hasattr(self.screen_overlay, "set_subtitle_duration"):
+                self.screen_overlay.set_subtitle_duration(val)
+            elif hasattr(self.screen_overlay, "update_duration"):
+                self.screen_overlay.update_duration(val)
+            elif hasattr(self.screen_overlay, "apply_config"):
+                self.screen_overlay.apply_config(apply_geometry=False)
+            elif hasattr(self.screen_overlay, "_apply_config"):
+                self.screen_overlay._apply_config(apply_geometry=False)
+        self.save_config_cb(self.config)
+
+    def on_screen_show_speaker_toggled(self, checked: bool):
+        self.config["screen_show_speaker"] = checked
+        if hasattr(self, 'screen_cb_show_speaker') and self.screen_cb_show_speaker.isChecked() != checked:
+            self.screen_cb_show_speaker.blockSignals(True)
+            self.screen_cb_show_speaker.setChecked(checked)
+            self.screen_cb_show_speaker.blockSignals(False)
+        if self.screen_overlay and hasattr(self.screen_overlay, "set_show_speaker"):
+            self.screen_overlay.set_show_speaker(checked)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_screen_show_original_toggled(self, checked: bool):
+        self.config["screen_show_original"] = checked
+        if hasattr(self, 'screen_cb_show_original') and self.screen_cb_show_original.isChecked() != checked:
+            self.screen_cb_show_original.blockSignals(True)
+            self.screen_cb_show_original.setChecked(checked)
+            self.screen_cb_show_original.blockSignals(False)
         if self.screen_overlay:
             if hasattr(self.screen_overlay, "set_show_original"):
                 self.screen_overlay.set_show_original(checked)
         self.save_config_cb(self.config)
         self._update_subtitle_preview()
 
-    def on_show_badge_toggled(self, checked):
-        self.config["show_engine_badge"] = checked
-        if self.overlay:
-            if hasattr(self.overlay, "set_badge_visible"):
-                self.overlay.set_badge_visible(checked)
-            else:
-                self.overlay.show_engine_badge = checked
+    def on_screen_show_translated_toggled(self, checked: bool):
+        self.config["screen_show_translated"] = checked
+        if hasattr(self, 'screen_cb_show_translated') and self.screen_cb_show_translated.isChecked() != checked:
+            self.screen_cb_show_translated.blockSignals(True)
+            self.screen_cb_show_translated.setChecked(checked)
+            self.screen_cb_show_translated.blockSignals(False)
+        if self.screen_overlay:
+            if hasattr(self.screen_overlay, "set_show_translated"):
+                self.screen_overlay.set_show_translated(checked)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_screen_show_badge_toggled(self, checked: bool):
+        self.config["screen_show_engine_badge"] = checked
+        if hasattr(self, 'screen_cb_show_badge') and self.screen_cb_show_badge.isChecked() != checked:
+            self.screen_cb_show_badge.blockSignals(True)
+            self.screen_cb_show_badge.setChecked(checked)
+            self.screen_cb_show_badge.blockSignals(False)
         if self.screen_overlay:
             if hasattr(self.screen_overlay, "set_badge_visible"):
                 self.screen_overlay.set_badge_visible(checked)
             else:
-                # manager 경유: 각 개별 오버레이의 live_badge 제어
                 for o in getattr(self.screen_overlay, 'overlays', []):
                     if hasattr(o, 'live_badge'):
                         o.live_badge.setVisible(checked)
         self.save_config_cb(self.config)
         self._update_subtitle_preview()
 
+    def on_screen_click_through_toggled(self, checked: bool):
+        self.config["screen_click_through"] = checked
+        if hasattr(self, 'screen_cb_click_through') and self.screen_cb_click_through.isChecked() != checked:
+            self.screen_cb_click_through.blockSignals(True)
+            self.screen_cb_click_through.setChecked(checked)
+            self.screen_cb_click_through.blockSignals(False)
+        if self.screen_overlay:
+            self.screen_overlay.set_click_through(checked)
+        self.save_config_cb(self.config)
+
+    def on_screen_clean_text_toggled(self, checked: bool):
+        self.config["screen_clean_text_mode"] = checked
+        if hasattr(self, 'screen_cb_clean_text') and self.screen_cb_clean_text.isChecked() != checked:
+            self.screen_cb_clean_text.blockSignals(True)
+            self.screen_cb_clean_text.setChecked(checked)
+            self.screen_cb_clean_text.blockSignals(False)
+        if self.screen_overlay and hasattr(self.screen_overlay, "set_clean_mode"):
+            self.screen_overlay.set_clean_mode(checked)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def on_screen_clean_box_toggled(self, checked: bool):
+        self.config["screen_clean_box"] = checked
+        if hasattr(self, 'screen_cb_clean_box') and self.screen_cb_clean_box.isChecked() != checked:
+            self.screen_cb_clean_box.blockSignals(True)
+            self.screen_cb_clean_box.setChecked(checked)
+            self.screen_cb_clean_box.blockSignals(False)
+        if self.screen_overlay and hasattr(self.screen_overlay, "set_clean_box"):
+            self.screen_overlay.set_clean_box(checked)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_screen_font_from_overlay(self, val):
+        self.config["screen_font_size"] = val
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["font_size"] = val
+        if hasattr(self, 'screen_font_slider'):
+            self.screen_font_slider.blockSignals(True)
+            self.screen_font_slider.setValue(val)
+            self.screen_font_slider.blockSignals(False)
+        if hasattr(self, 'screen_font_label'):
+            self.screen_font_label.setText(f"{val}px")
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_screen_opacity_from_overlay(self, pct):
+        val = float(pct)
+        if val <= 1.0:
+            val = val * 100.0
+        val_int = int(round(val))
+        pct_float = val_int / 100.0
+        self.config["screen_overlay_bg_opacity"] = pct_float
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["opacity"] = val_int
+        if hasattr(self, 'screen_opacity_slider'):
+            self.screen_opacity_slider.blockSignals(True)
+            self.screen_opacity_slider.setValue(val_int)
+            self.screen_opacity_slider.blockSignals(False)
+        if hasattr(self, 'screen_opacity_label'):
+            self.screen_opacity_label.setText(f"{val_int}%")
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_screen_click_through_from_overlay(self, checked):
+        self.config["screen_click_through"] = checked
+        if hasattr(self, 'screen_cb_click_through'):
+            self.screen_cb_click_through.blockSignals(True)
+            self.screen_cb_click_through.setChecked(checked)
+            self.screen_cb_click_through.blockSignals(False)
+        self.save_config_cb(self.config)
+
+    def sync_screen_clean_text_from_overlay(self, checked):
+        self.config["screen_clean_text_mode"] = checked
+        if hasattr(self, 'screen_cb_clean_text'):
+            self.screen_cb_clean_text.blockSignals(True)
+            self.screen_cb_clean_text.setChecked(checked)
+            self.screen_cb_clean_text.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_screen_show_speaker_from_overlay(self, checked):
+        self.config["screen_show_speaker"] = checked
+        if hasattr(self, 'screen_cb_show_speaker'):
+            self.screen_cb_show_speaker.blockSignals(True)
+            self.screen_cb_show_speaker.setChecked(checked)
+            self.screen_cb_show_speaker.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_screen_show_original_from_overlay(self, checked):
+        self.config["screen_show_original"] = checked
+        if hasattr(self, 'screen_cb_show_original'):
+            self.screen_cb_show_original.blockSignals(True)
+            self.screen_cb_show_original.setChecked(checked)
+            self.screen_cb_show_original.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    def sync_screen_show_translated_from_overlay(self, checked):
+        self.config["screen_show_translated"] = checked
+        if hasattr(self, 'screen_cb_show_translated'):
+            self.screen_cb_show_translated.blockSignals(True)
+            self.screen_cb_show_translated.setChecked(checked)
+            self.screen_cb_show_translated.blockSignals(False)
+        self.save_config_cb(self.config)
+        self._update_subtitle_preview()
+
+    # ------------------------------------------------------------------
+    # 하위 호환성 (레거시 모듈 및 기존 테스트 연동용 범용 핸들러)
+    # ------------------------------------------------------------------
+    def on_click_through_toggled(self, checked):
+        self.on_audio_click_through_toggled(checked)
+        self.on_screen_click_through_toggled(checked)
+
+    def sync_click_through_from_overlay(self, checked):
+        self.sync_audio_click_through_from_overlay(checked)
+        self.sync_screen_click_through_from_overlay(checked)
+
+    def sync_clean_text_from_overlay(self, checked):
+        self.sync_audio_clean_text_from_overlay(checked)
+        self.sync_screen_clean_text_from_overlay(checked)
+
+    def on_show_speaker_toggled(self, checked):
+        self.on_audio_show_speaker_toggled(checked)
+        self.on_screen_show_speaker_toggled(checked)
+
+    def sync_show_speaker_from_overlay(self, checked):
+        self.sync_audio_show_speaker_from_overlay(checked)
+        self.sync_screen_show_speaker_from_overlay(checked)
+
+    def on_show_original_toggled(self, checked):
+        self.on_audio_show_original_toggled(checked)
+        self.on_screen_show_original_toggled(checked)
+
+    def sync_show_original_from_overlay(self, checked):
+        self.sync_audio_show_original_from_overlay(checked)
+        self.sync_screen_show_original_from_overlay(checked)
+
+    def on_show_translated_toggled(self, checked):
+        self.on_audio_show_translated_toggled(checked)
+        self.on_screen_show_translated_toggled(checked)
+
+    def sync_show_translated_from_overlay(self, checked):
+        self.sync_audio_show_translated_from_overlay(checked)
+        self.sync_screen_show_translated_from_overlay(checked)
+
+    def on_show_badge_toggled(self, checked):
+        self.on_audio_show_badge_toggled(checked)
+        self.on_screen_show_badge_toggled(checked)
+
     def on_font_slider_changed(self, val, label=None):
         self.config["font_size"] = val
+        self.config["audio_font_size"] = val
+        self.config["screen_font_size"] = val
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["font_size"] = val
+        if hasattr(self, 'audio_font_slider'):
+            self.audio_font_slider.blockSignals(True)
+            self.audio_font_slider.setValue(val)
+            self.audio_font_slider.blockSignals(False)
+        if hasattr(self, 'screen_font_slider'):
+            self.screen_font_slider.blockSignals(True)
+            self.screen_font_slider.setValue(val)
+            self.screen_font_slider.blockSignals(False)
+        if hasattr(self, 'audio_font_label'):
+            self.audio_font_label.setText(f"{val}px")
+        if hasattr(self, 'screen_font_label'):
+            self.screen_font_label.setText(f"{val}px")
         if self.overlay:
-            if hasattr(self.overlay, "set_font_size"):
-                self.overlay.set_font_size(val)
-            elif hasattr(self.overlay, "update_font_size"):
+            if hasattr(self.overlay, "update_font_size"):
                 self.overlay.update_font_size(val)
+            elif hasattr(self.overlay, "set_font_size"):
+                self.overlay.set_font_size(val)
         if self.screen_overlay:
-            if hasattr(self.screen_overlay, "set_font_size"):
-                self.screen_overlay.set_font_size(val)
-            elif hasattr(self.screen_overlay, "update_font_size"):
+            if hasattr(self.screen_overlay, "update_font_size"):
                 self.screen_overlay.update_font_size(val)
+            elif hasattr(self.screen_overlay, "set_font_size"):
+                self.screen_overlay.set_font_size(val)
         self.save_config_cb(self.config)
+        self._update_subtitle_preview()
 
     def on_opacity_slider_changed(self, val, label=None):
         pct = val / 100.0
         self.config["overlay_bg_opacity"] = pct
+        self.config["audio_overlay_bg_opacity"] = pct
+        self.config["screen_overlay_bg_opacity"] = pct
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["opacity"] = val
+        if hasattr(self, 'audio_opacity_slider'):
+            self.audio_opacity_slider.blockSignals(True)
+            self.audio_opacity_slider.setValue(val)
+            self.audio_opacity_slider.blockSignals(False)
+        if hasattr(self, 'screen_opacity_slider'):
+            self.screen_opacity_slider.blockSignals(True)
+            self.screen_opacity_slider.setValue(val)
+            self.screen_opacity_slider.blockSignals(False)
+        if hasattr(self, 'audio_opacity_label'):
+            self.audio_opacity_label.setText(f"{val}%")
+        if hasattr(self, 'screen_opacity_label'):
+            self.screen_opacity_label.setText(f"{val}%")
         if self.overlay:
-            if hasattr(self.overlay, "set_bg_opacity"):
-                self.overlay.set_bg_opacity(pct)
-            elif hasattr(self.overlay, "update_opacity"):
+            if hasattr(self.overlay, "update_opacity"):
                 self.overlay.update_opacity(pct)
+            elif hasattr(self.overlay, "set_bg_opacity"):
+                self.overlay.set_bg_opacity(pct)
         if self.screen_overlay:
-            if hasattr(self.screen_overlay, "set_bg_opacity"):
-                self.screen_overlay.set_bg_opacity(pct)
-            elif hasattr(self.screen_overlay, "update_opacity"):
+            if hasattr(self.screen_overlay, "update_opacity"):
                 self.screen_overlay.update_opacity(pct)
+            elif hasattr(self.screen_overlay, "set_bg_opacity"):
+                self.screen_overlay.set_bg_opacity(pct)
         self.save_config_cb(self.config)
+        self._update_subtitle_preview()
 
     def sync_font_from_overlay(self, val):
-        if hasattr(self, 'font_slider'):
+        if hasattr(self, 'font_slider') and self.font_slider.value() != val:
+            self.font_slider.blockSignals(True)
             self.font_slider.setValue(val)
+            self.font_slider.blockSignals(False)
+        if hasattr(self, 'font_label'):
+            self.font_label.setText(f"{val}px")
+        self.sync_audio_font_from_overlay(val)
+        self.sync_screen_font_from_overlay(val)
 
     def sync_opacity_from_overlay(self, pct):
-        if hasattr(self, 'opacity_slider'):
-            val = float(pct)
-            if val <= 1.0:
-                val = val * 100.0
-            self.opacity_slider.setValue(int(round(val)))
+        val = float(pct)
+        if val <= 1.0:
+            val = val * 100.0
+        val_int = int(round(val))
+        if hasattr(self, 'opacity_slider') and self.opacity_slider.value() != val_int:
+            self.opacity_slider.blockSignals(True)
+            self.opacity_slider.setValue(val_int)
+            self.opacity_slider.blockSignals(False)
+        if hasattr(self, 'opacity_label'):
+            self.opacity_label.setText(f"{val_int}%")
+        self.sync_audio_opacity_from_overlay(pct)
+        self.sync_screen_opacity_from_overlay(pct)
 
     def reset_overlay_position(self):
         try:
@@ -8182,30 +9522,85 @@ class ControlPanel(QWidget):
 
     def on_stroke_slider_changed(self, val: int):
         self.config["subtitle_stroke_width"] = val
+        self.config["audio_subtitle_stroke_width"] = val
+        self.config["screen_subtitle_stroke_width"] = val
         if hasattr(self, 'lbl_stroke'):
             self.lbl_stroke.setText(f"{val}px")
+        if hasattr(self, 'audio_slider_stroke') and self.audio_slider_stroke.value() != val:
+            self.audio_slider_stroke.blockSignals(True)
+            self.audio_slider_stroke.setValue(val)
+            self.audio_slider_stroke.blockSignals(False)
+        if hasattr(self, 'audio_lbl_stroke'):
+            self.audio_lbl_stroke.setText(f"{val}px")
+        if hasattr(self, 'screen_slider_stroke') and self.screen_slider_stroke.value() != val:
+            self.screen_slider_stroke.blockSignals(True)
+            self.screen_slider_stroke.setValue(val)
+            self.screen_slider_stroke.blockSignals(False)
+        if hasattr(self, 'screen_lbl_stroke'):
+            self.screen_lbl_stroke.setText(f"{val}px")
         if self.overlay:
             self.overlay.set_stroke_width(val)
         if self.screen_overlay:
             self.screen_overlay.set_stroke_width(val)
         self.save_config_cb(self.config)
+        self._update_subtitle_preview()
 
     def on_spacing_slider_changed(self, int_val: int):
         val = int_val / 10.0
         self.config["letter_spacing"] = val
+        self.config["audio_letter_spacing"] = val
+        self.config["screen_letter_spacing"] = val
+        if hasattr(self, 'lbl_spacing'):
+            self.lbl_spacing.setText(f"{val:.1f}px")
+        if hasattr(self, 'audio_slider_spacing') and self.audio_slider_spacing.value() != int_val:
+            self.audio_slider_spacing.blockSignals(True)
+            self.audio_slider_spacing.setValue(int_val)
+            self.audio_slider_spacing.blockSignals(False)
+        if hasattr(self, 'audio_lbl_spacing'):
+            self.audio_lbl_spacing.setText(f"{val:.1f}px")
+        if hasattr(self, 'screen_slider_spacing') and self.screen_slider_spacing.value() != int_val:
+            self.screen_slider_spacing.blockSignals(True)
+            self.screen_slider_spacing.setValue(int_val)
+            self.screen_slider_spacing.blockSignals(False)
+        if hasattr(self, 'screen_lbl_spacing'):
+            self.screen_lbl_spacing.setText(f"{val:.1f}px")
         if self.overlay:
             self.overlay.set_letter_spacing(val)
         if self.screen_overlay:
             self.screen_overlay.set_letter_spacing(val)
         self.save_config_cb(self.config)
+        self._update_subtitle_preview()
 
     def on_duration_slider_changed(self, val: int):
         self.config["screen_subtitle_duration"] = val
+        self.config["audio_subtitle_duration"] = val
+        self.config["subtitle_duration"] = val
+        roi_configs = self.config.get("roi_configs", {})
+        if isinstance(roi_configs, dict):
+            for r_cfg in roi_configs.values():
+                if isinstance(r_cfg, dict):
+                    r_cfg["duration"] = val
         if hasattr(self, 'lbl_duration'):
             self.lbl_duration.setText(self._duration_text(val))
+        if hasattr(self, 'audio_slider_duration') and self.audio_slider_duration.value() != val:
+            self.audio_slider_duration.blockSignals(True)
+            self.audio_slider_duration.setValue(val)
+            self.audio_slider_duration.blockSignals(False)
+        if hasattr(self, 'audio_lbl_duration'):
+            self.audio_lbl_duration.setText(self._duration_text(val))
+        if hasattr(self, 'screen_slider_duration') and self.screen_slider_duration.value() != val:
+            self.screen_slider_duration.blockSignals(True)
+            self.screen_slider_duration.setValue(val)
+            self.screen_slider_duration.blockSignals(False)
+        if hasattr(self, 'screen_lbl_duration'):
+            self.screen_lbl_duration.setText(self._duration_text(val))
+        if self.overlay and hasattr(self.overlay, "set_subtitle_duration"):
+            self.overlay.set_subtitle_duration(val)
         if self.screen_overlay:
             if hasattr(self.screen_overlay, "set_subtitle_duration"):
                 self.screen_overlay.set_subtitle_duration(val)
+            elif hasattr(self.screen_overlay, "update_duration"):
+                self.screen_overlay.update_duration(val)
             elif hasattr(self.screen_overlay, "apply_config"):
                 self.screen_overlay.apply_config(apply_geometry=False)
             elif hasattr(self.screen_overlay, "_apply_config"):
@@ -8322,7 +9717,7 @@ class ControlPanel(QWidget):
             if "opacity" not in cfg:
                 cfg["opacity"] = int(self.config.get("overlay_bg_opacity", 0.70) * 100)
             if "duration" not in cfg:
-                cfg["duration"] = self.config.get("screen_subtitle_duration", 10)
+                cfg["duration"] = self.config.get("screen_subtitle_duration", 5)
             if "snap" not in cfg:
                 cfg["snap"] = self.config.get("screen_snap_to_roi", False)
 
@@ -8397,7 +9792,7 @@ class ControlPanel(QWidget):
             # 3. 표시 지속 시간
             dur_slider = NoWheelSlider(Qt.Orientation.Horizontal)
             dur_slider.setRange(0, 90)
-            dur_val = cfg.get("duration", 10)
+            dur_val = cfg.get("duration", 5)
             dur_slider.setValue(dur_val)
             lbl_durval = QLabel(self._duration_text(dur_val))
             lbl_durval.setStyleSheet("color: #94A3B8; font-size: 10px; min-width: 32px;")
@@ -8498,6 +9893,33 @@ class ControlPanel(QWidget):
             self.refresh_roi_settings_cards()
             self.save_config_cb(self.config)
 
+    def _on_rois_border_adjusted(self, rois: list, is_final: bool = True):
+        self.config["screen_rois"] = rois
+        self.config["screen_roi"] = rois[0] if rois else None
+
+        if hasattr(self, 'lbl_roi_coords') and rois:
+            r = rois[0]
+            self.lbl_roi_coords.setText(f"X: {r[0]}  Y: {r[1]}  W: {r[2]}  H: {r[3]}")
+
+        # 밀착 스냅 모드일 경우 실시간으로 자막 위치도 추종
+        if self.config.get("screen_snap_to_roi", False) and self.screen_overlay:
+            if hasattr(self.screen_overlay, "snap_all_to_rois"):
+                self.screen_overlay.snap_all_to_rois()
+            elif hasattr(self.screen_overlay, "snap_to_roi") and rois:
+                self.screen_overlay.snap_to_roi(rois[0])
+
+        if is_final:
+            if self.screen_worker and hasattr(self.screen_worker, "update_config"):
+                self.screen_worker.update_config(self.config)
+            elif self.screen_worker and hasattr(self.screen_worker, "invalidate_regions"):
+                self.screen_worker.invalidate_regions()
+            if self.screen_overlay and hasattr(self.screen_overlay, "sync_rois"):
+                self.screen_overlay.sync_rois()
+            if hasattr(self, 'screen_canvas'):
+                self.screen_canvas.set_rois(rois)
+            self.refresh_roi_settings_cards()
+            self.save_config_cb(self.config)
+
     def _on_rois_selected(self, rois: list):
         self.config["screen_rois"] = rois
         self.config["screen_roi"] = rois[0] if rois else None
@@ -8574,6 +9996,8 @@ class ControlPanel(QWidget):
             self._update_audio_overlay_btn_ui()
 
     def sync_audio_overlay_visibility(self, visible: bool):
+        if getattr(self, '_is_closing', False):
+            return
         self.config["audio_overlay_visible"] = bool(visible)
         self.save_config_cb(self.config)
         self._update_audio_overlay_btn_ui()
@@ -8589,6 +10013,8 @@ class ControlPanel(QWidget):
             self.sync_screen_overlay_visibility(bool(visible))
 
     def sync_screen_overlay_visibility(self, visible: bool):
+        if getattr(self, '_is_closing', False):
+            return
         self.config["screen_overlay_visible"] = bool(visible)
         self.save_config_cb(self.config)
         if hasattr(self, 'toggle_screen_overlay_vis'):
@@ -8678,20 +10104,66 @@ class ControlPanel(QWidget):
             self.config["subtitle_stroke_width"] = self.slider_stroke.value()
         if hasattr(self, 'slider_spacing'):
             self.config["letter_spacing"] = round(self.slider_spacing.value() / 10.0, 1)
-        if hasattr(self, 'slider_duration'):
+        if hasattr(self, 'audio_slider_duration'):
+            self.config["audio_subtitle_duration"] = self.audio_slider_duration.value()
+            self.config["subtitle_duration"] = self.audio_slider_duration.value()
+        if hasattr(self, 'screen_slider_duration'):
+            self.config["screen_subtitle_duration"] = self.screen_slider_duration.value()
+        elif hasattr(self, 'slider_duration'):
             self.config["screen_subtitle_duration"] = self.slider_duration.value()
-        if hasattr(self, 'cb_clean_box'):
+        if hasattr(self, 'audio_cb_clean_box'):
+            self.config["audio_clean_box"] = self.audio_cb_clean_box.isChecked()
+            self.config["clean_box"] = self.audio_cb_clean_box.isChecked()
+        if hasattr(self, 'screen_cb_clean_box'):
+            self.config["screen_clean_box"] = self.screen_cb_clean_box.isChecked()
+        elif hasattr(self, 'cb_clean_box'):
             self.config["screen_clean_box"] = self.cb_clean_box.isChecked()
-        if hasattr(self, 'cb_clean_text'):
+
+        if hasattr(self, 'audio_cb_clean_text'):
+            self.config["audio_clean_text_mode"] = self.audio_cb_clean_text.isChecked()
+        if hasattr(self, 'screen_cb_clean_text'):
+            self.config["screen_clean_text_mode"] = self.screen_cb_clean_text.isChecked()
+        elif hasattr(self, 'cb_clean_text'):
             self.config["screen_clean_text_mode"] = self.cb_clean_text.isChecked()
-        if hasattr(self, 'cb_show_original'):
+
+        if hasattr(self, 'audio_cb_show_original'):
+            self.config["audio_show_original"] = self.audio_cb_show_original.isChecked()
+            self.config["show_original"] = self.audio_cb_show_original.isChecked()
+        elif hasattr(self, 'cb_show_original'):
             self.config["show_original"] = self.cb_show_original.isChecked()
-        if hasattr(self, 'cb_show_badge'):
+        if hasattr(self, 'screen_cb_show_original'):
+            self.config["screen_show_original"] = self.screen_cb_show_original.isChecked()
+
+        if hasattr(self, 'audio_cb_show_translated'):
+            self.config["audio_show_translated"] = self.audio_cb_show_translated.isChecked()
+            self.config["show_translated"] = self.audio_cb_show_translated.isChecked()
+        if hasattr(self, 'screen_cb_show_translated'):
+            self.config["screen_show_translated"] = self.screen_cb_show_translated.isChecked()
+
+        if hasattr(self, 'audio_cb_show_badge'):
+            self.config["audio_show_engine_badge"] = self.audio_cb_show_badge.isChecked()
+            self.config["show_engine_badge"] = self.audio_cb_show_badge.isChecked()
+        elif hasattr(self, 'cb_show_badge'):
             self.config["show_engine_badge"] = self.cb_show_badge.isChecked()
-        if hasattr(self, 'cb_click_through'):
+        if hasattr(self, 'screen_cb_show_badge'):
+            self.config["screen_show_engine_badge"] = self.screen_cb_show_badge.isChecked()
+
+        if hasattr(self, 'audio_cb_click_through'):
+            self.config["audio_click_through"] = self.audio_cb_click_through.isChecked()
+            self.config["click_through"] = self.audio_cb_click_through.isChecked()
+        elif hasattr(self, 'cb_click_through'):
             self.config["click_through"] = self.cb_click_through.isChecked()
-        if hasattr(self, 'cb_show_speaker'):
+        if hasattr(self, 'screen_cb_click_through'):
+            self.config["screen_click_through"] = self.screen_cb_click_through.isChecked()
+
+        if hasattr(self, 'audio_cb_show_speaker'):
+            self.config["audio_show_speaker"] = self.audio_cb_show_speaker.isChecked()
+            self.config["show_speaker"] = self.audio_cb_show_speaker.isChecked()
+        elif hasattr(self, 'cb_show_speaker'):
             self.config["show_speaker"] = self.cb_show_speaker.isChecked()
+        if hasattr(self, 'screen_cb_show_speaker'):
+            self.config["screen_show_speaker"] = self.screen_cb_show_speaker.isChecked()
+
         if hasattr(self, 'cb_snap_to_roi'):
             self.config["screen_snap_to_roi"] = self.cb_snap_to_roi.isChecked()
         if hasattr(self, 'cb_show_roi_border'):
@@ -8756,6 +10228,18 @@ class ControlPanel(QWidget):
             self.config["audio_ducking_volume"] = self.slider_ducking_vol.value()
         if hasattr(self, 'toggle_audio_ducking'):
             self.config["audio_ducking_enabled"] = self.toggle_audio_ducking.isChecked()
+        if hasattr(self, 'toggle_dub_voice'):
+            self.config["dubbing_source_audio"] = self.toggle_dub_voice.isChecked()
+        if hasattr(self, 'toggle_dub_screen'):
+            self.config["dubbing_source_screen"] = self.toggle_dub_screen.isChecked()
+        if hasattr(self, 'combo_dub_voice_audio') and self.combo_dub_voice_audio.currentIndex() >= 0:
+            v_a = self.combo_dub_voice_audio.itemData(self.combo_dub_voice_audio.currentIndex())
+            if v_a:
+                self.config["dubbing_voice_audio"] = v_a
+        if hasattr(self, 'combo_dub_voice_screen') and self.combo_dub_voice_screen.currentIndex() >= 0:
+            v_s = self.combo_dub_voice_screen.itemData(self.combo_dub_voice_screen.currentIndex())
+            if v_s:
+                self.config["dubbing_voice_screen"] = v_s
 
         # 11. 화자 분리(Diarization) 설정
         if hasattr(self, 'toggle_speaker_diarization'):
@@ -8790,31 +10274,14 @@ class ControlPanel(QWidget):
         self.save_config_cb(self.config)
 
     def closeEvent(self, event):
-        if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or not self.isVisible() or getattr(self, "_skip_close_confirm", False):
-            self._cleanup_on_close()
-            event.accept()
-            app = QApplication.instance()
-            if app:
-                app.quit()
-            return
-
-        reply = QMessageBox.question(
-            self,
-            tr("quit_title"),
-            tr("quit_message"),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self._cleanup_on_close()
-            event.accept()
-            app = QApplication.instance()
-            if app:
-                app.quit()
-        else:
-            event.ignore()
+        self._cleanup_on_close()
+        event.accept()
+        app = QApplication.instance()
+        if app:
+            app.quit()
 
     def _cleanup_on_close(self):
+        self._is_closing = True
         if hasattr(self, 'speaker_poll_timer') and self.speaker_poll_timer:
             try:
                 self.speaker_poll_timer.stop()

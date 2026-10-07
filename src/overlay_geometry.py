@@ -256,8 +256,8 @@ class OverlayGeometryMixin:
         # QGraphicsOpacityEffect swallows mouse hits below 1.0, so disable it while clicking controls.
         self.header_opacity_effect.setEnabled(value < 0.99)
 
-    def _two_line_label_min_height(self, label, extra=18) -> int:
-        """영문/한글 각각 두 줄이 잘리지 않을 라벨 최소 높이."""
+    def _two_line_label_min_height(self, label, extra=24) -> int:
+        """영문/한글 각각 두 줄이 잘리지 않을 라벨 최소 높이 (135% 줄 간격 완벽 반영)."""
         if label is None:
             return 0
         try:
@@ -265,7 +265,7 @@ class OverlayGeometryMixin:
         except Exception:
             pass
         fm = label.fontMetrics() if hasattr(label, "fontMetrics") else QFontMetrics(label.font())
-        line = max(fm.lineSpacing(), fm.height() + max(2, fm.descent()))
+        line = max(int(fm.lineSpacing() * 1.35), fm.height() + max(2, fm.descent()))
         margins = label.contentsMargins()
         pad = margins.top() + margins.bottom()
         return int(line * 2 + fm.descent() + extra + pad)

@@ -251,9 +251,67 @@ RE_FEMALE_KEYWORDS = re.compile(
     re.IGNORECASE
 )
 
+class DualChannelQueue:
+    """
+    음성 번역(audio)과 화면 번역(screen)의 큐를 내부적으로 완전 분리하면서도
+    단일 큐 인터페이스(qsize, empty, full, put, get, get_nowait 등)를 투명하게 지원하는
+    하이브리드 듀얼 채널 큐 래퍼.
+    """
+    def __init__(self, audio_q: queue.Queue, screen_q: queue.Queue):
+        self.audio_q = audio_q
+        self.screen_q = screen_q
+        self._lock = threading.RLock()
+
+    def qsize(self) -> int:
+        return self.audio_q.qsize() + self.screen_q.qsize()
+
+    def empty(self) -> bool:
+        return self.audio_q.empty() and self.screen_q.empty()
+
+    def full(self) -> bool:
+        return self.audio_q.full() and self.screen_q.full()
+
+    def put(self, item, block=True, timeout=None):
+        src = item.get("source", "audio") if isinstance(item, dict) else "audio"
+        target_q = self.screen_q if src == "screen" else self.audio_q
+        return target_q.put(item, block=block, timeout=timeout)
+
+    def put_nowait(self, item):
+        return self.put(item, block=False)
+
+    def get_nowait(self):
+        with self._lock:
+            if not self.audio_q.empty():
+                return self.audio_q.get_nowait()
+            if not self.screen_q.empty():
+                return self.screen_q.get_nowait()
+            raise queue.Empty
+
+    def get(self, block=True, timeout=None):
+        with self._lock:
+            if not self.audio_q.empty():
+                return self.audio_q.get_nowait()
+            if not self.screen_q.empty():
+                return self.screen_q.get_nowait()
+        if not block:
+            raise queue.Empty
+
+        start = time.time()
+        while True:
+            with self._lock:
+                if not self.audio_q.empty():
+                    return self.audio_q.get_nowait()
+                if not self.screen_q.empty():
+                    return self.screen_q.get_nowait()
+            if timeout is not None and (time.time() - start) >= timeout:
+                raise queue.Empty
+            time.sleep(0.01)
+
+
 class DubbingEngine:
     """
     실시간 AI 음성 더빙 엔진 (Edge-TTS + Pygame Mixer).
+    - 음성 번역 더빙(채널 0)과 화면 번역 더빙(채널 1)의 완전 독립 듀얼 채널 동시 재생 지원 ("훗훗")
     - VRAM 0MB 소모, 초저지연 비동기 오디오 스트리밍
     - 화자 감별(Speaker ID) 및 성별/이름 패턴 기반 음성(Voice) 자동 라우팅
     - 화자별 개별 더빙 On/Off 필터링 (진행자 음성 제외, 상대 화자만 더빙 등)
@@ -262,9 +320,18 @@ class DubbingEngine:
     def __init__(self, config: dict, speaker_identifier=None):
         self.config = config
         self.speaker_identifier = speaker_identifier
-        self.text_queue = queue.Queue(maxsize=500)
-        self.playback_queue = queue.Queue(maxsize=500)
+
+        # 듀얼 채널 독립 큐 생성
+        self.audio_text_queue = queue.Queue(maxsize=500)
+        self.screen_text_queue = queue.Queue(maxsize=500)
+        self.audio_playback_queue = queue.Queue(maxsize=500)
+        self.screen_playback_queue = queue.Queue(maxsize=500)
+
+        # 기존 코드 및 단위 테스트 호환 래퍼
+        self.text_queue = DualChannelQueue(self.audio_text_queue, self.screen_text_queue)
+        self.playback_queue = DualChannelQueue(self.audio_playback_queue, self.screen_playback_queue)
         self.queue = self.text_queue  # 하위 호환성 유지
+
         self.is_running = True
         self.lock = threading.RLock()
         self._generation = 0
@@ -272,31 +339,82 @@ class DubbingEngine:
         self._source_active = {"audio": True, "screen": True}
         self._current_playing_source = None
 
-        # 실시간 발화(재생) 상태 및 텍스트 추적 (루프백 에코 지능형 차단용)
-        self._is_playing = False
-        self._current_speaking_text = ""
-        self._current_synthesizing_item = None
-        self._stop_playback_requested = False
+        # 실시간 발화(재생) 상태 및 텍스트 추적 (채널별 분리)
+        self._is_playing_audio = False
+        self._is_playing_screen = False
+        self._current_speaking_text_audio = ""
+        self._current_speaking_text_screen = ""
+        self._current_synthesizing_audio = None
+        self._current_synthesizing_screen = None
+        self._stop_playback_audio = False
+        self._stop_playback_screen = False
         self.last_playback_end_time = 0.0
         self.recent_dubbed_history = []  # [(cleaned_text, timestamp), ...]
         self.recent_enqueued_items = []  # [(clean_text, orig_text, source, timestamp), ...]
 
         self._mixer_initialized = False
-        self.channel = None
+        self.channel_audio = None
+        self.channel_screen = None
+        self.channel = None  # 하위 호환 (채널 0)
         self.output_device = self.config.get("dubbing_output_device", "default")
         vol_cfg = float(self.config.get("dubbing_volume", 80)) / 100.0
         self._current_volume = max(0.0, min(1.0, vol_cfg))
         self.playback_callbacks = []
         self._init_mixer()
 
-        # 2단계 비동기 프리페치 파이프라인 워커 스레드 시작
-        # 1) 백그라운드 선행 오디오 합성 워커 (Edge-TTS)
-        self.synth_thread = threading.Thread(target=self._synth_loop, daemon=True, name="DubbingSynthWorker")
-        self.synth_thread.start()
+        # 2개 소스(audio, screen) 각각에 대해 합성 및 재생 워커를 독립 스레드로 기동하여
+        # 음성 번역 더빙과 화면 번역 더빙이 서로 블로킹 없이 동시 병렬 재생되도록 함!
+        self.synth_thread_audio = threading.Thread(target=self._synth_worker, args=("audio",), daemon=True, name="DubbingSynthAudio")
+        self.synth_thread_screen = threading.Thread(target=self._synth_worker, args=("screen",), daemon=True, name="DubbingSynthScreen")
+        self.playback_thread_audio = threading.Thread(target=self._playback_worker, args=("audio",), daemon=True, name="DubbingPlayAudio")
+        self.playback_thread_screen = threading.Thread(target=self._playback_worker, args=("screen",), daemon=True, name="DubbingPlayScreen")
 
-        # 2) 끊김 없는 무지연 순차 오디오 재생 워커 (Pygame Mixer)
-        self.playback_thread = threading.Thread(target=self._playback_loop, daemon=True, name="DubbingPlaybackWorker")
-        self.playback_thread.start()
+        self.synth_thread = self.synth_thread_audio  # 하위 호환
+        self.playback_thread = self.playback_thread_audio  # 하위 호환
+
+        self.synth_thread_audio.start()
+        self.synth_thread_screen.start()
+        self.playback_thread_audio.start()
+        self.playback_thread_screen.start()
+
+    @property
+    def _is_playing(self) -> bool:
+        return self._is_playing_audio or self._is_playing_screen or getattr(self, '_manual_is_playing', False)
+
+    @_is_playing.setter
+    def _is_playing(self, val: bool):
+        self._manual_is_playing = bool(val)
+
+    @property
+    def _current_speaking_text(self) -> str:
+        manual = getattr(self, '_manual_current_speaking_text', None)
+        if manual is not None:
+            return manual
+        return self._current_speaking_text_audio or self._current_speaking_text_screen or ""
+
+    @_current_speaking_text.setter
+    def _current_speaking_text(self, val: str):
+        self._manual_current_speaking_text = str(val) if val is not None else None
+
+    @property
+    def _current_synthesizing_item(self):
+        manual = getattr(self, '_manual_synthesizing_item', None)
+        if manual is not None:
+            return manual
+        return self._current_synthesizing_audio or self._current_synthesizing_screen
+
+    @_current_synthesizing_item.setter
+    def _current_synthesizing_item(self, val):
+        self._manual_synthesizing_item = val
+
+    @property
+    def _stop_playback_requested(self) -> bool:
+        return self._stop_playback_audio or self._stop_playback_screen
+
+    @_stop_playback_requested.setter
+    def _stop_playback_requested(self, val: bool):
+        self._stop_playback_audio = bool(val)
+        self._stop_playback_screen = bool(val)
 
     def register_playback_callback(self, callback):
         """실시간 더빙 재생 시작 시 호출될 모니터링/자막 콜백 등록"""
@@ -305,10 +423,15 @@ class DubbingEngine:
 
     def get_pipeline_total_count(self) -> int:
         """현재 파이프라인 전체(텍스트 큐 + 합성 중 + 재생 큐 + 재생 중)에 머물고 있는 총 대사 수 반환"""
-        count = self.text_queue.qsize() + self.playback_queue.qsize()
-        if self._current_synthesizing_item is not None:
+        count = (self.audio_text_queue.qsize() + self.screen_text_queue.qsize() +
+                 self.audio_playback_queue.qsize() + self.screen_playback_queue.qsize())
+        if self._current_synthesizing_audio is not None:
             count += 1
-        if self._is_playing or (self._mixer_initialized and self.channel and self.channel.get_busy()):
+        if self._current_synthesizing_screen is not None:
+            count += 1
+        if self._is_playing_audio or (self._mixer_initialized and self.channel_audio and self.channel_audio.get_busy()):
+            count += 1
+        if self._is_playing_screen or (self._mixer_initialized and self.channel_screen and self.channel_screen.get_busy()):
             count += 1
         return count
 
@@ -318,12 +441,13 @@ class DubbingEngine:
             return False
         if self._is_playing:
             return True
-        if self._mixer_initialized and self.channel:
-            try:
-                if self.channel.get_busy():
-                    return True
-            except Exception:
-                pass
+        if self._mixer_initialized:
+            for ch in (self.channel_audio, self.channel_screen):
+                try:
+                    if ch and ch.get_busy():
+                        return True
+                except Exception:
+                    pass
         return (time.time() - self.last_playback_end_time) < grace_period
 
     def is_echo_of_dubbing(self, text: str) -> bool:
@@ -350,17 +474,22 @@ class DubbingEngine:
             import difflib
             return difflib.SequenceMatcher(None, ca, cb).ratio() >= 0.88
 
-        # 1. 현재 재생 중인 대사와 일치/유사도 검사
-        if self._is_playing and self._current_speaking_text:
-            curr_clean = self._clean_korean_text(self._current_speaking_text)
-            if _matches(clean, curr_clean):
-                return True
+        # 1. 현재 재생 중인 대사들과 일치/유사도 검사 (오디오 및 화면 발화 모두 검사)
+        speaking_candidates = [self._current_speaking_text_audio, self._current_speaking_text_screen]
+        manual = getattr(self, '_manual_current_speaking_text', None)
+        if manual:
+            speaking_candidates.append(manual)
+        for cand in speaking_candidates:
+            if cand:
+                curr_clean = self._clean_korean_text(cand)
+                if _matches(clean, curr_clean):
+                    return True
 
-        # 2. 최근 12초 이내 발화/큐잉된 대사들과 비교
+        # 2. 최근 3.5초 이내 발화/큐잉된 대사들과 비교 (재귀 에코 루프 차단용 안전 윈도우)
         now = time.time()
         with self.lock:
             for past_t, past_ts in self.recent_dubbed_history:
-                if now - past_ts < 12.0:
+                if now - past_ts < 3.5:
                     if _matches(clean, past_t):
                         return True
         return False
@@ -430,8 +559,10 @@ class DubbingEngine:
 
             if self._mixer_initialized:
                 try:
-                    if self.channel:
-                        self.channel.stop()
+                    if self.channel_audio:
+                        self.channel_audio.stop()
+                    if self.channel_screen:
+                        self.channel_screen.stop()
                     pygame.mixer.quit()
                 except Exception:
                     pass
@@ -448,7 +579,9 @@ class DubbingEngine:
                 pygame.mixer.init(frequency=24000, size=-16, channels=2, buffer=2048)
 
             pygame.mixer.set_num_channels(8)
-            self.channel = pygame.mixer.Channel(0)
+            self.channel_audio = pygame.mixer.Channel(0)
+            self.channel_screen = pygame.mixer.Channel(1)
+            self.channel = self.channel_audio  # 하위 호환 (채널 0 매핑)
             self._mixer_initialized = True
             self.output_device = target_dev
             self.active_output_device = devicename or "default"
@@ -462,8 +595,9 @@ class DubbingEngine:
                 self.active_output_device_id = None
             vol = float(self.config.get("dubbing_volume", 80)) / 100.0
             self._current_volume = max(0.0, min(1.0, vol))
-            self.channel.set_volume(self._current_volume)
-            _safe_print(f"[DubbingEngine] [OK] 더빙 오디오 믹서 초기화 완료! (장치: {devicename or '기본 장치'})")
+            self.channel_audio.set_volume(self._current_volume)
+            self.channel_screen.set_volume(self._current_volume)
+            _safe_print(f"[DubbingEngine] [OK] 더빙 오디오 믹서 초기화 완료! (장치: {devicename or '기본 장치'}, 독립 듀얼 채널(0:음성, 1:화면))")
         except Exception as e:
             _safe_print(f"[DubbingEngine] [WARN] Pygame 믹서 초기화 오류: {e}")
             self._mixer_initialized = False
@@ -481,13 +615,15 @@ class DubbingEngine:
             new_dev = self.config.get("dubbing_output_device", "default")
             if new_dev != getattr(self, "output_device", "default"):
                 self._init_mixer(target_dev=new_dev)
-            if self._mixer_initialized and self.channel:
+            if self._mixer_initialized:
                 vol = float(self.config.get("dubbing_volume", 80)) / 100.0
                 self._current_volume = max(0.0, min(1.0, vol))
-                try:
-                    self.channel.set_volume(self._current_volume)
-                except Exception:
-                    pass
+                for ch in (self.channel_audio, self.channel_screen):
+                    if ch:
+                        try:
+                            ch.set_volume(self._current_volume)
+                        except Exception:
+                            pass
 
     def is_enabled(self) -> bool:
         return bool(self.config.get("dubbing_enabled", False))
@@ -520,8 +656,7 @@ class DubbingEngine:
             if not active:
                 self._source_generations[source] += 1
                 self.clear_source_queue(source)
-                if self._current_playing_source == source:
-                    self.stop_current_audio()
+                self.stop_current_audio(source=source)
 
     def set_source_enabled(self, source: str, enabled: bool):
         """더빙 소스 체크박스를 끄면 빠른 재활성화에도 이전 음성을 재생하지 않는다."""
@@ -532,8 +667,7 @@ class DubbingEngine:
             if not enabled:
                 self._source_generations[source] += 1
                 self.clear_source_queue(source)
-                if self._current_playing_source == source:
-                    self.stop_current_audio()
+                self.stop_current_audio(source=source)
 
     def set_smart_speed(self, speed_str: str):
         """콘텐츠 템포 프리셋 또는 스마트 모드에 의해 기본 더빙 속도를 동적으로 연동"""
@@ -545,20 +679,30 @@ class DubbingEngine:
         with self.lock:
             self.config["dubbing_volume"] = volume_percent
             self._current_volume = vol
-            if self._mixer_initialized and self.channel:
+            if self._mixer_initialized:
+                for ch in (self.channel_audio, self.channel_screen):
+                    if ch:
+                        try:
+                            ch.set_volume(vol)
+                        except Exception:
+                            pass
+
+    def stop_current_audio(self, source: Optional[str] = None):
+        """현재 재생 중인 오디오 즉시 정지 (source 미지정 시 전체 정지)"""
+        if source in ("audio", None):
+            self._stop_playback_audio = True
+            if self._mixer_initialized and self.channel_audio:
                 try:
-                    self.channel.set_volume(vol)
+                    self.channel_audio.fadeout(80)
                 except Exception:
                     pass
-
-    def stop_current_audio(self):
-        """현재 재생 중인 오디오 즉시 정지"""
-        self._stop_playback_requested = True
-        if self._mixer_initialized and self.channel:
-            try:
-                self.channel.fadeout(80)
-            except Exception:
-                pass
+        if source in ("screen", None):
+            self._stop_playback_screen = True
+            if self._mixer_initialized and self.channel_screen:
+                try:
+                    self.channel_screen.fadeout(80)
+                except Exception:
+                    pass
 
     def clear_queue(self):
         """대기 중인 모든 더빙 텍스트 및 재생 큐 비우기"""
@@ -569,43 +713,29 @@ class DubbingEngine:
             self.recent_enqueued_items = []
 
     def _clear_waiting_queues(self):
-        while not self.text_queue.empty():
-            try:
-                self.text_queue.get_nowait()
-            except queue.Empty:
-                break
-        while not self.playback_queue.empty():
-            try:
-                self.playback_queue.get_nowait()
-            except queue.Empty:
-                break
+        for q in (self.audio_text_queue, self.screen_text_queue,
+                  self.audio_playback_queue, self.screen_playback_queue):
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    break
 
     def clear_source_queue(self, source: str):
         """특정 소스('audio' 또는 'screen')의 대기열만 즉시 비우기"""
         with self.lock:
-            # 1. 텍스트 큐 정리
-            rem_text = []
-            while not self.text_queue.empty():
+            tq = self.audio_text_queue if source == "audio" else self.screen_text_queue
+            pq = self.audio_playback_queue if source == "audio" else self.screen_playback_queue
+            while not tq.empty():
                 try:
-                    item = self.text_queue.get_nowait()
-                    if item.get("source") != source:
-                        rem_text.append(item)
+                    tq.get_nowait()
                 except queue.Empty:
                     break
-            for item in rem_text:
-                self.text_queue.put(item)
-
-            # 2. 재생 큐 정리
-            rem_play = []
-            while not self.playback_queue.empty():
+            while not pq.empty():
                 try:
-                    pitem = self.playback_queue.get_nowait()
-                    if pitem.get("source") != source:
-                        rem_play.append(pitem)
+                    pq.get_nowait()
                 except queue.Empty:
                     break
-            for pitem in rem_play:
-                self.playback_queue.put(pitem)
             self.recent_enqueued_items = [it for it in getattr(self, "recent_enqueued_items", []) if it[2] != source]
         _safe_print(f"[DubbingEngine] [CLEAN] '{source}' 소스 대기열 정리 완료")
 
@@ -640,7 +770,7 @@ class DubbingEngine:
         return "", t
 
     @staticmethod
-    def is_duplicate_or_similar(text1: str, text2: str, threshold: float = 0.72) -> bool:
+    def is_duplicate_or_similar(text1: str, text2: str, threshold: float = 0.85) -> bool:
         """두 텍스트의 동일성 및 유사도 판별 (자막 지터 및 오디오/화면 동시 더빙 중복 발화 방지)"""
         if not text1 or not text2:
             return False
@@ -650,9 +780,11 @@ class DubbingEngine:
             return False
         if t1 == t2:
             return True
-        # 한쪽이 다른 쪽을 실질적으로 포함하는 경우 (자막 누적 또는 짧은 프래그먼트)
-        if len(t1) >= 4 and len(t2) >= 4:
-            if t1 in t2 or t2 in t1:
+        # 한쪽이 다른 쪽을 실질적으로 거의 전부 포함하는 경우만 (길이 비율 85% 이상)
+        len1, len2 = len(t1), len(t2)
+        if len1 >= 4 and len2 >= 4:
+            shorter, longer = (t1, t2) if len1 <= len2 else (t2, t1)
+            if shorter in longer and (len(shorter) / len(longer) >= 0.85):
                 return True
         import difflib
         return difflib.SequenceMatcher(None, t1, t2).ratio() >= threshold
@@ -700,10 +832,11 @@ class DubbingEngine:
         if speaker_confirmed and not self._is_speaker_dubbing_allowed(speaker_name, spk_display):
             return
 
-        # 큐가 가득 찬 경우 오래된 대사 1개 정리 (최대 200개 보관)
-        if self.text_queue.full():
+        target_q = self.screen_text_queue if source == "screen" else self.audio_text_queue
+        # 큐가 가득 찬 경우 오래된 대사 1개 정리
+        if target_q.full():
             try:
-                self.text_queue.get_nowait()
+                target_q.get_nowait()
             except queue.Empty:
                 pass
 
@@ -729,43 +862,51 @@ class DubbingEngine:
             if not hasattr(self, "recent_enqueued_items"):
                 self.recent_enqueued_items = []
 
-            # 8.0초 지난 대사는 중복 검사 목록에서 정리
+            # 5.0초 지난 대사는 중복 검사 목록에서 정리
             self.recent_enqueued_items = [
-                (t, o, s, ts) for (t, o, s, ts) in self.recent_enqueued_items if now - ts < 8.0
+                (t, o, s, ts) for (t, o, s, ts) in self.recent_enqueued_items if now - ts < 5.0
             ]
 
             # 1. 화면-음성 간 교차 중복 및 동일 소스 연속 중복 발화 검사
-            for past_trans, past_orig, past_src, past_ts in self.recent_enqueued_items:
-                # A. 화면과 음성이 동시 켜져 있을 때 같은 대사를 번역한 경우 중복 차단
-                if source != past_src and (now - past_ts < 7.0):
-                    if (self.is_duplicate_or_similar(clean_text, past_trans, threshold=0.68) or
-                        (orig_text and past_orig and self.is_duplicate_or_similar(orig_text, past_orig, threshold=0.70))):
-                        _safe_print(f"[Dubbing] [DEDUP] {source} 더빙이 {past_src} 더빙과 중복되어 생략: '{clean_text}'")
+            for past_trans, past_orig, past_src, past_ts in reversed(self.recent_enqueued_items):
+                # A. 화면과 음성이 동시 켜져 있을 때 같은 대사를 중복 번역한 경우만 선별 차단 (3.5초 이내, 0.85 이상)
+                if source != past_src and (now - past_ts < 3.5):
+                    if (self.is_duplicate_or_similar(clean_text, past_trans, threshold=0.85) or
+                        (orig_text and past_orig and self.is_duplicate_or_similar(orig_text, past_orig, threshold=0.88))):
+                        _safe_print(f"[Dubbing] [DEDUP] {source} 더빙이 {past_src} 더빙과 교차 중복되어 생략: '{clean_text}'")
                         return
 
-                # B. 동일 소스(화면 OCR 지터 등)에서 8초 이내 유사한 대사가 반복 유입된 경우 차단
-                if source == past_src and (now - past_ts < 7.0):
-                    if self.is_duplicate_or_similar(clean_text, past_trans, threshold=0.72):
-                        _safe_print(f"[Dubbing] [DEDUP] {source} 연속 유사 대사 중복 제거: '{clean_text}'")
-                        return
+                # B. 동일 소스 중복 검사:
+                # - 화면 OCR: 동일 자막 프레임 반복 유입(지터) 차단 (3.5초 이내, 0.85 이상)
+                # - 오디오 STT: 직전 2.0초 이내 완전 동일 재전송(0.90 이상)만 차단
+                if source == past_src:
+                    time_limit = 3.5 if source == "screen" else 2.0
+                    sim_thresh = 0.85 if source == "screen" else 0.90
+                    if (now - past_ts < time_limit):
+                        if self.is_duplicate_or_similar(clean_text, past_trans, threshold=sim_thresh):
+                            _safe_print(f"[Dubbing] [DEDUP] {source} 연속 중복 대사 생략: '{clean_text}'")
+                            return
 
-            # 2. 현재 재생 중인 발화와 중복 검사
-            if self._is_playing and getattr(self, "_current_speaking_text", None):
-                if self.is_duplicate_or_similar(clean_text, self._current_speaking_text, threshold=0.70):
-                    _safe_print(f"[Dubbing] [DEDUP] 현재 재생 중인 대사와 유사하여 생략: '{clean_text}'")
+            # 2. 현재 재생 중인 발화와 중복 검사 (완전 동일 대사 반복 방지, 0.88 이상)
+            cur_speaking = self._current_speaking_text_screen if source == "screen" else self._current_speaking_text_audio
+            manual_speaking = getattr(self, '_manual_current_speaking_text', None)
+            check_text = manual_speaking or cur_speaking
+            if check_text:
+                if self.is_duplicate_or_similar(clean_text, check_text, threshold=0.88):
+                    _safe_print(f"[Dubbing] [DEDUP] 현재 재생 중인 대사와 동일하여 생략: '{clean_text}'")
                     return
 
             item["_generation"] = self._generation
             item["_source_generation"] = self._source_generations.get(source, 0)
             try:
-                self.text_queue.put_nowait(item)
+                target_q.put_nowait(item)
             except queue.Full:
                 try:
-                    self.text_queue.get_nowait()
+                    target_q.get_nowait()
                 except queue.Empty:
                     pass
                 try:
-                    self.text_queue.put_nowait(item)
+                    target_q.put_nowait(item)
                 except queue.Full:
                     return
             self.recent_enqueued_items.append((clean_text, orig_text, source, now))
@@ -790,9 +931,15 @@ class DubbingEngine:
 
     def _clean_dialogue_text(self, text: str) -> str:
         """HTML 태그 제거, 화자 콜론 접두사 제거 및 TTS 발음 방해 특수문자 정제 (다국어 공통)"""
+        if not text:
+            return ""
         text = re.sub(r'<[^>]+>', '', text)  # HTML 태그 제거
         text = re.sub(r'\[.*?\]', '', text)  # [화자명] 제거
-        text = re.sub(r'[\(\{\<].*?[\)\}\>]', '', text) # 괄호 속 내용 제거
+        cleaned = re.sub(r'[\(\{\<].*?[\)\}\>]', '', text) # 괄호 속 부가설명 제거 시도
+        # 만약 괄호를 지웠더니 내용이 전부 날아간 경우(예: '(중요한 내용입니다)'), 괄호 기호만 제거하고 내용 보존
+        if len(cleaned.strip()) < 2 and len(text.strip()) >= 2:
+            cleaned = re.sub(r'[\(\)\{\}\<\>]', '', text)
+        text = cleaned
         # 화자 콜론 접두사("알렉스:", "Alex:", "田中:", "Maya:") 제거
         text = re.sub(r'^[^\W_]{1,15}(?:\s+[^\W_]{1,15}){0,2}\s*[:：\-]\s*', '', text)
         text = re.sub(r'[:\-–—/\\_~*#]', ' ', text) # 발음 방해 기호 정리
@@ -801,11 +948,14 @@ class DubbingEngine:
 
     _clean_korean_text = _clean_dialogue_text
 
-    def resolve_voice_and_pitch(self, spk_raw: str, spk_display: str, orig_text: str) -> tuple[str, str]:
+    def resolve_voice_and_pitch(self, spk_raw: str, spk_display: str, orig_text: str, source: str = "audio") -> tuple[str, str]:
         """
-        화자 실명 및 원문 텍스트 패턴, 그리고 도착 언어(target_lang)를 분석하여
+        화자 실명 및 원문 텍스트 패턴, 그리고 도착 언어(target_lang)와 소스 채널(source)을 분석하여
         해당 국가 언어에 최적화된 Edge-TTS 음성과 피치(Hz) 반환.
-        반환 예: ('ko-KR-InJoonNeural', '-5Hz'), ('en-US-GuyNeural', '-10Hz')
+        - 음성 번역 채널(audio): 기본 남성 대표 음성 (예: ko-KR-InJoonNeural)
+        - 화면 번역 채널(screen): 기본 여성 대표 음성 (예: ko-KR-SunHiNeural)
+        두 채널 간 기본 목소리가 청각적으로 명확히 분리되어 동시 재생 시에도 혼선 없이 감상 가능.
+        반환 예: ('ko-KR-InJoonNeural', '-5Hz'), ('ko-KR-SunHiNeural', '+0Hz')
         """
         target_lang = str(self.config.get("target_lang") or self.config.get("target") or "ko").strip().lower().split("-")[0]
         voice_info = get_voice_matrix_for_target(target_lang)
@@ -814,9 +964,24 @@ class DubbingEngine:
         alt_male = voice_info.get("male_alt", default_male)
         alt_female = voice_info.get("female_alt", default_female)
 
+        # 소스별 사용자 정의 음성 설정 검사
+        if source == "screen":
+            custom_voice = self.config.get("dubbing_voice_screen")
+            if custom_voice and custom_voice != "auto":
+                return custom_voice, "+0Hz"
+        else:
+            custom_voice = self.config.get("dubbing_voice_audio")
+            if custom_voice and custom_voice != "auto":
+                return custom_voice, "+0Hz"
+
         spk_voices = self.config.get("speaker_voices", {})
         if not spk_raw:
-            return default_male, "+0Hz"
+            # 화자명이 없는 일반 대사/자막: 화면 채널은 여성 대표 음성, 음성 채널은 남성 대표 음성 배정
+            if source == "screen":
+                return default_female, "+0Hz"
+            else:
+                return default_male, "+0Hz"
+
         assigned_voice = spk_voices.get(spk_raw) or spk_voices.get(spk_display)
 
         # 1. 수동 지정된 보이스가 있고 'auto'가 아니면 검사
@@ -840,11 +1005,14 @@ class DubbingEngine:
         elif RE_MALE_KEYWORDS.search(context_str):
             is_male = True
         else:
-            # 패턴 매칭이 없으면 화자 번호 홀짝 기반 (1번: 남성1, 2번: 여성1, 3번: 남성2, 4번: 여성2)
-            if spk_num % 2 == 1:
-                is_male = True
+            # 패턴 매칭이 없으면:
+            # 화면 채널은 여성 기반 우선 배분, 음성 채널은 남성 기반 우선 배분
+            if source == "screen":
+                is_female = (spk_num % 2 == 1)
+                is_male = not is_female
             else:
-                is_female = True
+                is_male = (spk_num % 2 == 1)
+                is_female = not is_male
 
         # 화자 번호별 피치 미세 변조 (동일 성별이라도 목소리 톤이 다르게 들리도록 연출)
         pitch_offsets = ["-10Hz", "+0Hz", "+8Hz", "-5Hz", "+12Hz"]
@@ -859,19 +1027,21 @@ class DubbingEngine:
             voice = default_male if is_primary else alt_male
             return voice, pitch
 
-    def _synth_loop(self):
-        """1단계: 백그라운드 선행 오디오 합성 워커 (재생 중 다음 대사를 미리 합성하여 대기 0초 달성)"""
+    def _synth_worker(self, source: str):
+        """1단계: 백그라운드 선행 오디오 합성 워커 (source='audio' 또는 'screen' 독립 운영)"""
+        in_q = self.audio_text_queue if source == "audio" else self.screen_text_queue
+        out_q = self.audio_playback_queue if source == "audio" else self.screen_playback_queue
+
         while self.is_running:
             try:
                 try:
-                    item = self.text_queue.get(timeout=0.2)
+                    item = in_q.get(timeout=0.2)
                 except queue.Empty:
                     continue
 
                 if not item or not self._item_is_current(item):
                     continue
 
-                source = item.get("source", "audio")
                 if source == "audio" and not self.config.get("dubbing_source_audio", True):
                     continue
                 if source == "screen" and not self.config.get("dubbing_source_screen", False):
@@ -884,15 +1054,15 @@ class DubbingEngine:
                 segment_ids = list(item.get('segment_ids', []))
 
                 # 1. 지능형 저지연 버퍼링 (Low-Latency Smart Buffering):
-                is_player_busy = self._is_playing or (self.playback_queue.qsize() > 0)
-                is_complete = bool(len(text) >= 28 or text.endswith(('.', '!', '?', '。')))
+                is_playing = self._is_playing_audio if source == "audio" else self._is_playing_screen
+                is_player_busy = is_playing or (out_q.qsize() > 0)
+                is_complete = bool(len(text) >= 20 or text.endswith(('.', '!', '?', '。', '…', '~')))
 
-                if is_complete or not self.text_queue.empty():
+                # 이미 문장 완결 부호가 있거나 큐에 다음 대사가 있으면 대기 없이 즉시 진행
+                if is_complete or not in_q.empty():
                     wait_time = 0.0
-                elif is_player_busy:
-                    wait_time = 0.30  # 플레이어 재생 중인 짧은 단문: 300ms 대기 후 결합
-                elif len(text) < 22:
-                    wait_time = 0.20  # 유휴 상태 초단문: 200ms 대기 후 결합
+                elif is_player_busy and len(text) < 10:
+                    wait_time = 0.15  # 플레이어 재생 중인 아주 짧은 파편 단문: 150ms만 살짝 관찰
                 else:
                     wait_time = 0.0
 
@@ -903,21 +1073,22 @@ class DubbingEngine:
                                 and candidate.get("_generation") == item.get("_generation")
                                 and candidate.get("_source_generation") == item.get("_source_generation"))
 
-                if wait_time > 0 and self.text_queue.empty():
-                    follow_up = take_matching(self.text_queue, same_speaker_source, wait_time)
+                if wait_time > 0 and in_q.empty():
+                    follow_up = take_matching(in_q, same_speaker_source, wait_time)
                     if follow_up:
                         text = f"{text} {follow_up.get('text', '')}".strip()
                         orig_text = f"{orig_text} {follow_up.get('orig_text', '')}".strip()
                         segment_ids.extend(follow_up.get('segment_ids', []))
 
                 # 2. 스마트 대기열 단락 병합 (Smart Coalescing):
+                # 대기열이 심각하게 밀린 경우(백로그 4개 이상)에만 2문장 한정 병합, 평소에는 개별 온전 발화 유지
+                cur_backlog = in_q.qsize() + out_q.qsize() + (1 if is_playing else 0)
+                max_merge = 2 if cur_backlog >= 4 else 1
+                max_chars = 90 if cur_backlog >= 4 else 50
                 merge_count = 1
-                cur_backlog = self.text_queue.qsize() + self.playback_queue.qsize() + (1 if self._is_playing else 0)
-                max_merge = 5 if cur_backlog > 1 else 3
-                max_chars = 150 if cur_backlog > 1 else 110
 
-                while not self.text_queue.empty() and merge_count < max_merge:
-                    next_item = take_matching(self.text_queue, lambda candidate:
+                while not in_q.empty() and merge_count < max_merge:
+                    next_item = take_matching(in_q, lambda candidate:
                         same_speaker_source(candidate) and
                         len(text) + len(candidate.get("text", "")) <= max_chars)
                     if next_item is None:
@@ -936,13 +1107,18 @@ class DubbingEngine:
 
                 if not self._item_is_current(item):
                     continue
-                self._current_synthesizing_item = item
+
+                if source == "audio":
+                    self._current_synthesizing_audio = item
+                else:
+                    self._current_synthesizing_screen = item
+
                 try:
                     # 보이스 및 피치 결정
-                    voice, pitch = self.resolve_voice_and_pitch(spk_raw, spk_display, orig_text)
+                    voice, pitch = self.resolve_voice_and_pitch(spk_raw, spk_display, orig_text, source=source)
 
-                    # 대기 중인 총 미처리 대사 수 (텍스트 큐 + 재생 큐) 기반 적응형 배속
-                    total_backlog = self.text_queue.qsize() + self.playback_queue.qsize()
+                    # 대기 중인 총 미처리 대사 수 기반 적응형 배속
+                    total_backlog = in_q.qsize() + out_q.qsize()
                     speed = self.calculate_adaptive_speed(total_backlog)
 
                     # Edge-TTS 음성 데이터 메모리 생성 (타임아웃 단축 및 자동 재시도)
@@ -959,7 +1135,7 @@ class DubbingEngine:
                     if not self._item_is_current(item):
                         continue
                     if not audio_data:
-                        _safe_print(f"[DubbingEngine] [WARN] TTS 합성 실패로 해당 대사 건너뜀: '{text[:20]}'")
+                        _safe_print(f"[DubbingEngine] [WARN] TTS 합성 실패로 해당 대사 건너뜀 ({source}): '{text[:20]}'")
                         continue
 
                     play_item = {
@@ -976,30 +1152,40 @@ class DubbingEngine:
                         "_generation": item.get("_generation", getattr(self, "_generation", 0)),
                         "_source_generation": item.get("_source_generation", getattr(self, "_source_generations", {}).get(source, 0)),
                     }
-                    self.playback_queue.put(play_item)
+                    out_q.put(play_item)
                 finally:
-                    self._current_synthesizing_item = None
+                    if source == "audio":
+                        self._current_synthesizing_audio = None
+                    else:
+                        self._current_synthesizing_screen = None
             except Exception as loop_err:
-                _safe_print(f"[DubbingEngine] [WARN] _synth_loop 예외 포착 (워커 자동 유지): {loop_err}")
+                _safe_print(f"[DubbingEngine] [WARN] _synth_worker({source}) 예외 포착 (워커 자동 유지): {loop_err}")
                 time.sleep(0.05)
 
-    def _playback_loop(self):
-        """2단계: 끊김 없는 무지연 순차 오디오 재생 워커 (문장 간 간격 0.00초)"""
+    def _synth_loop(self):
+        """하위 호환용 오디오 합성 루프"""
+        self._synth_worker("audio")
+
+    def _playback_worker(self, source: str):
+        """2단계: 끊김 없는 무지연 순차 오디오 재생 워커 (source='audio' 또는 'screen' 독립 운영)"""
+        in_q = self.audio_playback_queue if source == "audio" else self.screen_playback_queue
+
         while self.is_running:
             try:
                 try:
-                    item = self.playback_queue.get(timeout=0.1)
+                    item = in_q.get(timeout=0.1)
                 except queue.Empty:
                     continue
 
                 if not item or not self._item_is_current(item):
                     continue
 
-                source = item.get("source", "audio")
                 if source == "audio" and not self.config.get("dubbing_source_audio", True):
                     continue
                 if source == "screen" and not self.config.get("dubbing_source_screen", False):
                     continue
+
+                channel = self.channel_audio if source == "audio" else self.channel_screen
 
                 text = item["text"]
                 orig_text = item.get("orig_text", "")
@@ -1009,41 +1195,57 @@ class DubbingEngine:
                 spk_display = item["speaker_display"]
                 audio_data = item["audio_data"]
 
-                # 새 대사 유입 시 이전 음성 페이드아웃 (인터럽트 옵션 활성화 시에만)
-                if self.config.get("dubbing_interrupt", False) and self._mixer_initialized and self.channel:
-                    if self.channel.get_busy():
-                        self.channel.fadeout(120)
+                # 새 대사 유입 시 이전 음성 페이드아웃 (해당 채널에 대해서만 인터럽트!)
+                if self.config.get("dubbing_interrupt", False) and self._mixer_initialized and channel:
+                    if channel.get_busy():
+                        channel.fadeout(120)
                         time.sleep(0.05)
 
                 # 오디오 재생
-                if self._mixer_initialized and self.channel:
+                if self._mixer_initialized and channel:
                     try:
                         reg_info = f" (영역 {item['region_idx']})" if item.get('region_idx') else ""
+                        ch_num = "0" if source == "audio" else "1"
                         src_label = f"화면 번역{reg_info}" if source == "screen" else "오디오 통역"
                         spk_tag = f"[{spk_display}]" if spk_display else ""
                         base_sp = self.config.get("dubbing_speed", "+0%")
                         speed_tag = f" [가속 {speed}]" if speed != base_sp else ""
                         voice_short = voice.split('-')[2] if '-' in voice else voice
-                        _safe_print(f"[Dubbing] [VOICE] [{src_label}] {spk_tag}{speed_tag} ('{voice_short}', {pitch}): '{text}'")
+                        _safe_print(f"[Dubbing] [VOICE] [{src_label} - 채널 {ch_num}] {spk_tag}{speed_tag} ('{voice_short}', {pitch}): '{text}'")
 
                         sound, duration = self._create_trimmed_sound(audio_data)
                         with self.lock:
                             if not self._item_is_current(item):
                                 continue
-                            self._stop_playback_requested = False
-                            self._is_playing = True
+                            if source == "audio":
+                                self._stop_playback_audio = False
+                                self._is_playing_audio = True
+                                self._current_speaking_text_audio = text
+                            else:
+                                self._stop_playback_screen = False
+                                self._is_playing_screen = True
+                                self._current_speaking_text_screen = text
+
                             self._current_playing_source = source
-                            self._current_speaking_text = text
-                            self.channel.set_volume(self._current_volume)
-                            self.channel.play(sound)
+                            channel.set_volume(self._current_volume)
+                            channel.play(sound)
+
                         if self._item_is_current(item):
                             for cb in list(self.playback_callbacks):
                                 try:
                                     cb(text=text, speaker=spk_display, orig_text=orig_text,
                                        source=source, voice=voice, speed=speed,
                                        region_idx=item.get('region_idx', 0))
-                                except Exception:
-                                    pass
+                                except Exception as cb_err:
+                                    _safe_print(f"[DubbingEngine] playback_callback error: {cb_err}")
+                            on_pb = getattr(self, 'on_playback_status', None)
+                            if on_pb and on_pb not in self.playback_callbacks:
+                                try:
+                                    on_pb(text=text, speaker=spk_display, orig_text=orig_text,
+                                          source=source, voice=voice, speed=speed,
+                                          region_idx=item.get('region_idx', 0))
+                                except Exception as pb_err:
+                                    _safe_print(f"[DubbingEngine] on_playback_status error: {pb_err}")
                         trace = getattr(self, 'pipeline_trace', None)
                         if trace:
                             trace.record('tts_playback', segment_ids=item.get('segment_ids', []),
@@ -1051,25 +1253,33 @@ class DubbingEngine:
 
                         expected_end_time = time.time() + duration
 
-                        # 오디오가 완전히 끝날 때까지 대기 (순차 무누락 재생 보장)
+                        # 오디오가 완전히 끝날 때까지 대기 (채널별 독립 대기)
                         while self.is_running:
-                            if self._stop_playback_requested or not self._item_is_current(item):
-                                self.channel.stop()
-                                self._stop_playback_requested = False
+                            stop_req = self._stop_playback_audio if source == "audio" else self._stop_playback_screen
+                            if stop_req or not self._item_is_current(item):
+                                channel.stop()
+                                if source == "audio":
+                                    self._stop_playback_audio = False
+                                else:
+                                    self._stop_playback_screen = False
                                 break
                             now = time.time()
-                            if not self.channel.get_busy() and now >= expected_end_time:
+                            if not channel.get_busy() and now >= expected_end_time:
                                 break
                             if now >= expected_end_time + 0.35:
                                 break
-                            if not self.playback_queue.empty() and self.config.get("dubbing_interrupt", False):
-                                self.channel.fadeout(80)
+                            if not in_q.empty() and self.config.get("dubbing_interrupt", False):
+                                channel.fadeout(80)
                                 break
                             time.sleep(0.02)
                     finally:
-                        self._is_playing = False
+                        if source == "audio":
+                            self._is_playing_audio = False
+                            self._current_speaking_text_audio = ""
+                        else:
+                            self._is_playing_screen = False
+                            self._current_speaking_text_screen = ""
                         self._current_playing_source = None
-                        self._current_speaking_text = ""
                         now = time.time()
                         self.last_playback_end_time = now
                         with self.lock:
@@ -1078,8 +1288,12 @@ class DubbingEngine:
                                 (t, ts) for (t, ts) in self.recent_dubbed_history if now - ts < 15.0
                             ]
             except Exception as loop_err:
-                _safe_print(f"[DubbingEngine] [WARN] _playback_loop 예외 포착 (워커 자동 유지): {loop_err}")
+                _safe_print(f"[DubbingEngine] [WARN] _playback_worker({source}) 예외 포착 (워커 자동 유지): {loop_err}")
                 time.sleep(0.05)
+
+    def _playback_loop(self):
+        """하위 호환용 오디오 재생 루프"""
+        self._playback_worker("audio")
 
     @staticmethod
     def _create_trimmed_sound(audio_data: bytes) -> tuple[pygame.mixer.Sound, float]:
@@ -1110,42 +1324,56 @@ class DubbingEngine:
         return raw_snd, raw_snd.get_length()
 
     def _synthesize_audio(self, text: str, voice: str, speed: str, pitch: str) -> bytes:
-        """edge-tts를 호출하여 메모리 내 MP3 바이트 생성 (타임아웃 단축 및 자동 재시도로 지연 멈춤 차단)"""
-        async def _async_synth():
-            communicate = edge_tts.Communicate(text=text, voice=voice, rate=speed, pitch=pitch)
+        """edge-tts를 호출하여 메모리 내 MP3 바이트 생성 (3단계 점진적 타임아웃 및 옵션 fallback으로 대사 누락 방지)"""
+        async def _async_synth(v: str, s: str, p: str):
+            communicate = edge_tts.Communicate(text=text, voice=v, rate=s, pitch=p)
             bio = io.BytesIO()
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     bio.write(chunk["data"])
             return bio.getvalue()
 
-        # 타임아웃을 3.0초 / 3.5초로 줄여 네트워크 지연 시 장시간 얼어붙는 현상 원천 차단
-        for attempt in range(1, 3):
-            timeout_sec = 3.0 if attempt == 1 else 3.5
+        # 네트워크 지연 및 클라우드 연결 핸드셰이크에 견고하게 대응하도록 3회 시도
+        attempts = [
+            (4.5, voice, speed, pitch),
+            (6.0, voice, speed, pitch),
+            (7.5, voice, "+0%", "+0Hz"),  # 3차: 옵션 충돌 방지 기본 피치/속도로 최종 fallback 시도
+        ]
+
+        for attempt, (timeout_sec, cur_v, cur_s, cur_p) in enumerate(attempts, 1):
+            if not self.is_running:
+                break
             try:
-                data = asyncio.run(asyncio.wait_for(_async_synth(), timeout=timeout_sec))
+                data = asyncio.run(asyncio.wait_for(_async_synth(cur_v, cur_s, cur_p), timeout=timeout_sec))
                 if data and len(data) > 0:
                     return data
             except asyncio.TimeoutError:
-                _safe_print(f"[DubbingEngine] [WARN] TTS 합성 {attempt}회차 타임아웃 ({timeout_sec}초): '{text[:20]}...'")
+                _safe_print(f"[DubbingEngine] [WARN] TTS 합성 {attempt}회차 타임아웃 ({timeout_sec}초): '{text[:25]}...'")
             except Exception as e:
                 _safe_print(f"[DubbingEngine] [WARN] TTS 통신 {attempt}회차 오류: {e}")
             if not self.is_running:
                 break
-            time.sleep(0.08)
+            time.sleep(0.1)
         return b""
 
     def stop(self):
         """더빙 엔진 및 믹서 종료 클린업"""
         self.is_running = False
         self.clear_queue()
-        for worker in (self.synth_thread, self.playback_thread):
-            if worker.is_alive() and worker is not threading.current_thread():
-                worker.join()
+        workers = [
+            getattr(self, 'synth_thread_audio', None),
+            getattr(self, 'synth_thread_screen', None),
+            getattr(self, 'playback_thread_audio', None),
+            getattr(self, 'playback_thread_screen', None),
+        ]
+        for worker in workers:
+            if worker and worker.is_alive() and worker is not threading.current_thread():
+                worker.join(timeout=1.0)
         if self._mixer_initialized:
             try:
-                if self.channel:
-                    self.channel.stop()
+                for ch in (self.channel_audio, self.channel_screen):
+                    if ch:
+                        ch.stop()
                 pygame.mixer.quit()
                 self._mixer_initialized = False
                 self.active_output_device_id = None

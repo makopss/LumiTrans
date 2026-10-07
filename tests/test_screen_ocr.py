@@ -462,7 +462,7 @@ def test_subtitle_retention_and_hover_logic():
     overlay.btn_pin.click()
     assert overlay.is_pinned is True
     assert not overlay.clear_timer.isActive(), "고정 핀 활성화 시 타이머가 정지되어 영구 고정되어야 합니다."
-    assert "ON" in overlay.btn_pin.text()
+    assert overlay.btn_pin.text() == "📌"
     assert "고정" in overlay.btn_pin.toolTip()
 
     # 고정 해제
@@ -1051,18 +1051,18 @@ def test_roi_border_overlay_sync_and_toggle():
 
     app = QApplication.instance() or QApplication(sys.argv)
 
-    # 1. SingleROIBorderWidget 플래그 및 마우스 관통 속성 검증
+    # 1. SingleROIBorderWidget 플래그, 마우스 트래킹 및 마스크 관통 속성 검증
     sample_roi = [150, 200, 450, 250]
     widget = SingleROIBorderWidget(sample_roi, roi_idx=0, show_badge=True)
     g = widget.geometry()
     assert g.x() == 150 and g.y() == 200 and g.width() == 450 and g.height() == 250, "위젯 좌표/크기가 ROI와 일치해야 합니다."
     assert widget.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground), "투명 배경 속성이 켜져 있어야 합니다."
-    assert widget.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents), "마우스 관통 속성이 켜져 있어야 합니다."
     assert widget.testAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating), "포커스 미점유 속성이 켜져 있어야 합니다."
+    assert widget.hasMouseTracking(), "인터랙티브 리사이즈를 위해 마우스 트래킹이 켜져 있어야 합니다."
+    assert not widget.mask().isEmpty(), "중앙 영역 관통 및 테두리 조작을 위한 윈도우 마스크가 설정되어 있어야 합니다."
     flags = widget.windowFlags()
     assert flags & Qt.WindowType.FramelessWindowHint, "프레임리스 윈도우여야 합니다."
     assert flags & Qt.WindowType.WindowStaysOnTopHint, "최상위 유지 윈도우여야 합니다."
-    assert flags & Qt.WindowType.WindowTransparentForInput, "입력 관통 윈도우여야 합니다."
     widget.close()
 
     # 2. ROIBorderManager 다중 ROI 관리 및 상태 동기화 검증

@@ -694,7 +694,7 @@ class SubtitleHistoryManager:
 
 
     @classmethod
-    def format_html_table(cls, entries: List[SubtitleEntry], filter_mode: str = "all") -> str:
+    def format_html_table(cls, entries: List[SubtitleEntry], filter_mode: str = "all", include_header: bool = False) -> str:
         """3개 섹션(① STT 원문 | ② 번역문 | ③ AI 음성 더빙문) 가로 비교 또는 선택형 단독 뷰 렌더링"""
         if not entries:
             msg = tr("history_empty_all")
@@ -727,8 +727,7 @@ class SubtitleHistoryManager:
                     </td>
                 </tr>
                 """)
-            return f"""
-            <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse: collapse; font-family: \"Segoe UI\", \"Malgun Gothic\", sans-serif;'>
+            header_html = f"""
                 <thead>
                     <tr style='background-color: #121A22; border-bottom: 2px solid #00ACC1;'>
                         <th style='color: #00E5FF; font-size: 11px; font-weight: bold; text-align: left; padding: 7px 12px;'>
@@ -736,6 +735,10 @@ class SubtitleHistoryManager:
                         </th>
                     </tr>
                 </thead>
+            """ if include_header else ""
+            return f"""
+            <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse: collapse; font-family: \"Segoe UI\", \"Malgun Gothic\", sans-serif;'>
+                {header_html}
                 <tbody>
                     {''.join(rows)}
                 </tbody>
@@ -767,8 +770,7 @@ class SubtitleHistoryManager:
                     </td>
                 </tr>
                 """)
-            return f"""
-            <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse: collapse; font-family: \"Segoe UI\", \"Malgun Gothic\", sans-serif;'>
+            header_html = f"""
                 <thead>
                     <tr style='background-color: #121A22; border-bottom: 2px solid #00E676;'>
                         <th style='color: #00E676; font-size: 11px; font-weight: bold; text-align: left; padding: 7px 12px;'>
@@ -776,6 +778,10 @@ class SubtitleHistoryManager:
                         </th>
                     </tr>
                 </thead>
+            """ if include_header else ""
+            return f"""
+            <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse: collapse; font-family: \"Segoe UI\", \"Malgun Gothic\", sans-serif;'>
+                {header_html}
                 <tbody>
                     {''.join(rows)}
                 </tbody>
@@ -808,8 +814,7 @@ class SubtitleHistoryManager:
                     </td>
                 </tr>
                 """)
-            return f"""
-            <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse: collapse; font-family: \"Segoe UI\", \"Malgun Gothic\", sans-serif;'>
+            header_html = f"""
                 <thead>
                     <tr style='background-color: #121A22; border-bottom: 2px solid #BA68C8;'>
                         <th style='color: #BA68C8; font-size: 11px; font-weight: bold; text-align: left; padding: 7px 12px;'>
@@ -817,6 +822,10 @@ class SubtitleHistoryManager:
                         </th>
                     </tr>
                 </thead>
+            """ if include_header else ""
+            return f"""
+            <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse: collapse; font-family: \"Segoe UI\", \"Malgun Gothic\", sans-serif;'>
+                {header_html}
                 <tbody>
                     {''.join(rows)}
                 </tbody>
@@ -828,8 +837,7 @@ class SubtitleHistoryManager:
         for idx, e in enumerate(entries):
             rows.append(cls.format_html_row(e, is_even=(idx % 2 == 0)))
 
-        return f"""
-        <table width='100%' cellpadding='8' cellspacing='0' style='border-collapse: collapse; font-family: \"Malgun Gothic\", \"맑은 고딕\", \"Segoe UI\", sans-serif;'>
+        header_html = f"""
             <thead>
                 <tr style='background-color: #101726; border-bottom: 2px solid #1E2A42;'>
                     <th width='12%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>{tr('history_th_time')}</th>
@@ -839,6 +847,11 @@ class SubtitleHistoryManager:
                     <th width='20%' style='color: #94A3B8; font-size: 11px; font-weight: bold; text-align: left; padding: 9px 12px;'>{tr('history_th_dub')}</th>
                 </tr>
             </thead>
+        """ if include_header else ""
+
+        return f"""
+        <table width='100%' cellpadding='8' cellspacing='0' style='border-collapse: collapse; font-family: \"Malgun Gothic\", \"맑은 고딕\", \"Segoe UI\", sans-serif;'>
+            {header_html}
             <tbody>
                 {''.join(rows)}
             </tbody>
@@ -871,20 +884,20 @@ class SubtitleHistoryManager:
 
         return f"""
         <tr style='background-color: {bg_col}; border-bottom: 1px solid #1A2438;'>
-            <td style='vertical-align: middle; padding: 10px 12px; color: #64748B; font-size: 11px; font-family: Consolas, monospace;'>
+            <td width='12%' style='vertical-align: middle; padding: 10px 12px; color: #64748B; font-size: 11px; font-family: Consolas, monospace;'>
                 {time_tag}
             </td>
-            <td style='vertical-align: middle; padding: 10px 12px;'>
+            <td width='15%' style='vertical-align: middle; padding: 10px 12px;'>
                 <div>{src_badge}</div>
                 <div style='color: #94A3B8; font-size: 10px; margin-top: 3px; font-weight: 500;'>{sub_lbl}</div>
             </td>
-            <td style='vertical-align: middle; padding: 10px 12px; color: #F1F5F9; font-size: 12px;'>
+            <td width='28%' style='vertical-align: middle; padding: 10px 12px; color: #F1F5F9; font-size: 12px;'>
                 {e.clean_orig if e.clean_orig else '<span style=\"color: #475569;\">-</span>'}
             </td>
-            <td style='vertical-align: middle; padding: 10px 12px; color: #F8FAFC; font-size: 12px; font-weight: 600;'>
+            <td width='25%' style='vertical-align: middle; padding: 10px 12px; color: #F8FAFC; font-size: 12px; font-weight: 600;'>
                 {e.clean_trans if e.clean_trans else '<span style=\"color: #475569;\">-</span>'}
             </td>
-            <td style='vertical-align: middle; padding: 10px 12px; font-size: 12px;'>
+            <td width='20%' style='vertical-align: middle; padding: 10px 12px; font-size: 12px;'>
                 {dub_col}
             </td>
         </tr>

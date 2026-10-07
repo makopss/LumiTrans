@@ -42,11 +42,15 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.is_previewing_new_sentence = False
         self.base_geometry = list(self.config.get("window_geometry", [200, 750, 900, 140]))
         self.is_auto_resizing = False
-        self.clean_text_mode = self.config.get("screen_clean_text_mode", False)
-        self.show_speaker = self.config.get("show_speaker", True)
+        self.clean_text_mode = bool(self.config.get("audio_clean_text_mode", self.config.get("screen_clean_text_mode", False)))
+        self.show_speaker = bool(self.config.get("audio_show_speaker", self.config.get("show_speaker", True)))
         self.speaker_diarization_enabled = self.config.get("speaker_diarization_enabled", False)
+        self.is_click_through = bool(self.config.get("audio_click_through", self.config.get("click_through", False)))
         self.is_user_sized = False
         self.is_user_positioned = False
+        self.is_closing = False
+        self.is_dubbing_enabled = bool(self.config.get("dubbing_enabled", False) and self.config.get("dubbing_source_audio", True))
+        self.ext_sync_show_original = None
         
         # 8방향 테두리 리사이즈 및 드래그 이동 상태 변수
         self.active_resize_edge = EDGE_NONE
@@ -78,6 +82,10 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         self.setMouseTracking(True)
 
+    def closeEvent(self, event):
+        self.is_closing = True
+        super().closeEvent(event)
+
     def showEvent(self, event):
         super().showEvent(event)
         self._apply_capture_exclusion()
@@ -89,6 +97,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def hideEvent(self, event):
         super().hideEvent(event)
+        if getattr(self, 'is_closing', False):
+            return
         if hasattr(self, 'ext_visibility_change') and self.ext_visibility_change:
             self.ext_visibility_change(False)
 
@@ -101,6 +111,81 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
                 ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
         except Exception:
             pass
+
+    def _get_font_size(self) -> int:
+        val = self.config.get("audio_font_size")
+        if val is not None:
+            return int(val)
+        return int(self.config.get("font_size", 22))
+
+    def _get_bg_opacity(self) -> float:
+        val = self.config.get("audio_overlay_bg_opacity")
+        if val is not None:
+            return self._normalize_bg_opacity(val)
+        return self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75))
+
+    def _get_stroke_width(self) -> int:
+        val = self.config.get("audio_subtitle_stroke_width")
+        if val is not None:
+            return int(val)
+        return int(self.config.get("subtitle_stroke_width", 0))
+
+    def _get_letter_spacing(self) -> float:
+        val = self.config.get("audio_letter_spacing")
+        if val is not None:
+            return float(val)
+        return float(self.config.get("letter_spacing", 2.0))
+
+    def _get_show_original(self) -> bool:
+        val = self.config.get("audio_show_original")
+        if val is not None:
+            return bool(val)
+        return bool(self.config.get("show_original", True))
+
+    def _get_show_translated(self) -> bool:
+        val = self.config.get("audio_show_translated")
+        if val is not None:
+            return bool(val)
+        return bool(self.config.get("show_translated", True))
+
+    def _get_show_speaker(self) -> bool:
+        val = self.config.get("audio_show_speaker")
+        if val is not None:
+            return bool(val)
+        return bool(self.config.get("show_speaker", True))
+
+    def _get_show_badge(self) -> bool:
+        val = self.config.get("audio_show_engine_badge")
+        if val is not None:
+            return bool(val)
+        return bool(self.config.get("show_engine_badge", True))
+
+    def _get_clean_box(self) -> bool:
+        val = self.config.get("audio_clean_box")
+        if val is not None:
+            return bool(val)
+        return bool(self.config.get("clean_box", True))
+
+    def _get_click_through(self) -> bool:
+        val = self.config.get("audio_click_through")
+        if val is not None:
+            return bool(val)
+        return bool(self.config.get("click_through", False))
+
+    def _get_clean_text_mode(self) -> bool:
+        val = self.config.get("audio_clean_text_mode")
+        if val is not None:
+            return bool(val)
+        return bool(self.config.get("clean_text_mode", False))
+
+    def _get_subtitle_duration(self) -> int:
+        val = self.config.get("audio_subtitle_duration")
+        if val is not None:
+            return int(val)
+        val = self.config.get("subtitle_duration")
+        if val is not None:
+            return int(val)
+        return 5
 
     def _init_ui(self):
         # 윈도우 기본 속성: 무테두리, 항상 위, 반투명 배경
@@ -116,7 +201,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         # 메인 레이아웃
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(14, 8, 14, 8)
-        self.main_layout.setSpacing(4)
+        self.main_layout.setSpacing(6)
 
         self.setStyleSheet("""
             QToolTip {
@@ -151,7 +236,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_pause.setFixedHeight(26)
         self.btn_pause.setFixedWidth(34)
         if init_paused:
-            self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #FF5252; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
             self.btn_pause.setToolTip(tr("overlay_pause_voice_on"))
         else:
             self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(45, 48, 62, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
@@ -163,7 +248,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.combo_engine = NoWheelComboBox()
         self.combo_engine.setToolTip(tr("overlay_tip_engine_combo"))
         self.combo_engine.setFixedHeight(26)
-        self.combo_engine.setFixedWidth(102)
+        self.combo_engine.setFixedWidth(78)
         self.combo_engine.setCursor(Qt.CursorShape.PointingHandCursor)
         self.combo_engine.addItems([
             "DeepL", "Google", "Gemini", "Groq",
@@ -195,7 +280,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         # 3. 실시간 동작 상태 뱃지 (선택 기능과 분리된 독립 인디케이터, 고정폭 Jitter 0%!)
         self.live_badge = QLabel(tr("overlay_waiting"))
         self.live_badge.setFixedHeight(26)
-        self.live_badge.setFixedWidth(150)
+        self.live_badge.setFixedWidth(86)
         self.live_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.live_badge.setToolTip(tr("overlay_tip_live_badge"))
         self.live_badge.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -216,13 +301,13 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
                 border: 1px solid rgba(255, 255, 255, 0.3);
             }
         """)
-        if not self.config.get("show_engine_badge", True):
+        if not self._get_show_badge():
             self.live_badge.hide()
         self.header_layout.addWidget(self.live_badge)
 
         # 4. 폰트 크기 미니 조절 버튼 (A- / A+)
         self.btn_font_dec = QPushButton("A-")
-        self.btn_font_dec.setToolTip(tr("overlay_tip_font_dec", size=self.config.get("font_size", 22)))
+        self.btn_font_dec.setToolTip(tr("overlay_tip_font_dec", size=self._get_font_size()))
         self.btn_font_dec.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_font_dec.setFixedHeight(26)
         self.btn_font_dec.setFixedWidth(36)
@@ -230,7 +315,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.header_layout.addWidget(self.btn_font_dec)
 
         self.btn_font_inc = QPushButton("A+")
-        self.btn_font_inc.setToolTip(tr("overlay_tip_font_inc", size=self.config.get("font_size", 22)))
+        self.btn_font_inc.setToolTip(tr("overlay_tip_font_inc", size=self._get_font_size()))
         self.btn_font_inc.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_font_inc.setFixedHeight(26)
         self.btn_font_inc.setFixedWidth(36)
@@ -238,7 +323,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.header_layout.addWidget(self.btn_font_inc)
 
         # 5. 배경 불투명도 미니 조절 버튼 (◐- / ◐+)
-        cur_op_pct = int(self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75)) * 100)
+        cur_op_pct = int(self._get_bg_opacity() * 100)
         self.btn_op_dec = QPushButton("◐-")
         self.btn_op_dec.setToolTip(tr("overlay_tip_op_dec", pct=cur_op_pct))
         self.btn_op_dec.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -272,26 +357,37 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_toggle_ko.clicked.connect(self._toggle_show_translated)
         self.header_layout.addWidget(self.btn_toggle_ko)
 
-        self._show_translated = True
+        self._show_translated = self._get_show_translated()
         self._update_en_ko_button_styles()
 
         # 5-2. 클린 텍스트 모드 토글 버튼
-        self.btn_clean = QPushButton("✨" if not self.clean_text_mode else "✨ON")
+        self.btn_clean = QPushButton("✨")
         self.btn_clean.setToolTip(tr("overlay_tip_clean"))
         self.btn_clean.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clean.setFixedHeight(26)
-        self.btn_clean.setFixedWidth(54 if self.clean_text_mode else 34)
+        self.btn_clean.setFixedWidth(34)
         self.btn_clean.clicked.connect(self.toggle_clean_mode)
         self.header_layout.addWidget(self.btn_clean)
         self._update_clean_button_style()
 
-        # 5-3. 화자 이름 표시 토글 버튼
-        self.btn_speaker = QPushButton("🗣️" if not self.show_speaker else "🗣️ON")
+        # 5-3. 실시간 AI 음성 더빙 토글 버튼
+        self.btn_dubbing = QPushButton("🔊")
+        self.btn_dubbing.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
+        self.btn_dubbing.setToolTip(tr("overlay_tip_audio_dubbing_on") if self.is_dubbing_enabled else tr("overlay_tip_audio_dubbing_off"))
+        self.btn_dubbing.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_dubbing.setFixedHeight(26)
+        self.btn_dubbing.setFixedWidth(34)
+        self.btn_dubbing.clicked.connect(self._toggle_dubbing)
+        self.header_layout.addWidget(self.btn_dubbing)
+        self._update_dubbing_button_style()
+
+        # 5-4. 화자 이름 표시 토글 버튼 (🗣️)
+        self.btn_speaker = QPushButton("🗣️")
         self.btn_speaker.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
         self.btn_speaker.setToolTip(tr("overlay_tip_speaker_on") if self.show_speaker else tr("overlay_tip_speaker_off"))
         self.btn_speaker.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_speaker.setFixedHeight(26)
-        self.btn_speaker.setFixedWidth(54 if self.show_speaker else 34)
+        self.btn_speaker.setFixedWidth(34)
         self.btn_speaker.clicked.connect(self.toggle_show_speaker)
         self.header_layout.addWidget(self.btn_speaker)
         self._update_speaker_button_style()
@@ -312,7 +408,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_lock.setToolTip(tr("overlay_tip_lock_voice"))
         self.btn_lock.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_lock.setFixedHeight(26)
-        self.btn_lock.setFixedWidth(54 if self.is_click_through else 34)
+        self.btn_lock.setFixedWidth(34)
         self.btn_lock.clicked.connect(self.toggle_click_through)
         self.header_layout.addWidget(self.btn_lock)
 
@@ -346,7 +442,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
                 color: #EEE;
                 border: 1px solid rgba(255, 255, 255, 0.18);
                 border-radius: 4px;
-                padding: 0px 4px 0px 6px;
+                padding: 0px 2px 0px 4px;
                 font-size: 11px;
                 font-weight: bold;
             }
@@ -404,12 +500,17 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
         self.main_layout.addWidget(self.label_original)
         self.main_layout.addWidget(self.label_translated)
+        self.label_original.setVisible(self._get_show_original())
+        self.label_translated.setVisible(self._show_translated)
 
-        # 우측 하단 크기 조절 그립
+        # 우측 하단 크기 조절 그립 (숨김 시에도 레이아웃 공간을 유지하여 자막 텍스트 점프/위치 왜곡 원천 차단)
         grip_layout = QHBoxLayout()
         grip_layout.addStretch()
         self.size_grip = QSizeGrip(self)
         self.size_grip.setStyleSheet("width: 12px; height: 12px; margin: 0px;")
+        sp = self.size_grip.sizePolicy()
+        sp.setRetainSizeWhenHidden(True)
+        self.size_grip.setSizePolicy(sp)
         grip_layout.addWidget(self.size_grip)
         self.main_layout.addLayout(grip_layout)
 
@@ -423,7 +524,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def _calc_label_text_boxes(self, label, pad_x=14, pad_y=4):
         """라벨(QLabel)에 렌더링된 텍스트의 각 시각적 라인별 정확한 밀착 사각형(QRect) 목록 계산 (수직 중앙 정렬 완벽 보정)"""
-        if not label or not label.isVisible():
+        if not label or label.isHidden():
             return []
         text = label.text().strip()
         if not text or text == "...":
@@ -474,33 +575,59 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         return boxes
 
     def _calc_subtitle_box_rects(self):
-        """자막 텍스트(영문/한글)의 실제 렌더링 라인별 밀착 반투명 라운드 박스 목록 계산"""
-        if getattr(self, "_is_waiting", False) or not getattr(self, "current_translated", "").strip() or self.current_translated.strip() == "...":
+        """자막 텍스트(영문/한글)의 실제 렌더링 라인별 밀착 반투명 라운드 박스 목록 계산 (완벽한 라인 분리 및 위치 동기화)"""
+        show_orig = self._get_show_original()
+        show_trans = self._get_show_translated()
+        orig_visible = bool(show_orig and hasattr(self, 'label_original') and not self.label_original.isHidden())
+        trans_visible = bool(show_trans and hasattr(self, 'label_translated') and not self.label_translated.isHidden())
+        orig = self.label_original.text() if orig_visible else ""
+        trans = self.label_translated.text() if trans_visible else ""
+
+        plain_orig = re.sub(r'<[^>]+>', '', orig).strip()
+        plain_trans = re.sub(r'<[^>]+>', '', trans).strip()
+        if not plain_orig and not plain_trans:
+            self._subtitle_box_cache = None
+            return []
+        if (not plain_orig or plain_orig == "...") and (not plain_trans or plain_trans == "..."):
             self._subtitle_box_cache = None
             return []
 
-        show_orig = self.config.get("show_original", True)
-        orig_visible = bool(show_orig and hasattr(self, 'label_original') and self.label_original.isVisible())
-        trans_visible = bool(hasattr(self, 'label_translated') and self.label_translated.isVisible())
-        orig = self.label_original.text() if orig_visible else ""
-        trans = self.label_translated.text() if trans_visible else ""
+        orig_geo = self.label_original.geometry().getRect() if orig_visible else None
+        trans_geo = self.label_translated.geometry().getRect() if trans_visible else None
+
         key = (
             self.width(),
+            self.height(),
             orig,
             trans,
             orig_visible,
             trans_visible,
-            int(self.config.get("font_size", 22)),
-            float(self.config.get("letter_spacing", 0.0)),
+            orig_geo,
+            trans_geo,
+            self._get_font_size(),
+            self._get_letter_spacing(),
         )
         cached = getattr(self, "_subtitle_box_cache", None)
         if cached and cached[0] == key:
             return cached[1]
         boxes = []
-        if orig_visible:
+        if orig_visible and plain_orig and plain_orig != "...":
             boxes.extend(self._calc_label_text_boxes(self.label_original, pad_x=12, pad_y=3))
-        if trans_visible:
+        if trans_visible and plain_trans and plain_trans != "...":
             boxes.extend(self._calc_label_text_boxes(self.label_translated, pad_x=14, pad_y=4))
+
+        # 각 라인 박스 간 최소 간격(min_gap) 보장 및 겹침 방지 처리 (2줄 이상 시 테두리/박스 중첩 원천 차단)
+        min_gap = 5
+        for i in range(1, len(boxes)):
+            prev = boxes[i - 1]
+            curr = boxes[i]
+            if curr.top() < prev.bottom() + min_gap:
+                diff = (prev.bottom() + min_gap) - curr.top()
+                shift_up = diff // 2
+                shift_down = diff - shift_up
+                boxes[i - 1] = QRect(prev.x(), prev.y() - shift_up, prev.width(), prev.height())
+                boxes[i] = QRect(curr.x(), curr.y() + shift_down, curr.width(), curr.height())
+
         self._subtitle_box_cache = (key, boxes)
         return boxes
 
@@ -519,8 +646,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
         painter.restore()
 
-        opacity = self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75))
-        clean_box_enabled = self.config.get("screen_clean_box", True)
+        opacity = self._get_bg_opacity()
+        clean_box_enabled = self._get_clean_box()
 
         # 2. 클린 텍스트 모드이거나 배경 불투명도가 0%(완전 투명)인 경우
         if self.clean_text_mode or opacity <= 0.001:
@@ -534,13 +661,13 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             if clean_box_enabled:
                 boxes = self._calc_subtitle_box_rects()
                 if boxes:
-                    box_alpha = 160 if opacity <= 0.001 else max(150, int(opacity * 255))
+                    box_alpha = 185 if opacity <= 0.001 else max(150, int(opacity * 255))
                     path = QPainterPath()
                     path.setFillRule(Qt.FillRule.WindingFill)
                     for b_rect in boxes:
                         path.addRoundedRect(QRectF(b_rect), 6, 6)
+                    painter.fillPath(path, QBrush(QColor(8, 12, 20, box_alpha)))
                     painter.setPen(Qt.PenStyle.NoPen)
-                    painter.fillPath(path, QBrush(QColor(10, 15, 24, box_alpha)))
             return
 
         # 3. 일반 창 모드: 배경 불투명도 > 0%
@@ -553,17 +680,17 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         rect = self.rect().adjusted(1, 1, -1, -1)
         painter.drawRoundedRect(rect, 12, 12)
 
+        # 4. 반투명 배경 박스 (각 줄 뒤의 검은 막대) 렌더링 (아웃라인 테두리 없이 깔끔한 다크 바)
         if clean_box_enabled:
             boxes = self._calc_subtitle_box_rects()
             if boxes:
-                # 창 프레임 배경 위에서도 자막 대비감을 위해 더 짙은 반투명 박스 렌더링
-                box_alpha = min(220, alpha + 45)
+                box_alpha = min(245, alpha + 60)
                 path = QPainterPath()
                 path.setFillRule(Qt.FillRule.WindingFill)
                 for b_rect in boxes:
                     path.addRoundedRect(QRectF(b_rect), 6, 6)
+                painter.fillPath(path, QBrush(QColor(6, 8, 14, box_alpha)))
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.fillPath(path, QBrush(QColor(10, 15, 24, box_alpha)))
 
     def _label_sheet(self, size, *, bold=False, italic=False):
         extra = "font-weight: bold;" if bold else ""
@@ -574,8 +701,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         if html is None or html == "":
             return html
         if center:
-            return f"<div style='color:{color};text-align:center'>{html}</div>"
-        return f"<span style='color:{color}'>{html}</span>"
+            return f"<div style='color:{color};text-align:center;line-height:135%;'>{html}</div>"
+        return f"<div style='color:{color};line-height:135%;'>{html}</div>"
 
     def _set_label_html(self, label, html, color):
         label.setText(self._html_body(html, color, center=True))
@@ -588,9 +715,9 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def _auto_fit_text(self, original_text: str, translated_text: str, adjust_window: bool = True):
         """설정한 글자 크기를 유지한다. 창 크기에 따라 축소하지 않는다."""
-        font_size = int(self.config.get("font_size", 22))
-        show_orig = self.config.get("show_original", True) and bool((original_text or "").strip())
-        letter_spacing = float(self.config.get("letter_spacing", 2.0))
+        font_size = self._get_font_size()
+        show_orig = self._get_show_original() and bool((original_text or "").strip())
+        letter_spacing = self._get_letter_spacing()
         self._apply_fixed_fonts(font_size, letter_spacing, show_orig, adjust_window=adjust_window)
 
     def _apply_fixed_fonts(self, font_size: int, letter_spacing: float, show_orig: bool, adjust_window: bool = True):
@@ -618,7 +745,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def _apply_text_effect(self):
         """텍스트 효과 적용 (0px: 순수 네이티브 소프트 섀도우, 1px+: 고대비 외곽선)"""
-        stroke_w = self.config.get("subtitle_stroke_width", 0)
+        stroke_w = self._get_stroke_width()
         if stroke_w == 0:
             shadow = QGraphicsDropShadowEffect(self.label_translated)
             shadow.setBlurRadius(5)
@@ -641,18 +768,56 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self.stroke_effect = eff
             self.orig_stroke_effect = orig_eff
 
+    def _refresh_current_subtitle(self):
+        """현재 화면에 렌더링 중인 자막을 새 폰트 크기/자간/외곽선 스타일로 즉시 재포맷 및 리페인트"""
+        if not getattr(self, "current_translated", None):
+            return
+        if getattr(self, "_is_waiting", False):
+            return
+        orig = getattr(self, "current_original", "") or ""
+        trans = getattr(self, "current_translated", "") or ""
+        format_func = getattr(self, '_format_speaker_text', lambda t: t)
+        display_ko = format_func(trans)
+        display_en = format_func(orig)
+        target_lang = self.config.get("target_lang", "ko")
+        from src.subtitle_manager import break_subtitle_text, smart_break_sentences
+        formatted_ko = break_subtitle_text(display_ko, target_lang=target_lang, linebreak="<br>")
+        formatted_en = smart_break_sentences(display_en, linebreak="<br>")
+        self._auto_fit_text(formatted_en, formatted_ko)
+        self._set_label_html(self.label_original, formatted_en, self._original_color())
+        self._set_label_html(self.label_translated, formatted_ko, self._translated_color())
+        self._subtitle_box_cache = None
+        self.update()
+
     def set_stroke_width(self, val: int):
         """외곽선 굵기 또는 섀도우 모드 동적 변경 (0=순수 섀도우, 1~5=외곽선)"""
+        self.config["audio_subtitle_stroke_width"] = int(val)
         self.config["subtitle_stroke_width"] = int(val)
         self._apply_text_effect()
+        self._subtitle_box_cache = None
+        self._refresh_current_subtitle()
         self.update()
+        if hasattr(self, 'label_translated'):
+            self.label_translated.update()
+        if hasattr(self, 'label_original'):
+            self.label_original.update()
         if self.on_config_change:
             self.on_config_change(self.config)
 
     def set_letter_spacing(self, val: float):
         """글자 자간(간격) 동적 변경 (외곽선 뭉침 방지 및 가독성 향상)"""
+        self.config["audio_letter_spacing"] = float(val)
         self.config["letter_spacing"] = float(val)
+        self._last_orig_style_key = None
+        self._last_trans_style_key = None
         self._apply_config()
+        self._subtitle_box_cache = None
+        self._refresh_current_subtitle()
+        self.update()
+        if hasattr(self, 'label_translated'):
+            self.label_translated.update()
+        if hasattr(self, 'label_original'):
+            self.label_original.update()
         if self.on_config_change:
             self.on_config_change(self.config)
 
@@ -661,13 +826,18 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def set_clean_box(self, enabled: bool):
         """자막 배경 박스(반투명 라운드 박스) 렌더링 온/오프"""
-        self.config["screen_clean_box"] = bool(enabled)
+        self.config["audio_clean_box"] = bool(enabled)
+        self.config["clean_box"] = bool(enabled)
+        self._subtitle_box_cache = None
+        self._refresh_current_subtitle()
         self.update()
+        self.repaint()
         if self.on_config_change:
             self.on_config_change(self.config)
 
     def set_show_original(self, enabled: bool):
         """원문 함께 표시 온/오프"""
+        self.config["audio_show_original"] = bool(enabled)
         self.config["show_original"] = bool(enabled)
         if hasattr(self, 'label_original'):
             self.label_original.setVisible(bool(enabled))
@@ -676,35 +846,44 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         if self.on_config_change:
             self.on_config_change(self.config)
         self._update_en_ko_button_styles()
+        if hasattr(self, 'ext_sync_show_original') and self.ext_sync_show_original:
+            self.ext_sync_show_original(enabled)
 
-    def _toggle_show_original(self):
-        """원문 버튼 클릭: 원문 표시 토글"""
-        new_val = not self.config.get("show_original", True)
-        if not new_val and not getattr(self, '_show_translated', True):
-            return
-        self.set_show_original(new_val)
-
-    def _toggle_show_translated(self):
-        """번역 버튼 클릭: 번역문 표시 토글"""
-        new_val = not getattr(self, '_show_translated', True)
-        if not new_val and not self.config.get("show_original", True):
-            return
-        self._show_translated = new_val
-        self.config["show_translated"] = new_val
+    def set_show_translated(self, enabled: bool):
+        """번역문 함께 표시 온/오프"""
+        self._show_translated = bool(enabled)
+        self.config["audio_show_translated"] = bool(enabled)
+        self.config["show_translated"] = bool(enabled)
         if hasattr(self, 'label_translated'):
-            self.label_translated.setVisible(new_val)
+            self.label_translated.setVisible(bool(enabled))
         self._apply_config()
         self.update()
         if self.on_config_change:
             self.on_config_change(self.config)
         self._update_en_ko_button_styles()
+        if hasattr(self, 'ext_sync_show_translated') and self.ext_sync_show_translated:
+            self.ext_sync_show_translated(enabled)
+
+    def _toggle_show_original(self):
+        """원문 버튼 클릭: 원문 표시 토글"""
+        new_val = not self._get_show_original()
+        if not new_val and not self._get_show_translated():
+            return
+        self.set_show_original(new_val)
+
+    def _toggle_show_translated(self):
+        """번역 버튼 클릭: 번역문 표시 토글"""
+        new_val = not self._get_show_translated()
+        if not new_val and not self._get_show_original():
+            return
+        self.set_show_translated(new_val)
 
     def _update_en_ko_button_styles(self):
         """원문/번역 토글 버튼의 활성/비활성 스타일 및 툴팁 업데이트"""
         if not hasattr(self, 'btn_toggle_en'):
             return
-        en_on = self.config.get("show_original", True)
-        ko_on = getattr(self, '_show_translated', True)
+        en_on = self._get_show_original()
+        ko_on = self._get_show_translated()
         style_on = (
             "QPushButton { background-color: rgba(0, 150, 136, 0.85); "
             "color: #FFFFFF; font-weight: bold; "
@@ -727,6 +906,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def set_clean_mode(self, enabled: bool):
         self.clean_text_mode = enabled
+        self.config["audio_clean_text_mode"] = enabled
         self.config["screen_clean_text_mode"] = enabled
         self._update_clean_button_style()
         if self.clean_text_mode:
@@ -736,7 +916,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._set_header_chrome_opacity(1.0 if self._controls_in_use() else 0.35)
             if not self.is_click_through:
                 self.size_grip.show()
-        if self.config.get("show_original", True):
+        if self._get_show_original():
             self.label_original.show()
         else:
             self.label_original.hide()
@@ -749,13 +929,11 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
     def _update_clean_button_style(self):
         if not hasattr(self, 'btn_clean'):
             return
+        self.btn_clean.setText("✨")
+        self.btn_clean.setFixedWidth(34)
         if self.clean_text_mode:
-            self.btn_clean.setText("✨ON")
-            self.btn_clean.setFixedWidth(54)
-            self.btn_clean.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_clean.setStyleSheet("QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #64FFDA; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
         else:
-            self.btn_clean.setText("✨")
-            self.btn_clean.setFixedWidth(34)
             self.btn_clean.setStyleSheet("QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
 
     def _cursor_over_window(self):
@@ -770,18 +948,16 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         )
 
     def toggle_show_speaker(self):
-        if not getattr(self, 'speaker_diarization_enabled', False):
-            return
         self.set_show_speaker(not self.show_speaker)
 
     def set_speaker_diarization_enabled(self, enabled: bool):
         self.speaker_diarization_enabled = bool(enabled)
-        self._update_speaker_button_style()
 
     def set_show_speaker(self, enabled: bool):
         enabled = bool(enabled)
         already_same = (getattr(self, 'show_speaker', None) == enabled)
         self.show_speaker = enabled
+        self.config["audio_show_speaker"] = enabled
         self.config["show_speaker"] = enabled
         self._update_speaker_button_style()
         if getattr(self, 'current_translated', None):
@@ -795,36 +971,73 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
     def _update_speaker_button_style(self):
         if not hasattr(self, 'btn_speaker'):
             return
-        diar_enabled = getattr(self, 'speaker_diarization_enabled', False)
-        if not diar_enabled:
-            self.btn_speaker.setEnabled(False)
-            self.btn_speaker.setText("🗣️")
-            self.btn_speaker.setFixedWidth(34)
-            self.btn_speaker.setCursor(Qt.CursorShape.ForbiddenCursor)
+        self.btn_speaker.setEnabled(True)
+        self.btn_speaker.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_speaker.setText("🗣️")
+        self.btn_speaker.setFixedWidth(34)
+        if self.show_speaker:
             self.btn_speaker.setStyleSheet(
-                "QPushButton, QPushButton:disabled { background-color: rgba(30, 40, 55, 0.35); color: #666; font-weight: normal; "
+                "QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; "
+                "border: 1.5px solid #64FFDA; "
                 "border-radius: 4px; padding: 0px 2px; font-size: 11px; }"
             )
-            self.btn_speaker.setToolTip(tr("overlay_tip_speaker_disabled"))
+            self.btn_speaker.setToolTip(tr("overlay_tip_speaker_on"))
         else:
-            self.btn_speaker.setEnabled(True)
-            self.btn_speaker.setCursor(Qt.CursorShape.PointingHandCursor)
-            if self.show_speaker:
-                self.btn_speaker.setText("🗣️ON")
-                self.btn_speaker.setFixedWidth(54)
-                self.btn_speaker.setStyleSheet(
-                    "QPushButton { background-color: rgba(0, 150, 136, 0.85); color: #FFF; font-weight: bold; "
-                    "border-radius: 4px; padding: 0px 2px; font-size: 11px; }"
-                )
-                self.btn_speaker.setToolTip(tr("overlay_tip_speaker_on"))
-            else:
-                self.btn_speaker.setText("🗣️")
-                self.btn_speaker.setFixedWidth(34)
-                self.btn_speaker.setStyleSheet(
-                    "QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; "
-                    "border-radius: 4px; padding: 0px 2px; font-size: 11px; }"
-                )
-                self.btn_speaker.setToolTip(tr("overlay_tip_speaker_off"))
+            self.btn_speaker.setStyleSheet(
+                "QPushButton { background-color: rgba(30, 40, 55, 0.75); color: #EEE; font-weight: bold; "
+                "border-radius: 4px; padding: 0px 2px; font-size: 11px; }"
+            )
+            self.btn_speaker.setToolTip(tr("overlay_tip_speaker_off"))
+        self.btn_speaker.show()
+
+    def _update_dubbing_button_style(self):
+        if not hasattr(self, 'btn_dubbing'):
+            return
+        self.btn_dubbing.setText("🔊")
+        self.btn_dubbing.setFixedWidth(34)
+        if self.is_dubbing_enabled:
+            self.btn_dubbing.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(16, 185, 129, 0.85);
+                    color: #FFFFFF;
+                    font-weight: bold;
+                    border: 1.5px solid #34D399;
+                    border-radius: 4px;
+                    padding: 0px 2px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(5, 150, 105, 0.95);
+                    border: 1.5px solid #6EE7B7;
+                }
+            """)
+            self.btn_dubbing.setToolTip(tr("overlay_tip_audio_dubbing_on"))
+        else:
+            self.btn_dubbing.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(45, 48, 62, 0.75);
+                    color: #EEE;
+                    border: 1px solid rgba(255, 255, 255, 0.18);
+                    border-radius: 4px;
+                    padding: 0px 2px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: rgba(75, 82, 110, 0.95);
+                }
+            """)
+            self.btn_dubbing.setToolTip(tr("overlay_tip_audio_dubbing_off"))
+
+    def update_dubbing_state(self, enabled: bool):
+        self.is_dubbing_enabled = bool(enabled)
+        self._update_dubbing_button_style()
+
+    def _toggle_dubbing(self):
+        if hasattr(self, 'ext_toggle_dubbing') and self.ext_toggle_dubbing:
+            self.ext_toggle_dubbing()
+        else:
+            self.update_dubbing_state(not self.is_dubbing_enabled)
 
     def _format_speaker_text(self, text: str) -> str:
         """화자 표시 설정(show_speaker)에 따라 화자 태그 필터링"""
@@ -837,12 +1050,12 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         return text
 
     def _apply_config(self):
-        font_size = int(self.config.get("font_size", 22))
-        letter_spacing = float(self.config.get("letter_spacing", 2.0))
-        show_orig = self.config.get("show_original", True)
+        font_size = self._get_font_size()
+        letter_spacing = self._get_letter_spacing()
+        show_orig = self._get_show_original()
         self._apply_fixed_fonts(font_size, letter_spacing, show_orig)
 
-        if self.config.get("click_through", False):
+        if self._get_click_through():
             self.set_click_through(True)
 
         if hasattr(self, 'label_original'):
@@ -854,7 +1067,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._apply_two_line_overlay_height()
 
         if hasattr(self, 'live_badge'):
-            self.live_badge.setVisible(self.config.get("show_engine_badge", True))
+            self.live_badge.setVisible(self._get_show_badge())
 
         if hasattr(self, '_update_clean_button_style'):
             self._update_clean_button_style()
@@ -863,18 +1076,16 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._update_speaker_button_style()
 
         if hasattr(self, 'btn_font_dec'):
-            font_size = self.config.get("font_size", 22)
             self.btn_font_dec.setToolTip(tr("overlay_tip_font_dec", size=font_size))
         if hasattr(self, 'btn_font_inc'):
-            font_size = self.config.get("font_size", 22)
             self.btn_font_inc.setToolTip(tr("overlay_tip_font_inc", size=font_size))
 
         if hasattr(self, 'btn_op_dec') and hasattr(self, 'btn_op_inc'):
-            pct = int(self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75)) * 100)
+            pct = int(self._get_bg_opacity() * 100)
             self.btn_op_dec.setToolTip(tr("overlay_tip_op_dec_100", pct=pct) if pct == 0 else tr("overlay_tip_op_dec", pct=pct))
             self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=pct))
 
-        stroke_w = self.config.get("subtitle_stroke_width", 0)
+        stroke_w = self._get_stroke_width()
         if stroke_w == 0:
             if not isinstance(getattr(self, 'stroke_effect', None), QGraphicsDropShadowEffect):
                 self._apply_text_effect()
@@ -913,11 +1124,12 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
                 self.live_badge.setText(tr("overlay_waiting"))
             else:
                 self.update_live_display()
+        font_size = self._get_font_size()
         if hasattr(self, "btn_font_dec") and self.btn_font_dec:
-            self.btn_font_dec.setToolTip(tr("overlay_tip_font_dec", size=self.config.get("font_size", 22)))
+            self.btn_font_dec.setToolTip(tr("overlay_tip_font_dec", size=font_size))
         if hasattr(self, "btn_font_inc") and self.btn_font_inc:
-            self.btn_font_inc.setToolTip(tr("overlay_tip_font_inc", size=self.config.get("font_size", 22)))
-        cur_op_pct = int(self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75)) * 100)
+            self.btn_font_inc.setToolTip(tr("overlay_tip_font_inc", size=font_size))
+        cur_op_pct = int(self._get_bg_opacity() * 100)
         if hasattr(self, "btn_op_dec") and self.btn_op_dec:
             self.btn_op_dec.setToolTip(tr("overlay_tip_op_dec_100", pct=cur_op_pct) if cur_op_pct == 0 else tr("overlay_tip_op_dec", pct=cur_op_pct))
         if hasattr(self, "btn_op_inc") and self.btn_op_inc:
@@ -938,6 +1150,13 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             if not getattr(self, "current_translated", None):
                 self._set_label_html(self.label_translated, tr("overlay_voice_placeholder"), "#FFFFFF")
 
+        if hasattr(self, 'clear_timer'):
+            dur = self._get_subtitle_duration() if hasattr(self, '_get_subtitle_duration') else 5
+            if dur == 0:
+                self.clear_timer.stop()
+            elif dur > 0 and getattr(self, 'current_translated', None) and not getattr(self, 'is_mouse_hovered', False):
+                self.clear_timer.start(dur * 1000)
+
         self.update()
 
     def toggle_live_badge_dimmed(self):
@@ -954,8 +1173,9 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def set_badge_visible(self, visible: bool):
         """컨트롤 패널 설정창에서 뱃지 표시 여부 설정 및 저장"""
-        self.config["show_engine_badge"] = visible
-        self.live_badge.setVisible(visible)
+        self.config["audio_show_engine_badge"] = bool(visible)
+        self.config["show_engine_badge"] = bool(visible)
+        self.live_badge.setVisible(bool(visible))
         if self.on_config_change:
             self.on_config_change(self.config)
 
@@ -1052,14 +1272,23 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         else:
             dot_color = "#81C784"
 
-        tag_text = f"{hw} &middot; {engine}"
+        # STT 약어 단축 매핑 (86px 뱃지 폭 최적화)
+        hw_short_map = {
+            "Deepgram": "DG",
+            "SenseVoice": "SV",
+            "Moonshine": "MS",
+            "Parakeet": "PK",
+        }
+        hw_disp = hw_short_map.get(hw, hw)
+
+        tag_text = f"{hw_disp} &middot; {engine}"
         if is_fallback:
             # 고정폭 배지를 넘치면 "(폴백)" 글자는 빼고 호박색 점과 툴팁으로만 알린다
             font = QFont(self.live_badge.font())
             font.setPixelSize(10)
             font.setBold(True)
             fallback_label = f" ({tr('badge_fallback')})"
-            if QFontMetrics(font).horizontalAdvance(f"• {hw} · {engine}{fallback_label}") + 12 <= self.live_badge.width():
+            if QFontMetrics(font).horizontalAdvance(f"• {hw_disp} · {engine}{fallback_label}") + 10 <= self.live_badge.width():
                 tag_text += fallback_label
             reasons = []
             if stt_fallback:
@@ -1069,6 +1298,17 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self.live_badge.setToolTip(" | ".join(reasons) + tr("badge_temporary_issue"))
         else:
             self.live_badge.setToolTip(tr("badge_voice_status_tip", hw=hw, engine=engine))
+
+        # 뱃지 폭 초과 방지 가드 (elidedText 적용)
+        font = QFont(self.live_badge.font())
+        font.setPixelSize(10)
+        font.setBold(True)
+        fm = QFontMetrics(font)
+        available_w = max(20, self.live_badge.width() - 14)
+        clean_label = tag_text.replace("&middot;", "·")
+        if fm.horizontalAdvance(clean_label) > available_w:
+            elided = fm.elidedText(clean_label, Qt.TextElideMode.ElideRight, available_w)
+            tag_text = elided.replace("·", "&middot;")
 
         self.live_badge.setText(f"<span style='color: {dot_color}; font-size: 8px;'>&bull;</span> <span style='color: rgba(255, 255, 255, 0.85); font-size: 9.5px; font-weight: bold;'>{tag_text}</span>")
 
@@ -1093,7 +1333,11 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         format_func = getattr(self, '_format_speaker_text', lambda t: t)
         display_partial = format_func(partial_text)
         self._set_label_html(self.label_original, display_partial, self._original_color())
-        self.clear_timer.start(8000)
+        dur = self._get_subtitle_duration() if hasattr(self, '_get_subtitle_duration') else 5
+        if dur == 0:
+            self.clear_timer.stop()
+        elif dur > 0 and not getattr(self, 'is_mouse_hovered', False):
+            self.clear_timer.start(dur * 1000)
         if hasattr(self, 'idle_timer'):
             self.idle_timer.start(3500)
 
@@ -1170,8 +1414,16 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._typewriter_timer.stop()
         self._set_label_html(self.label_translated, formatted_ko, self._translated_color())
         
-        # 8초 후 자동 지우기
-        self.clear_timer.start(8000)
+        # 자막 유지 시간 (초): 0이면 새 자막이 올 때까지 영구 유지 (무제한)
+        if hasattr(self, '_get_subtitle_duration'):
+            dur = self._get_subtitle_duration()
+        else:
+            cfg = getattr(self, 'config', {}) or {}
+            dur = int(cfg.get('audio_subtitle_duration', cfg.get('subtitle_duration', 5)))
+        if dur == 0:
+            self.clear_timer.stop()
+        elif dur > 0 and not getattr(self, 'is_mouse_hovered', False):
+            self.clear_timer.start(dur * 1000)
         if hasattr(self, 'idle_timer'):
             self.idle_timer.start(3500)
         self.update()
@@ -1187,7 +1439,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._set_label_html(self.label_translated, "...", self._translated_color())
         self.update()
 
-    def set_external_handlers(self, on_toggle_pause=None, on_change_engine=None, on_open_settings=None, on_sync_opacity=None, on_visibility_change=None, on_sync_font=None, on_sync_click_through=None, on_sync_clean_text=None, on_sync_show_speaker=None):
+    def set_external_handlers(self, on_toggle_pause=None, on_change_engine=None, on_open_settings=None, on_sync_opacity=None, on_visibility_change=None, on_sync_font=None, on_sync_click_through=None, on_sync_clean_text=None, on_sync_show_speaker=None, on_toggle_dubbing=None, on_sync_show_original=None, on_sync_show_translated=None):
         self.ext_toggle_pause = on_toggle_pause
         self.ext_change_engine = on_change_engine
         self.ext_open_settings = on_open_settings
@@ -1197,13 +1449,16 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.ext_sync_click_through = on_sync_click_through
         self.ext_sync_clean_text = on_sync_clean_text
         self.ext_sync_show_speaker = on_sync_show_speaker
+        self.ext_toggle_dubbing = on_toggle_dubbing
+        self.ext_sync_show_original = on_sync_show_original
+        self.ext_sync_show_translated = on_sync_show_translated
 
     def set_paused_state(self, is_paused: bool):
         """일시정지 / 재생 상태에 따른 버튼 텍스트 및 스타일 동기화"""
         self._audio_paused = bool(is_paused)
         if is_paused:
             self.btn_pause.setText("▶")
-            self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
+            self.btn_pause.setStyleSheet("QPushButton { background-color: rgba(180, 40, 40, 0.85); color: #FFF; font-weight: bold; border: 1.5px solid #FF5252; border-radius: 4px; padding: 0px 2px; font-size: 11px; }")
             self.btn_pause.setToolTip(tr("overlay_pause_voice_on"))
         else:
             self.btn_pause.setText("⏸")
@@ -1222,27 +1477,57 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def update_font_size(self, val: int):
         """글꼴 크기 외부 설정 반영"""
+        self.config["audio_font_size"] = int(val)
         self.config["font_size"] = int(val)
         self._last_orig_style_key = None
         self._last_trans_style_key = None
         self._apply_config()
         self._apply_two_line_overlay_height(follow_font=True)
+        self._subtitle_box_cache = None
+        self._refresh_current_subtitle()
+        self.update()
+        if hasattr(self, 'label_translated'):
+            self.label_translated.update()
+        if hasattr(self, 'label_original'):
+            self.label_original.update()
         if self.on_config_change:
             self.on_config_change(self.config)
 
     def update_opacity(self, pct: float):
         """배경 불투명도 외부 설정 반영 (0.0~1.0 또는 0~100)"""
         val = self._normalize_bg_opacity(pct)
+        self.config["audio_overlay_bg_opacity"] = float(val)
         self.config["overlay_bg_opacity"] = float(val)
         self.update()
+        pct_int = int(val * 100)
+        dec_txt = tr("overlay_tip_op_dec_100", pct=pct_int) if pct_int == 0 else tr("overlay_tip_op_dec", pct=pct_int)
+        if hasattr(self, 'btn_op_dec'):
+            self.btn_op_dec.setToolTip(dec_txt)
+        if hasattr(self, 'btn_op_inc'):
+            self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=pct_int))
         if self.on_config_change:
             self.on_config_change(self.config)
 
     set_font_size = update_font_size
     set_bg_opacity = update_opacity
 
+    def update_duration(self, val: int):
+        val = max(0, int(val))
+        self.config["audio_subtitle_duration"] = val
+        self.config["subtitle_duration"] = val
+        if hasattr(self, 'clear_timer'):
+            if val == 0:
+                self.clear_timer.stop()
+            elif val > 0 and getattr(self, 'current_translated', None) and not getattr(self, 'is_mouse_hovered', False):
+                self.clear_timer.start(val * 1000)
+        if self.on_config_change:
+            self.on_config_change(self.config)
+
+    set_subtitle_duration = update_duration
+
     def _decrease_font(self):
-        cur = max(14, self.config.get("font_size", 22) - 2)
+        cur = max(14, self._get_font_size() - 2)
+        self.config["audio_font_size"] = cur
         self.config["font_size"] = cur
         if self.on_config_change:
             self.on_config_change(self.config)
@@ -1250,11 +1535,19 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._last_trans_style_key = None
         self._apply_config()
         self._apply_two_line_overlay_height(follow_font=True)
+        self._subtitle_box_cache = None
+        self._refresh_current_subtitle()
+        self.update()
+        if hasattr(self, 'label_translated'):
+            self.label_translated.update()
+        if hasattr(self, 'label_original'):
+            self.label_original.update()
         if hasattr(self, 'ext_sync_font') and self.ext_sync_font:
             self.ext_sync_font(cur)
 
     def _increase_font(self):
-        cur = min(40, self.config.get("font_size", 22) + 2)
+        cur = min(40, self._get_font_size() + 2)
+        self.config["audio_font_size"] = cur
         self.config["font_size"] = cur
         if self.on_config_change:
             self.on_config_change(self.config)
@@ -1262,31 +1555,44 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._last_trans_style_key = None
         self._apply_config()
         self._apply_two_line_overlay_height(follow_font=True)
+        self._subtitle_box_cache = None
+        self._refresh_current_subtitle()
+        self.update()
+        if hasattr(self, 'label_translated'):
+            self.label_translated.update()
+        if hasattr(self, 'label_original'):
+            self.label_original.update()
         if hasattr(self, 'ext_sync_font') and self.ext_sync_font:
             self.ext_sync_font(cur)
 
     def _decrease_opacity(self):
-        cur = round(max(0.0, self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75)) - 0.10), 2)
+        cur = round(max(0.0, self._get_bg_opacity() - 0.10), 2)
+        self.config["audio_overlay_bg_opacity"] = cur
         self.config["overlay_bg_opacity"] = cur
         if self.on_config_change:
             self.on_config_change(self.config)
         self.update()
         pct = int(cur * 100)
         dec_txt = tr("overlay_tip_op_dec_100", pct=pct) if pct == 0 else tr("overlay_tip_op_dec", pct=pct)
-        self.btn_op_dec.setToolTip(dec_txt)
-        self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=pct))
+        if hasattr(self, 'btn_op_dec'):
+            self.btn_op_dec.setToolTip(dec_txt)
+        if hasattr(self, 'btn_op_inc'):
+            self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=pct))
         if hasattr(self, 'ext_sync_opacity') and self.ext_sync_opacity:
             self.ext_sync_opacity(pct)
 
     def _increase_opacity(self):
-        cur = round(min(1.0, self._normalize_bg_opacity(self.config.get("overlay_bg_opacity", 0.75)) + 0.10), 2)
+        cur = round(min(1.0, self._get_bg_opacity() + 0.10), 2)
+        self.config["audio_overlay_bg_opacity"] = cur
         self.config["overlay_bg_opacity"] = cur
         if self.on_config_change:
             self.on_config_change(self.config)
         self.update()
         pct = int(cur * 100)
-        self.btn_op_dec.setToolTip(tr("overlay_tip_op_dec_100", pct=pct) if pct == 0 else tr("overlay_tip_op_dec", pct=pct))
-        self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=pct))
+        if hasattr(self, 'btn_op_dec'):
+            self.btn_op_dec.setToolTip(tr("overlay_tip_op_dec_100", pct=pct) if pct == 0 else tr("overlay_tip_op_dec", pct=pct))
+        if hasattr(self, 'btn_op_inc'):
+            self.btn_op_inc.setToolTip(tr("overlay_tip_op_inc", pct=pct))
         if hasattr(self, 'ext_sync_opacity') and self.ext_sync_opacity:
             self.ext_sync_opacity(pct)
 
@@ -1299,6 +1605,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def set_click_through(self, enabled: bool):
         self.is_click_through = enabled
+        self.config["audio_click_through"] = enabled
         self.config["click_through"] = enabled
         if self.on_config_change:
             self.on_config_change(self.config)
@@ -1309,9 +1616,9 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         if enabled:
             self.title_label.setText(tr("overlay_click_through_active_voice"))
             self.title_label.setStyleSheet("QLabel { color: rgba(100, 255, 100, 0.9); font-size: 11px; font-weight: bold; }")
-            self.btn_lock.setText("🔓ON")
-            self.btn_lock.setFixedWidth(54)
-            self.btn_lock.setStyleSheet("QPushButton { background-color: rgba(30, 140, 50, 0.9); color: #FFF; border: 1px solid rgba(100, 255, 120, 0.8); border-radius: 4px; padding: 0px 2px; font-size: 11px; font-weight: bold; }")
+            self.btn_lock.setText("🔓")
+            self.btn_lock.setFixedWidth(34)
+            self.btn_lock.setStyleSheet("QPushButton { background-color: rgba(30, 140, 50, 0.9); color: #FFF; border: 1.5px solid #69F0AE; border-radius: 4px; padding: 0px 2px; font-size: 11px; font-weight: bold; }")
             self.size_grip.hide()
             self._set_header_chrome_opacity(0.35)
         else:
@@ -1419,6 +1726,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.size_grip.hide()
         # 주의: 자막 원문(label_original)을 idle 상태라고 해서 임의로 숨기면(hide)
         # 자막 텍스트와 배경 박스의 수직 위치가 불일치해지고 상하 박스가 비어 보이는 심각한 디싱크가 발생하므로 절대 hide하지 않는다.
+        self._subtitle_box_cache = None
         self.update()
 
     def enterEvent(self, event):
@@ -1435,6 +1743,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._set_header_chrome_opacity(1.0)
             self.size_grip.show()
         self.idle_timer.start(3500)
+        self._subtitle_box_cache = None
         self.update()
 
     def leaveEvent(self, event):
@@ -1449,8 +1758,10 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         else:
             self._set_header_chrome_opacity(0.0)
         self.idle_timer.start(1500)
-        if getattr(self, 'current_translated', None) and hasattr(self, 'clear_timer'):
-            self.clear_timer.start(8000)
+        dur = self._get_subtitle_duration() if hasattr(self, '_get_subtitle_duration') else 5
+        if dur > 0 and getattr(self, 'current_translated', None) and hasattr(self, 'clear_timer'):
+            self.clear_timer.start(dur * 1000)
+        self._subtitle_box_cache = None
         self.update()
 
     def _get_resize_edges(self, pos: QPoint) -> int:
@@ -1534,6 +1845,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._set_header_chrome_opacity(1.0)
             if not self.is_click_through:
                 self.size_grip.show()
+            self._subtitle_box_cache = None
             self.update()
         self.idle_timer.start(3500)
 
@@ -1618,6 +1930,7 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._subtitle_box_cache = None
         if self._reject_unwanted_resize():
             return
 

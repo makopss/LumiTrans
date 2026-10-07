@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from src.i18n import tr
 from src.engine_badge import (configured_stt_label, configured_translation_label,  # noqa: E402
                               stt_badge, translation_badge)
 
@@ -45,7 +46,7 @@ class TranslationBadge(unittest.TestCase):
         self.assertEqual(translation_badge("Google (exaone7b 폴백)", cfg), ("Google", True))
         # 다른 PC 로그: "GPU + MyMemory" 가 이전에는 선택 엔진(EXAONE)으로 표시되었다
         self.assertEqual(translation_badge("MyMemory", cfg), ("MyMemory", True))
-        self.assertEqual(translation_badge("원문 유지", cfg), ("원문", True))
+        self.assertEqual(translation_badge("원문 유지", cfg), (tr("original"), True))
         self.assertEqual(translation_badge("Groq Qwen (Google 폴백)", {"translation_engine": "google"}), ("Groq", True))
 
     def test_ollama(self):

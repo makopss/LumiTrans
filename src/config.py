@@ -65,6 +65,28 @@ DEFAULT_CONFIG = {
     "overlay_bg_opacity": 0.75,      # 자막 배경 불투명도
     "text_color": "#FFFFFF",         # 한글 텍스트 색상
     "original_color": "#BBBBBB",     # 영어 텍스트 색상
+    # 음성 자막 독립 설정 (None이면 font_size, overlay_bg_opacity 등 공통 설정 상속)
+    "audio_font_size": None,
+    "audio_overlay_bg_opacity": None,
+    "audio_subtitle_stroke_width": None,
+    "audio_letter_spacing": None,
+    "audio_show_speaker": None,
+    "audio_show_original": None,
+    "audio_show_engine_badge": None,
+    "audio_click_through": None,
+    "audio_clean_text_mode": None,
+    "audio_clean_box": None,
+    # 화면 자막 독립 설정 (None이면 font_size, overlay_bg_opacity 등 공통 설정 상속)
+    "screen_font_size": None,
+    "screen_overlay_bg_opacity": None,
+    "screen_subtitle_stroke_width": None,
+    "screen_letter_spacing": None,
+    "screen_show_speaker": None,
+    "screen_show_original": None,
+    "screen_show_engine_badge": None,
+    "screen_click_through": None,
+    "screen_clean_text_mode": None,
+    "screen_clean_box": None,
     "sentence_mode": True,           # 문장 단위 완결형 번역 모드
     "translation_engine": "google",  # 저사양 호환 기본값 (google, deepl, gemini, groq, exaone, gemma, hymt)
     "google_api_key": "",            # Google Cloud Translation API v2 Key (선택 사항, 공식 API 키)
@@ -93,7 +115,9 @@ DEFAULT_CONFIG = {
     "screen_click_through": False,           # 화면 자막 창 마우스 관통 여부
     "screen_snap_to_roi": False,             # 관심 영역 주변 자동 밀착(Snap) 모드 여부
     "screen_ocr_preprocess": True,           # 게임 폰트 CLAHE 적응형 대비 강화 전처리 활성화 여부
-    "screen_subtitle_duration": 0,           # 화면 자막 유지 시간 (초, 0=새 자막 감지 시까지 무제한 영구 유지)
+    "audio_subtitle_duration": 5,             # 음성 자막 유지 시간 (초, 기본값 5초, 0=무제한)
+    "screen_subtitle_duration": 5,           # 화면 자막 유지 시간 (초, 기본값 5초, 0=무제한)
+    "subtitle_duration": 5,                  # 공통 자막 유지 시간 (초, 기본값 5초, 0=무제한)
     "subtitle_stroke_width": 0,              # 자막 글씨 외곽선/효과 (0=기본 순수 소프트 섀도우 시스템 부하 0%, 1~5=외곽선 스트로크)
     "letter_spacing": 2.0,                   # 자막 글자 자간 간격 (px, 0.0~4.0, 2.0=외곽선 뭉침 방지 가독성 최적화)
     "screen_clean_box": True,                # 클린 텍스트 모드에서 자막 뒤 은은한 반투명 라운드 박스 표시 여부 (테두리 라인 없음)
@@ -122,6 +146,8 @@ DEFAULT_CONFIG = {
     "dubbing_interrupt": False,              # 새 대사 유입 시 이전 음성 즉각 끊기 여부 (False: 끝까지 온전히 순차 재생)
     "dubbing_source_audio": True,            # 오디오 음성 번역 더빙 출력 여부
     "dubbing_source_screen": False,          # 화면 OCR 번역 더빙 출력 여부
+    "dubbing_voice_audio": "auto",           # 음성 번역 더빙 기본 목소리 ("auto", 또는 특정 보이스 ID)
+    "dubbing_voice_screen": "auto",          # 화면 번역 더빙 기본 목소리 ("auto", 또는 특정 보이스 ID)
     "speaker_dubbing_mutes": {},             # 화자별 더빙 제외 여부 {"화자 1": True(더빙제외), "화자 2": False}
     "speaker_voices": {},                    # 화자별 음성 매핑 {"화자 1": "auto", "화자 2": "ko-KR-SunHiNeural"}
     "dubbing_echo_cancellation": True,       # 더빙 음성이 마이크/루프백으로 재유입되어 무한 번역되는 에코 루프 자동 차단
@@ -142,6 +168,9 @@ DEFAULT_CONFIG = {
     "auto_youtube_detect": False,            # 브라우저 재생 중인 유튜브 영상 자동 감지 및 Ground-Truth 사전 자동 생성 (기본값 OFF)
     "gpu_warmup_on_startup": True,           # 프로그램 구동 시 GPU 로컬 LLM 1-Token 즉시 예열 (False: 번역 시작 시 예열)
     "inplace_hotkey": "F4",                  # 화면 제자리 즉시 번역(In-Place Snapshot AR) 전역 단축키
+    "show_translated": True,                 # 번역문 함께 표시 기본값
+    "audio_show_translated": None,           # 음성 번역 자막 번역문 표시 여부 (None=show_translated 상속)
+    "screen_show_translated": None,          # 화면 번역 자막 번역문 표시 여부 (None=show_translated 상속)
 }
 
 CONTENT_TEMPO_PRESETS = {
@@ -527,6 +556,12 @@ def load_config(config_file=None):
                 cfg = json.load(f)
                 merged = DEFAULT_CONFIG.copy()
                 merged.update(cfg)
+
+                # 음성 및 화면 자막 기본 유지 시간 5초 보장 (기존 설정에 키가 없거나 이전 기본값 2초였던 경우 5초로 마이그레이션)
+                if "audio_subtitle_duration" not in cfg:
+                    merged["audio_subtitle_duration"] = 5
+                if cfg.get("screen_subtitle_duration") == 2:
+                    merged["screen_subtitle_duration"] = 5
 
                 # screen_rois와 screen_roi 상호 동기화 (유효한 좌표만 유지)
                 if "screen_rois" in cfg and isinstance(cfg["screen_rois"], list):

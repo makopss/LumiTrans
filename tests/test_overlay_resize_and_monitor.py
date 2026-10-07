@@ -237,7 +237,7 @@ class TestOverlayResizeAndMultiMonitor(unittest.TestCase):
             ov.show()
             ov.set_click_through(True)
             self.assertTrue(ov.is_click_through)
-            self.assertIn("ON", ov.btn_lock.text())
+            self.assertEqual(ov.btn_lock.text(), "🔓")
 
             # btn_lock 클릭 시 관통 해제
             ov.btn_lock.click()
