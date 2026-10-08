@@ -57,18 +57,27 @@ LumiTrans is an all-in-one standalone desktop application that **listens to PC a
 
 ## 📸 Screenshots
 
-| Audio Translation | Screen Translation (OCR) |
-|---|---|
-| ![Audio translation tab](docs/images/panel-audio.png) | ![Screen translation tab](docs/images/panel-screen.png) |
-| **Subtitle Explorer** | **Subtitle Style** |
-| ![Subtitle explorer tab](docs/images/panel-history.png) | ![Subtitle style tab](docs/images/panel-subtitles.png) |
+### 🗗 New in v1.1.1: Ultra-Compact Mini Mode (PiP UI)
+Unobtrusive compact control designed to stay on top of games, videos, and calls without blocking content. One-click access to voice/screen translation, AI dubbing volume, and pin controls (`Ctrl+M`).
+
+| Full Mode (Settings & Native Frame) | Ultra-Compact Mini Mode (PiP Controller) |
+|:---:|:---:|
+| ![Full Control Panel](docs/images/panel-audio.png) | ![Ultra-Compact Mini Mode](docs/images/panel-mini-mode.png) |
 
 <details>
-<summary>More: Settings Tab &amp; Screen Translation Overlay</summary>
+<summary>More: Tabs &amp; Overlay Screenshots</summary>
 
-![Settings tab](docs/images/panel-settings.png)
+| Screen Translation (OCR) | Subtitle Explorer |
+|:---:|:---:|
+| ![Screen translation tab](docs/images/panel-screen.png) | ![Subtitle explorer tab](docs/images/panel-history.png) |
 
-![Screen translation overlay](docs/images/overlay-screen.jpg)
+| Subtitle Style | Settings Tab |
+|:---:|:---:|
+| ![Subtitle style tab](docs/images/panel-subtitles.png) | ![Settings tab](docs/images/panel-settings.png) |
+
+| Screen Translation Overlay |
+|:---:|
+| ![Screen translation overlay](docs/images/overlay-screen.jpg) |
 
 </details>
 
@@ -80,10 +89,10 @@ Prebuilt Windows installers are available on the [GitHub Releases](https://githu
 
 | Edition | File Name | Size | Recommendation & Features |
 |---|---|---|---|
-| **Korean Lite** | `LumiTrans_Lite_Setup_v1.0.0.exe` | ~194 MB | Korean-optimized lightweight installer (models download on first run) |
-| **Korean Full** | `LumiTrans_Full_Setup_v1.0.0.exe` | ~790 MB | Includes Korean offline STT model & CUDA 12 acceleration libraries |
-| **Global Lite** | `LumiTrans_Global_Lite_Setup_v1.0.0.exe` | ~194 MB | 15-language global edition (models download on first run) |
-| **Global Full** | `LumiTrans_Global_Full_Setup_v1.0.0.exe` | ~968 MB | 15-language global edition + multilingual STT models + CUDA 12 bundled |
+| **Korean Lite** | `LumiTrans_Lite_Setup_v1.1.1.exe` | ~194 MB | Korean-optimized lightweight installer (models download on first run) |
+| **Korean Full** | `LumiTrans_Full_Setup_v1.1.1.exe` | ~790 MB | Includes Korean offline STT model & CUDA 12 acceleration libraries |
+| **Global Lite** | `LumiTrans_Global_Lite_Setup_v1.1.1.exe` | ~194 MB | 15-language global edition (models download on first run) |
+| **Global Full** | `LumiTrans_Global_Full_Setup_v1.1.1.exe` | ~923 MB | 15-language global edition + multilingual STT models + CUDA 12 bundled |
 
 ---
 

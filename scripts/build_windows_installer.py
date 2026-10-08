@@ -31,6 +31,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 from src.product import get_product
 
+APP_VERSION = "1.1.1"
+
 def print_step(step: str):
     print(f"\n{'=' * 60}\n>> {step}\n{'=' * 60}")
 
@@ -369,14 +371,14 @@ def run_pyinstaller(edition: str = "full", product: str = "kr"):
     )
     print(f"[PyInstaller] 최종 압축 전 번들 크기: {total_bundle_bytes / (1024 * 1024):.1f} MB")
 
-def setup_filename(edition: str, product: str = "kr") -> str:
+def setup_filename(edition: str, product: str = "kr", version: str = APP_VERSION) -> str:
     edition_cap = edition.capitalize()
     if product == "global":
-        return f"LumiTrans_Global_{edition_cap}_Setup_v1.0.0.exe"
-    return f"LumiTrans_{edition_cap}_Setup_v1.0.0.exe"
+        return f"LumiTrans_Global_{edition_cap}_Setup_v{version}.exe"
+    return f"LumiTrans_{edition_cap}_Setup_v{version}.exe"
 
 
-def run_innosetup(edition: str = "full", product: str = "kr") -> Path:
+def run_innosetup(edition: str = "full", product: str = "kr", version: str = APP_VERSION) -> Path:
     edition_cap = edition.capitalize()
     edition_label = "라이트(Lite) 에디션" if edition == "lite" else "풀(Full) 에디션"
     product_label = "글로벌" if product == "global" else "한국어"
@@ -393,7 +395,7 @@ def run_innosetup(edition: str = "full", product: str = "kr") -> Path:
     output_dir = ROOT_DIR / "installer_output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    cmd = [iscc, f"/DEdition={edition_cap}", f"/DProduct={product}", str(iss_path)]
+    cmd = [iscc, f"/DEdition={edition_cap}", f"/DProduct={product}", f"/DMyAppVersion={version}", str(iss_path)]
     print(f"실행 명령: {' '.join(cmd)}")
     start_t = time.time()
     res = subprocess.run(cmd, cwd=str(ROOT_DIR))
@@ -403,7 +405,7 @@ def run_innosetup(edition: str = "full", product: str = "kr") -> Path:
         raise RuntimeError(f"Inno Setup 컴파일 실패 (코드: {res.returncode})")
 
     # 결과 검증
-    setup_path = output_dir / setup_filename(edition, product)
+    setup_path = output_dir / setup_filename(edition, product, version=version)
     if not setup_path.exists():
         raise FileNotFoundError(f"생성된 설치 파일이 없습니다: {setup_path}")
 
@@ -413,15 +415,18 @@ def run_innosetup(edition: str = "full", product: str = "kr") -> Path:
     print(f"[결과] 최종 설치 파일 용량: {size_mb:.2f} MB")
     return setup_path
 
-def build_single_edition(edition: str, product: str = "kr") -> Path:
+def build_single_edition(edition: str, product: str = "kr", version: str = APP_VERSION, skip_pyinstaller: bool = False) -> Path:
     edition_label = "라이트(Lite - 약 190~220MB)" if edition == "lite" else "풀(Full - 약 750~800MB)"
     product_label = "글로벌" if product == "global" else "한국어"
     print("\n" + "#" * 60)
-    print(f"### [LumiTrans] {product_label} / {edition_label} 빌드 파이프라인 가동")
+    print(f"### [LumiTrans] {product_label} / {edition_label} 빌드 파이프라인 가동 (v{version})")
     print("#" * 60)
     start_t = time.time()
-    run_pyinstaller(edition=edition, product=product)
-    out_file = run_innosetup(edition=edition, product=product)
+    if not skip_pyinstaller:
+        run_pyinstaller(edition=edition, product=product)
+    else:
+        print("[PyInstaller] --skip-pyinstaller 지정됨: 번들링 생략하고 Inno Setup만 컴파일합니다.")
+    out_file = run_innosetup(edition=edition, product=product, version=version)
     elapsed = time.time() - start_t
     print(f"\n>> [{edition.upper()}] 에디션 완료 (소요: {elapsed:.1f}초)")
     return out_file
@@ -440,26 +445,37 @@ def main():
         default=get_product(),
         help="제품 라인 (kr: 한국어, global: 글로벌). 기본값은 edition.json 설정값(현재: %(default)s)입니다.",
     )
+    parser.add_argument(
+        "--version",
+        default=APP_VERSION,
+        help=f"설치 파일 버전 (기본값: {APP_VERSION})",
+    )
+    parser.add_argument(
+        "--skip-pyinstaller",
+        action="store_true",
+        help="PyInstaller 번들링을 건너뛰고 기존 dist로 Inno Setup 컴파일만 실행합니다.",
+    )
     args = parser.parse_args()
 
     print("=" * 60)
     print(f"[BUILD] 루미트랜스 (LumiTrans) - 윈도우 설치 버전 빌드 시작")
-    print(f"[TARGET] 제품: {args.product} | 에디션: {args.edition.upper()}")
+    print(f"[TARGET] 제품: {args.product} | 에디션: {args.edition.upper()} | 버전: {args.version}")
     print("=" * 60)
 
     total_start = time.time()
-    patch_scipy_python312_bug()
-    patch_pyinstaller_sentencepiece_bug()
-    generate_icon()
-    ensure_bundled_stt_model(product=args.product)
+    if not args.skip_pyinstaller:
+        patch_scipy_python312_bug()
+        patch_pyinstaller_sentencepiece_bug()
+        generate_icon()
+        ensure_bundled_stt_model(product=args.product)
 
     built_files = []
     if args.edition in ("lite", "all"):
-        f = build_single_edition("lite", product=args.product)
+        f = build_single_edition("lite", product=args.product, version=args.version, skip_pyinstaller=args.skip_pyinstaller)
         built_files.append(("Lite", f))
 
     if args.edition in ("full", "all"):
-        f = build_single_edition("full", product=args.product)
+        f = build_single_edition("full", product=args.product, version=args.version, skip_pyinstaller=args.skip_pyinstaller)
         built_files.append(("Full", f))
 
     total_elapsed = time.time() - total_start

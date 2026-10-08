@@ -57,18 +57,27 @@
 
 ## 📸 스크린샷
 
-| 음성 번역 | 화면 번역 (OCR) |
-|---|---|
-| ![음성 번역 탭](docs/images/panel-audio.png) | ![화면 번역 탭](docs/images/panel-screen.png) |
-| **자막 탐색기** | **자막 설정** |
-| ![자막 탐색기 탭](docs/images/panel-history.png) | ![자막 설정 탭](docs/images/panel-subtitles.png) |
+### 🗗 v1.1.1 신규 추가: 초소형 미니 모드 (Compact PiP UI)
+화면을 가리지 않고 필수 조작(음성 번역, 화면 번역, AI 더빙 및 음량 제어, 핀 고정)을 한 손으로 간편하게 제어합니다 (`Ctrl+M`).
+
+| 기본 모드 (상세 설정 및 네이티브 프레임) | 초소형 미니 모드 (미니멀 컨트롤러) |
+|:---:|:---:|
+| ![기본 모드 상세 패널](docs/images/panel-audio.png) | ![초소형 미니 모드](docs/images/panel-mini-mode.png) |
 
 <details>
-<summary>더 보기: 설정 탭 · 화면 번역 오버레이</summary>
+<summary>기타 탭 및 오버레이 화면 보기</summary>
 
-![설정 탭](docs/images/panel-settings.png)
+| 화면 번역 (OCR) | 자막 탐색기 |
+|:---:|:---:|
+| ![화면 번역 탭](docs/images/panel-screen.png) | ![자막 탐색기 탭](docs/images/panel-history.png) |
 
-![화면 번역 오버레이](docs/images/overlay-screen.jpg)
+| 자막 설정 | 환경 설정 탭 |
+|:---:|:---:|
+| ![자막 설정 탭](docs/images/panel-subtitles.png) | ![설정 탭](docs/images/panel-settings.png) |
+
+| 화면 번역 오버레이 |
+|:---:|
+| ![화면 번역 오버레이](docs/images/overlay-screen.jpg) |
 
 </details>
 
@@ -80,10 +89,10 @@
 
 | 에디션 | 파일명 | 크기 | 권장 환경 및 특징 |
 |---|---|---|---|
-| **Korean Lite** | `LumiTrans_Lite_Setup_v1.0.0.exe` | 약 194MB | 한국어 특화 가벼운 패키지 (모델은 첫 실행 시 자동 다운로드) |
-| **Korean Full** | `LumiTrans_Full_Setup_v1.0.0.exe` | 약 790MB | 한국어 오프라인 STT 모델 및 CUDA 12 가속 라이브러리 기본 내장 |
-| **Global Lite** | `LumiTrans_Global_Lite_Setup_v1.0.0.exe` | 약 194MB | 15개국 다국어 UI 지원 글로벌 에디션 (첫 실행 시 모델 다운로드) |
-| **Global Full** | `LumiTrans_Global_Full_Setup_v1.0.0.exe` | 약 968MB | 15개국 다국어 UI + 다국어 STT 모델 + CUDA 12 가속 라이브러리 완전 내장 |
+| **Korean Lite** | `LumiTrans_Lite_Setup_v1.1.1.exe` | 약 194MB | 한국어 특화 가벼운 패키지 (모델은 첫 실행 시 자동 다운로드) |
+| **Korean Full** | `LumiTrans_Full_Setup_v1.1.1.exe` | 약 790MB | 한국어 오프라인 STT 모델 및 CUDA 12 가속 라이브러리 기본 내장 |
+| **Global Lite** | `LumiTrans_Global_Lite_Setup_v1.1.1.exe` | 약 194MB | 15개국 다국어 UI 지원 글로벌 에디션 (첫 실행 시 모델 다운로드) |
+| **Global Full** | `LumiTrans_Global_Full_Setup_v1.1.1.exe` | 약 923MB | 15개국 다국어 UI + 다국어 STT 모델 + CUDA 12 가속 라이브러리 완전 내장 |
 
 ---
 

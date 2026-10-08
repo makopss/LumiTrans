@@ -1,5 +1,6 @@
-; Inno Setup 6 Script for LumiTrans (AI real-time audio & screen subtitle translator)
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.1.1"
+#endif
 #define MyAppPublisher "LumiTrans"
 #define MyAppExeName "LumiTrans.exe"
 ; 이전 이름. 기존 설치를 업그레이드할 때 옛 실행 파일·바로가기·데이터를 정리하는 데 쓴다.
