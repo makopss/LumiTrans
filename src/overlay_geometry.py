@@ -14,6 +14,67 @@ from PyQt6.QtWidgets import QComboBox, QPushButton
 class OverlayGeometryMixin:
     """Mixin for frameless always-on-top overlay widgets."""
 
+    @staticmethod
+    def get_centered_geometry(screen=None, width=900, height=140, min_w=250, min_h=100) -> list[int]:
+        """지정된 모니터(화면) 가용 영역(작업표시줄 제외)의 중앙 좌표 및 크기 계산"""
+        app = QGuiApplication.instance()
+        if not screen and app:
+            screen = app.primaryScreen()
+        if not screen:
+            return [200, 400, width, height]
+
+        avail = screen.availableGeometry()
+        safe_max_w = max(min_w, avail.width() - 40)
+        safe_max_h = max(min_h, avail.height() - 40)
+        w = min(max(min_w, width), safe_max_w)
+        h = min(max(min_h, height), safe_max_h)
+        x = avail.left() + max(0, (avail.width() - w) // 2)
+        y = avail.top() + max(0, (avail.height() - h) // 2)
+        return [x, y, w, h]
+
+    @staticmethod
+    def sanitize_geometry(geom, default_geo=None, min_w=250, min_h=100) -> list[int]:
+        """다중 모니터 분리/연결 해제 및 해상도/DPI 변경 시 자막창이 화면 밖으로 사라지거나
+        비정상적으로 거대해지는 것을 방지하는 안전 지오메트리 보정 함수."""
+        if not geom or len(geom) != 4:
+            return list(default_geo) if default_geo and len(default_geo) == 4 else [200, 400, 900, 140]
+
+        app = QGuiApplication.instance()
+        if not app:
+            return list(geom)
+
+        try:
+            x, y, w, h = int(geom[0]), int(geom[1]), int(geom[2]), int(geom[3])
+        except (ValueError, TypeError):
+            return list(default_geo) if default_geo and len(default_geo) == 4 else [200, 400, 900, 140]
+
+        center = QPoint(x + w // 2, y + h // 2)
+        screen = app.screenAt(center) or app.screenAt(QPoint(x, y)) or app.primaryScreen()
+        if not screen:
+            return [x, y, w, h]
+
+        avail = screen.availableGeometry()
+
+        # 1. 크기 제한: 화면 가용 폭/높이를 초과하지 않도록 안전 제한
+        safe_max_w = max(min_w, avail.width() - 20)
+        safe_max_h = max(min_h, avail.height() - 30)
+        w = min(max(min_w, w), safe_max_w)
+        h = min(max(min_h, h), safe_max_h)
+
+        # 2. 좌표 보정: 화면 밖(연결 해제된 모니터 등)이거나 경계를 벗어난 경우 가용 화면 중앙 영역으로 안전 이동
+        if (x < avail.left() - 40 or x + w > avail.right() + 40 or
+            y < avail.top() - 20 or y + h > avail.bottom() + 20):
+            def_w = min(int(default_geo[2]), safe_max_w) if default_geo and len(default_geo) == 4 else w
+            def_h = min(int(default_geo[3]), safe_max_h) if default_geo and len(default_geo) == 4 else h
+            x = avail.left() + max(0, (avail.width() - def_w) // 2)
+            y = avail.top() + max(0, (avail.height() - def_h) // 2)
+            w, h = def_w, def_h
+        else:
+            x = min(max(x, avail.left()), max(avail.left(), avail.right() - w))
+            y = min(max(y, avail.top()), max(avail.top(), avail.bottom() - h))
+
+        return [x, y, w, h]
+
     def _init_geometry_lock(self):
         self._size_locked = False
         self._locked_w = 0
@@ -328,21 +389,32 @@ class OverlayGeometryMixin:
                 return
 
             new_y = geo.y()
+            new_x = geo.x()
             try:
-                screen = self.screen()
+                screen = getattr(self, 'screen', lambda: None)()
+                if screen is None:
+                    app = QGuiApplication.instance()
+                    if app:
+                        screen = app.screenAt(geo.center()) or app.primaryScreen()
                 if screen is not None:
                     avail = screen.availableGeometry()
+                    safe_max_w = max(250, avail.width() - 20)
+                    safe_max_h = max(100, avail.height() - 20)
+                    width = min(max(self.minimumWidth(), width), safe_max_w)
+                    new_h = min(new_h, safe_max_h)
+                    new_x = min(max(new_x, avail.left()), max(avail.left(), avail.right() - width))
                     bottom = avail.y() + avail.height()
                     if new_y + new_h > bottom - 4:
                         new_y = max(avail.y() + 4, bottom - new_h - 4)
+                    new_y = min(max(new_y, avail.top()), max(avail.top(), avail.bottom() - new_h))
             except Exception:
                 pass
 
             self.is_auto_resizing = True
             try:
-                self.setGeometry(geo.x(), new_y, max(self.minimumWidth(), width), new_h)
+                self.setGeometry(new_x, new_y, max(self.minimumWidth(), width), new_h)
                 if hasattr(self, "base_geometry"):
-                    self.base_geometry = [geo.x(), new_y, max(self.minimumWidth(), width), new_h]
+                    self.base_geometry = [new_x, new_y, max(self.minimumWidth(), width), new_h]
             finally:
                 self.is_auto_resizing = False
         finally:

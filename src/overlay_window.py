@@ -40,7 +40,8 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._audio_paused = False
         self.last_translated_time = 0.0
         self.is_previewing_new_sentence = False
-        self.base_geometry = list(self.config.get("window_geometry", [200, 750, 900, 140]))
+        raw_geom = list(self.config.get("window_geometry", [200, 750, 900, 140]))
+        self.base_geometry = self.sanitize_geometry(raw_geom, default_geo=[200, 750, 900, 140])
         self.is_auto_resizing = False
         self.clean_text_mode = bool(self.config.get("audio_clean_text_mode", self.config.get("screen_clean_text_mode", False)))
         self.show_speaker = bool(self.config.get("audio_show_speaker", self.config.get("show_speaker", True)))
@@ -85,6 +86,27 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
     def closeEvent(self, event):
         self.is_closing = True
         super().closeEvent(event)
+
+    def reset_geometry(self, target_screen=None, target_rect=None):
+        """기본 음성 자막 위치 및 크기로 안전 초기화 (모니터 중앙 영역 배치)"""
+        if target_rect and len(target_rect) == 4:
+            safe_geo = self.sanitize_geometry(target_rect, default_geo=target_rect)
+        else:
+            from PyQt6.QtGui import QGuiApplication
+            app = QGuiApplication.instance()
+            screen = target_screen
+            if not screen and app:
+                screen = app.screenAt(self.frameGeometry().center()) or app.screenAt(self.pos()) or app.primaryScreen()
+            safe_geo = self.get_centered_geometry(screen, width=900, height=140)
+
+        self.setGeometry(safe_geo[0], safe_geo[1], safe_geo[2], safe_geo[3])
+        self.base_geometry = list(safe_geo)
+        self.is_user_positioned = False
+        self.is_user_sized = False
+        self.config["window_geometry"] = list(safe_geo)
+        self._apply_two_line_overlay_height()
+        if self.on_config_change:
+            self.on_config_change(self.config)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -524,10 +546,11 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         grip_layout.addWidget(self.size_grip)
         self.main_layout.addLayout(grip_layout)
 
-        # 기본 위치 및 크기 복원
-        geom = self.base_geometry
+        # 기본 위치 및 크기 복원 (다중 모니터 및 DPI 안전 보정)
+        geom = self.sanitize_geometry(self.base_geometry, default_geo=[200, 750, 900, 140])
+        self.base_geometry = list(geom)
         self.setGeometry(geom[0], geom[1], geom[2], geom[3])
-        self.setMinimumSize(830, 120)
+        self.setMinimumSize(max(250, min(830, geom[2])), 120)
         if self.layout() is not None:
             from PyQt6.QtWidgets import QLayout
             self.layout().setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
@@ -1472,7 +1495,9 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.current_original = ""
         self.current_translated = ""
         self.label_original.setText("")
-        self._set_label_html(self.label_translated, "...", self._translated_color())
+        self._set_label_html(self.label_translated, "", self._translated_color())
+        if hasattr(self, 'live_badge') and self.live_badge:
+            self.live_badge.setText(tr("overlay_waiting"))
         self.update()
 
     def set_external_handlers(self, on_toggle_pause=None, on_change_engine=None, on_open_settings=None, on_sync_opacity=None, on_visibility_change=None, on_sync_font=None, on_sync_click_through=None, on_sync_clean_text=None, on_sync_clean_box=None, on_sync_show_speaker=None, on_toggle_dubbing=None, on_sync_show_original=None, on_sync_show_translated=None):
@@ -1785,6 +1810,11 @@ class SubtitleOverlay(OverlayGeometryMixin, QWidget):
 
     def leaveEvent(self, event):
         super().leaveEvent(event)
+        if not self.is_click_through and (self._cursor_over_window() or self.is_moving or self.active_resize_edge != EDGE_NONE):
+            # 자식 버튼으로 커서가 이동한 경우에도 상위 창의 leave 이벤트가 올 수 있다.
+            self.is_mouse_hovered = True
+            self.idle_timer.stop()
+            return
         self.is_mouse_hovered = False
         if not self.active_resize_edge:
             self.unsetCursor()

@@ -540,18 +540,56 @@ class ScreenOverlayManager(QObject):
         for o in self.overlays:
             o.close()
 
-    def reset_geometry(self):
-        """모든 관리 대상 화면 번역 오버레이 창들의 위치 및 크기를 기본값으로 초기화"""
-        default_geo = [200, 520, 850, 130]
-        self.config["screen_overlay_geometry"] = list(default_geo)
-        self.config["screen_overlay_geometries"] = {}
-        for idx, overlay in enumerate(self.overlays):
-            y_offset = default_geo[1] + (idx * (default_geo[3] + 15))
-            overlay.setGeometry(default_geo[0], y_offset, default_geo[2], default_geo[3])
-            overlay.base_geometry = [default_geo[0], y_offset, default_geo[2], default_geo[3]]
-            overlay.is_user_positioned = False
-            overlay.is_user_sized = False
-            if hasattr(overlay, '_notify_config_change'):
-                overlay._notify_config_change()
+    def reset_geometry(self, target_screen=None, target_rects=None):
+        """모든 관리 대상 화면 번역 오버레이 창들의 위치 및 크기를 모니터 중앙 영역에 겹치지 않게 초기화"""
+        if not self.overlays:
+            return
+
+        if target_rects and len(target_rects) == len(self.overlays):
+            for idx, overlay in enumerate(self.overlays):
+                overlay.reset_geometry(target_rect=target_rects[idx])
+        else:
+            from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtCore import QRect
+            app = QApplication.instance()
+            screen = target_screen
+            if not screen and app:
+                first_o = self.overlays[0]
+                screen = app.screenAt(first_o.frameGeometry().center()) or app.screenAt(first_o.pos()) or app.primaryScreen()
+            if not screen and app:
+                screen = app.primaryScreen()
+
+            avail = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
+            w = min(860, max(250, avail.width() - 40))
+            count = len(self.overlays)
+            spacing = 16
+
+            overlay_heights = []
+            for overlay in self.overlays:
+                h = 130
+                if hasattr(overlay, "_preferred_two_line_overlay_height"):
+                    try:
+                        h = max(130, overlay._preferred_two_line_overlay_height())
+                    except Exception:
+                        h = 130
+                overlay_heights.append(h)
+
+            total_h = sum(overlay_heights) + max(0, count - 1) * spacing
+            max_avail_h = max(180, avail.height() - 60)
+            if total_h > max_avail_h:
+                spacing = 8
+                scale = max_avail_h / max(1, total_h)
+                overlay_heights = [max(90, int(h * scale)) for h in overlay_heights]
+                total_h = sum(overlay_heights) + max(0, count - 1) * spacing
+
+            start_y = avail.top() + max(20, (avail.height() - total_h) // 2)
+            start_x = avail.left() + max(0, (avail.width() - w) // 2)
+
+            cur_y = start_y
+            for idx, overlay in enumerate(self.overlays):
+                h = overlay_heights[idx]
+                overlay.reset_geometry(target_rect=[start_x, cur_y, w, h])
+                cur_y += h + spacing
+
         if self.on_config_change:
             self.on_config_change(self.config)

@@ -1360,27 +1360,38 @@ class ControlPanel(QWidget):
         self.setPalette(pal)
         set_windows_dark_mode(int(self.winId()))
 
-        # 화면 밖 엉뚱한 위치 방지 및 노트북 최적화 컴팩트 안전 좌표 보정
+        # 화면 밖 엉뚱한 위치 방지 및 다중 모니터/DPI 최적화 안전 좌표 보정
         geom = self.config.get("control_panel_geometry", [80, 40, 1080, 680])
         if len(geom) == 4:
-            screen = QApplication.primaryScreen()
+            center_pt = QPoint(geom[0] + geom[2] // 2, geom[1] + geom[3] // 2)
+            screen = (QApplication.screenAt(center_pt) or
+                      QApplication.screenAt(QPoint(geom[0], geom[1])) or
+                      QApplication.primaryScreen())
             if screen:
                 avail = screen.availableGeometry()
-                # 노트북/작은 화면에서도 상하좌우가 넘치지 않도록 최대 가용 크기 내로 자동 맞춤
-                max_w = min(geom[2], max(control_panel_min_width(self.font()), avail.width() - 30))
-                # 프리셋 리스트 확장으로 인해 창 높이가 800을 초과하여 비정상 저장된 경우 기본 높이(800)로 자동 복원
+                # 다중 모니터 및 DPI 배율을 고려한 안전 가용 한계치 (작업표시줄/테두리 침범 방지)
+                safe_max_w = max(400, avail.width() - 30)
+                safe_max_h = max(350, avail.height() - 40)
+
+                # 저장된 크기 보정: 화면 가용 폭/높이를 초과하지 않도록 안전 제한
+                saved_w = min(geom[2], safe_max_w)
                 saved_h = geom[3]
                 if saved_h > CONTROL_PANEL_MIN_HEIGHT + 20 and not self.config.get("user_custom_window_height", False):
                     saved_h = CONTROL_PANEL_MIN_HEIGHT
-                max_h = max(CONTROL_PANEL_MIN_HEIGHT, min(saved_h, max(400, avail.height() - 50)))
-                # 저장된 좌표가 화면 밖이거나 하단 작업표시줄을 침범하는 경우 화면 중앙으로 안전 복원
+
+                max_w = max(min(saved_w, safe_max_w), min(control_panel_min_width(self.font()), safe_max_w))
+                max_h = max(min(saved_h, safe_max_h), min(CONTROL_PANEL_MIN_HEIGHT, safe_max_h))
+
+                # 저장된 좌표가 해당 모니터 화면 밖이거나 침범하는 경우 화면 중앙으로 안전 복원
                 if (geom[0] < avail.left() - 40 or geom[0] + max_w > avail.right() + 40 or
                     geom[1] < avail.top() - 20 or geom[1] + max_h > avail.bottom()):
                     x = avail.left() + max(0, (avail.width() - max_w) // 2)
                     y = avail.top() + max(0, (avail.height() - max_h) // 2)
                     geom = [x, y, max_w, max_h]
                 else:
-                    geom = [geom[0], geom[1], max_w, max_h]
+                    x = min(max(geom[0], avail.left()), max(avail.left(), avail.right() - max_w))
+                    y = min(max(geom[1], avail.top()), max(avail.top(), avail.bottom() - max_h))
+                    geom = [x, y, max_w, max_h]
             self.setGeometry(geom[0], geom[1], geom[2], geom[3])
         self.setMinimumSize(control_panel_min_width(self.font()), CONTROL_PANEL_MIN_HEIGHT)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
@@ -1404,11 +1415,14 @@ class ControlPanel(QWidget):
         required_width = max(control_panel_min_width(self.font()),
                              getattr(self, '_required_content_width', 0))
         self.setMinimumSize(required_width, CONTROL_PANEL_MIN_HEIGHT)
-        screen = QApplication.screenAt(self.frameGeometry().center()) or QApplication.primaryScreen()
+        center_pt = self.frameGeometry().center()
+        screen = (QApplication.screenAt(center_pt) or
+                  QApplication.screenAt(self.pos()) or
+                  QApplication.primaryScreen())
         if screen:
             avail = screen.availableGeometry()
-            self.move(min(max(self.x(), avail.left()), max(avail.left(), avail.right() - self.width() + 1)),
-                      min(max(self.y(), avail.top()), max(avail.top(), avail.bottom() - self.height() + 1)))
+            self.move(min(max(self.x(), avail.left()), max(avail.left(), avail.right() - self.width())),
+                      min(max(self.y(), avail.top()), max(avail.top(), avail.bottom() - self.height())))
 
         # 시그널 연결
         self.audio_level_signal.connect(self._update_level_meter)
@@ -2354,21 +2368,23 @@ class ControlPanel(QWidget):
         if getattr(self, '_is_simple_mode', False) == enabled:
             return
 
+        if enabled:
+            # 1. Full -> Mini Mode: 온전한 풀모드 geometry를 먼저 캡처
+            cur_geo = self.normalGeometry() if self.isMaximized() else self.geometry()
+            if cur_geo.isValid() and cur_geo.width() >= 400 and cur_geo.height() >= 300:
+                self._full_geometry = cur_geo
+                self.config["control_panel_geometry"] = [cur_geo.x(), cur_geo.y(), cur_geo.width(), cur_geo.height()]
+            elif not getattr(self, '_full_geometry', None):
+                full_cfg = self.config.get("control_panel_geometry")
+                if full_cfg and len(full_cfg) == 4 and full_cfg[2] >= 400 and full_cfg[3] >= 300:
+                    self._full_geometry = QRect(full_cfg[0], full_cfg[1], full_cfg[2], full_cfg[3])
+                else:
+                    self._full_geometry = self.geometry()
+
         self._is_simple_mode = enabled
         self.config["ui_mode"] = "simple" if enabled else "full"
 
         if enabled:
-            # 1. Full -> Mini Mode
-            if not getattr(self, '_full_geometry', None):
-                full_cfg = self.config.get("control_panel_geometry")
-                if full_cfg and len(full_cfg) == 4 and full_cfg[2] >= 400 and full_cfg[3] >= 300:
-                    from PyQt6.QtCore import QRect
-                    self._full_geometry = QRect(full_cfg[0], full_cfg[1], full_cfg[2], full_cfg[3])
-                else:
-                    self._full_geometry = self.geometry()
-            elif not getattr(self, '_is_simple_mode', False):
-                self._full_geometry = self.geometry()
-            
             flags = Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint
             if getattr(self, '_simple_pinned', False):
                 flags |= Qt.WindowType.WindowStaysOnTopHint
@@ -2425,8 +2441,29 @@ class ControlPanel(QWidget):
             self.setMinimumSize(max(control_panel_min_width(self.font()),
                                     getattr(self, '_required_content_width', 0)), CONTROL_PANEL_MIN_HEIGHT)
 
-            if hasattr(self, '_full_geometry') and self._full_geometry:
-                self.setGeometry(self._full_geometry)
+            target_geo = getattr(self, '_full_geometry', None)
+            if not target_geo:
+                full_cfg = self.config.get("control_panel_geometry")
+                if full_cfg and len(full_cfg) == 4 and full_cfg[2] >= 400 and full_cfg[3] >= 300:
+                    target_geo = QRect(full_cfg[0], full_cfg[1], full_cfg[2], full_cfg[3])
+
+            if target_geo:
+                center_pt = target_geo.center()
+                screen = (QApplication.screenAt(center_pt) or
+                          QApplication.screenAt(target_geo.topLeft()) or
+                          QApplication.screenAt(self.pos()) or
+                          QApplication.primaryScreen())
+                if screen:
+                    avail = screen.availableGeometry()
+                    safe_max_w = max(400, avail.width() - 30)
+                    safe_max_h = max(350, avail.height() - 40)
+                    tw = min(max(400, target_geo.width()), safe_max_w)
+                    th = min(max(CONTROL_PANEL_MIN_HEIGHT, target_geo.height()), safe_max_h)
+                    tx = min(max(target_geo.x(), avail.left()), max(avail.left(), avail.right() - tw))
+                    ty = min(max(target_geo.y(), avail.top()), max(avail.top(), avail.bottom() - th))
+                    self.setGeometry(tx, ty, tw, th)
+                else:
+                    self.setGeometry(target_geo)
             else:
                 self.resize(control_panel_min_width(self.font()), CONTROL_PANEL_MIN_HEIGHT)
 
@@ -7819,7 +7856,8 @@ class ControlPanel(QWidget):
             if hasattr(self, "nav_host") and self.nav_host is not None:
                 self.nav_host.setFixedSize(tab_total, NAV_TAB_HEIGHT)
                 self.nav_host.updateGeometry()
-            self.setMinimumWidth(max(self.minimumWidth(), control_panel_min_width(self.font()), tab_total + 380))
+            if not getattr(self, '_is_simple_mode', False):
+                self.setMinimumWidth(max(self.minimumWidth(), control_panel_min_width(self.font()), tab_total + 380))
         if hasattr(self, "_refresh_audio_devices"):
             self._refresh_audio_devices()
         if hasattr(self, "_populate_models"):
@@ -10337,14 +10375,128 @@ class ControlPanel(QWidget):
         self.sync_screen_opacity_from_overlay(pct)
 
     def reset_overlay_position(self):
+        """컨트롤 패널이 위치한 현재 모니터를 감지하여,
+        음성 번역 및 화면 번역 자막 오버레이창들을 그 모니터의 중앙 영역에 서로 겹치지 않고
+        작업표시줄과도 충돌하지 않도록 안전하게 배치 및 크기 복원."""
         try:
-            if self.overlay:
-                self.overlay.setGeometry(200, 750, 900, 140)
-            if self.screen_overlay:
-                if hasattr(self.screen_overlay, 'reset_geometry'):
-                    self.screen_overlay.reset_geometry()
-                elif hasattr(self.screen_overlay, 'setGeometry'):
-                    self.screen_overlay.setGeometry(200, 520, 850, 130)
+            app = QApplication.instance()
+            target_screen = None
+            if app:
+                # 1. 컨트롤 패널 창의 중심점 기준 모니터 감지 (다중 모니터 완벽 지원)
+                center_pt = self.frameGeometry().center()
+                target_screen = app.screenAt(center_pt) or app.screenAt(self.pos()) or app.primaryScreen()
+            if not target_screen and app:
+                target_screen = app.primaryScreen()
+
+            avail = target_screen.availableGeometry() if target_screen else QRect(0, 0, 1920, 1080)
+
+            # 2. 배치 대상 오버레이 수집
+            screen_overlays = []
+            if getattr(self, 'screen_overlay', None):
+                if hasattr(self.screen_overlay, "get_overlays"):
+                    screen_overlays = [o for o in self.screen_overlay.get_overlays() if o]
+                elif hasattr(self.screen_overlay, "overlays"):
+                    screen_overlays = [o for o in self.screen_overlay.overlays if o]
+                else:
+                    screen_overlays = [self.screen_overlay]
+
+            voice_overlay = getattr(self, 'overlay', None)
+
+            # 3. 폭 및 권장 높이 산출 (두 줄 텍스트가 잘리지 않는 최적 높이 반영)
+            w_screen = min(860, max(250, avail.width() - 40))
+            w_voice = min(900, max(250, avail.width() - 40))
+
+            items = []  # tuple of (type, overlay, width, height)
+            for so in screen_overlays:
+                h = 130
+                if hasattr(so, "_preferred_two_line_overlay_height"):
+                    try:
+                        h = max(130, so._preferred_two_line_overlay_height())
+                    except Exception:
+                        h = 130
+                items.append(("screen", so, w_screen, h))
+
+            if voice_overlay:
+                h = 140
+                if hasattr(voice_overlay, "_preferred_two_line_overlay_height"):
+                    try:
+                        h = max(140, voice_overlay._preferred_two_line_overlay_height())
+                    except Exception:
+                        h = 140
+                items.append(("voice", voice_overlay, w_voice, h))
+
+            if not items:
+                return
+
+            # 4. 중앙 영역 수직 스택 계산 (상단: 화면 번역, 하단: 음성 번역)
+            spacing = 16
+            total_h = sum(item[3] for item in items) + spacing * (len(items) - 1)
+
+            # 화면 높이 초과 시 높이 및 간격 압축 보정
+            max_avail_h = max(180, avail.height() - 60)
+            if total_h > max_avail_h:
+                spacing = 8
+                scale = max_avail_h / max(1, total_h)
+                items = [
+                    (t, o, w, max(90, int(h * scale)))
+                    for (t, o, w, h) in items
+                ]
+                total_h = sum(item[3] for item in items) + spacing * (len(items) - 1)
+
+            start_y = avail.top() + max(20, (avail.height() - total_h) // 2)
+
+            # 5. 각 오버레이별 위치 및 크기 적용 (모니터 가로 중앙, 세로 순차 배치)
+            cur_y = start_y
+            for item_type, ov, w, h in items:
+                x = avail.left() + max(0, (avail.width() - w) // 2)
+                rect = [x, cur_y, w, h]
+                if item_type == "screen":
+                    if hasattr(ov, 'reset_geometry'):
+                        try:
+                            ov.reset_geometry(target_rect=rect)
+                        except TypeError:
+                            ov.reset_geometry()
+                            ov.setGeometry(x, cur_y, w, h)
+                            ov.base_geometry = [x, cur_y, w, h]
+                    else:
+                        ov.setGeometry(x, cur_y, w, h)
+                        if hasattr(ov, 'base_geometry'):
+                            ov.base_geometry = [x, cur_y, w, h]
+                    idx_key = str(getattr(ov, 'assigned_roi_idx', 0))
+                    if "screen_overlay_geometries" in self.config and isinstance(self.config["screen_overlay_geometries"], dict):
+                        self.config["screen_overlay_geometries"][idx_key] = [x, cur_y, w, h]
+                    if getattr(ov, 'assigned_roi_idx', 0) == 0:
+                        self.config["screen_overlay_geometry"] = [x, cur_y, w, h]
+                elif item_type == "voice":
+                    if hasattr(ov, 'reset_geometry'):
+                        try:
+                            ov.reset_geometry(target_rect=rect)
+                        except TypeError:
+                            ov.reset_geometry()
+                            ov.setGeometry(x, cur_y, w, h)
+                            ov.base_geometry = [x, cur_y, w, h]
+                    else:
+                        ov.setGeometry(x, cur_y, w, h)
+                        if hasattr(ov, 'base_geometry'):
+                            ov.base_geometry = [x, cur_y, w, h]
+                    self.config["window_geometry"] = [x, cur_y, w, h]
+
+                cur_y += h + spacing
+
+            # 6. 화면 번역 밀착 모드 해제 및 설정 저장
+            if hasattr(self, 'screen_overlay') and self.screen_overlay:
+                if self.config.get("screen_snap_to_roi", False):
+                    self.config["screen_snap_to_roi"] = False
+                    for so in screen_overlays:
+                        if hasattr(so, "_update_snap_button_style"):
+                            so._update_snap_button_style()
+
+            if hasattr(self, 'save_config') and callable(self.save_config):
+                self.save_config()
+            elif hasattr(self, 'save_config_cb') and callable(self.save_config_cb):
+                self.save_config_cb(self.config)
+
+            print(f"[Overlay] 위치 초기화 완료: 모니터({target_screen.name() if target_screen and hasattr(target_screen, 'name') else 'primary'}) 중앙 배치")
         except Exception as e:
             print(f"[Overlay] 위치 초기화 오류: {e}")
 
@@ -10857,9 +11009,18 @@ class ControlPanel(QWidget):
         self.config.setdefault("roi_configs", {}).setdefault(idx_str, {})["duration"] = val
         if idx == 0:
             self.config["screen_subtitle_duration"] = val
+            if hasattr(self, 'screen_slider_duration') and self.screen_slider_duration.value() != val:
+                self.screen_slider_duration.blockSignals(True)
+                self.screen_slider_duration.setValue(val)
+                self.screen_slider_duration.blockSignals(False)
+            if hasattr(self, 'screen_lbl_duration'):
+                self.screen_lbl_duration.setText(self._duration_text(val))
         if self.screen_overlay and hasattr(self.screen_overlay, "overlays") and idx < len(self.screen_overlay.overlays):
             o = self.screen_overlay.overlays[idx]
-            o._apply_config(apply_geometry=False)
+            if hasattr(o, "update_duration"):
+                o.update_duration(val)
+            else:
+                o._apply_config(apply_geometry=False)
         self.save_config_cb(self.config)
 
     def _on_roi_snap_toggled(self, idx: int, checked: bool):
@@ -11042,8 +11203,8 @@ class ControlPanel(QWidget):
 
         # 1. 창 위치 및 크기 저장
         try:
-            geo = self.geometry()
             if getattr(self, '_is_simple_mode', False):
+                geo = self.geometry()
                 self.config["simple_mode_geometry"] = [geo.x(), geo.y(), geo.width(), geo.height()]
                 self.config["ui_mode"] = "simple"
                 if hasattr(self, '_full_geometry') and self._full_geometry:
@@ -11051,10 +11212,17 @@ class ControlPanel(QWidget):
                     self.config["control_panel_geometry"] = [fg.x(), fg.y(), fg.width(), fg.height()]
             else:
                 self.config["ui_mode"] = "full"
+                # 최대화 상태인 경우 화면 전체 크기 대신 원래 창 크기(normalGeometry)를 저장하여
+                # 다음 실행 시 비정상적으로 거대해지는 현상 방지
+                geo = self.normalGeometry() if self.isMaximized() else self.geometry()
                 if geo.isValid() and geo.width() >= 400 and geo.height() >= 300:
-                    screen = QApplication.primaryScreen()
+                    center_pt = QPoint(geo.x() + geo.width() // 2, geo.y() + geo.height() // 2)
+                    screen = (QApplication.screenAt(center_pt) or
+                              QApplication.screenAt(QPoint(geo.x(), geo.y())) or
+                              QApplication.primaryScreen())
                     if screen:
                         avail = screen.availableGeometry()
+                        # 다중 모니터 환경에서도 해당 스크린 가용 영역 내에 위치하면 정상 저장
                         if (avail.left() - 100 <= geo.x() <= avail.right() and
                             avail.top() - 50 <= geo.y() <= avail.bottom()):
                             self.config["control_panel_geometry"] = [geo.x(), geo.y(), geo.width(), geo.height()]
@@ -11066,8 +11234,8 @@ class ControlPanel(QWidget):
 
         if self.overlay and hasattr(self.overlay, "geometry"):
             try:
-                og = self.overlay.geometry()
-                if hasattr(og, 'x') and callable(og.x):
+                og = self.overlay.normalGeometry() if self.overlay.isMaximized() else self.overlay.geometry()
+                if hasattr(og, 'x') and callable(og.x) and og.isValid():
                     self.config["window_geometry"] = [og.x(), og.y(), og.width(), og.height()]
             except Exception:
                 pass
@@ -11077,13 +11245,19 @@ class ControlPanel(QWidget):
                 overlays_list = getattr(self.screen_overlay, "overlays", None)
                 if isinstance(overlays_list, (list, tuple)) and overlays_list:
                     self.config["screen_overlay_geometries"] = {
-                        str(i): [ov.geometry().x(), ov.geometry().y(), ov.geometry().width(), ov.geometry().height()]
+                        str(i): [
+                            (ov.normalGeometry() if ov.isMaximized() else ov.geometry()).x(),
+                            (ov.normalGeometry() if ov.isMaximized() else ov.geometry()).y(),
+                            (ov.normalGeometry() if ov.isMaximized() else ov.geometry()).width(),
+                            (ov.normalGeometry() if ov.isMaximized() else ov.geometry()).height(),
+                        ]
                         for i, ov in enumerate(overlays_list)
                         if hasattr(ov, 'geometry') and hasattr(ov.geometry(), 'x')
                     }
                 elif hasattr(self.screen_overlay, "geometry"):
-                    og = self.screen_overlay.geometry()
-                    if hasattr(og, 'x') and callable(og.x):
+                    ov = self.screen_overlay
+                    og = ov.normalGeometry() if ov.isMaximized() else ov.geometry()
+                    if hasattr(og, 'x') and callable(og.x) and og.isValid():
                         self.config["screen_overlay_geometries"] = {"0": [og.x(), og.y(), og.width(), og.height()]}
             except Exception:
                 pass

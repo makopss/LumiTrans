@@ -84,6 +84,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         else:
             self.base_geometry = list(self.config.get("screen_overlay_geometry", [200, 520, 850, 130]))
             self.is_user_sized = False
+        self.base_geometry = self.sanitize_geometry(self.base_geometry, default_geo=[200, 520, 850, 130])
         self.is_auto_resizing = False
 
         # 8방향 테두리 리사이즈 및 드래그 이동 상태 변수
@@ -128,13 +129,19 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.status_signal.connect(self.display_status)
         self.setMouseTracking(True)
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        if hasattr(self, 'idle_timer'):
-            self.idle_timer.start(3500)
-        if hasattr(self, 'ext_visibility_change') and self.ext_visibility_change:
-            self.ext_visibility_change(True)
-        self._bind_screen_changed()
+    def _get_subtitle_duration(self) -> int:
+        idx_key = str(getattr(self, 'assigned_roi_idx', 0))
+        roi_configs = self.config.get("roi_configs", {})
+        roi_specific_cfg = roi_configs.get(idx_key, {}) if isinstance(roi_configs, dict) else {}
+        if "duration" in roi_specific_cfg and roi_specific_cfg["duration"] is not None:
+            return int(roi_specific_cfg["duration"])
+        val = self.config.get("screen_subtitle_duration")
+        if val is not None:
+            return int(val)
+        val = self.config.get("subtitle_duration")
+        if val is not None:
+            return int(val)
+        return 5
 
     def _get_font_size(self) -> int:
         idx_key = str(getattr(self, 'assigned_roi_idx', 0))
@@ -294,22 +301,6 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.btn_inplace.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_inplace.setFixedHeight(26)
         self.btn_inplace.setFixedWidth(32)
-        self.btn_inplace.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(99, 102, 241, 0.75);
-                color: #FFFFFF;
-                font-weight: bold;
-                border: 1px solid #818CF8;
-                border-radius: 4px;
-                padding: 0px;
-                margin: 0px;
-                text-align: center;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #4F46E5;
-            }
-        """)
         self.btn_inplace.clicked.connect(self._on_inplace_clicked)
         self.header_layout.addWidget(self.btn_inplace)
 
@@ -493,7 +484,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                 border: 1px solid rgba(0, 200, 255, 0.5);
             }
         """
-        for b in [self.btn_pause, self.btn_roi, self.btn_snap, self.btn_font_dec, self.btn_font_inc, self.btn_op_dec, self.btn_op_inc, self.btn_pin, self.btn_lock, self.btn_settings, self.btn_hide, self.btn_border]:
+        for b in [self.btn_pause, self.btn_roi, self.btn_snap, self.btn_inplace, self.btn_font_dec, self.btn_font_inc, self.btn_op_dec, self.btn_op_inc, self.btn_pin, self.btn_lock, self.btn_settings, self.btn_hide, self.btn_border]:
             b.setStyleSheet(btn_style)
         self._update_snap_button_style()
         self._update_clean_button_style()
@@ -832,8 +823,9 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             else:
                 geo = self.config.get("screen_overlay_geometry", self.base_geometry)
             if len(geo) == 4:
-                self.setGeometry(geo[0], geo[1], geo[2], geo[3])
-                self.base_geometry = list(geo)
+                safe_geo = self.sanitize_geometry(geo, default_geo=self.base_geometry)
+                self.setGeometry(safe_geo[0], safe_geo[1], safe_geo[2], safe_geo[3])
+                self.base_geometry = list(safe_geo)
 
         idx_key = str(getattr(self, 'assigned_roi_idx', 0))
         roi_configs = self.config.get("roi_configs", {})
@@ -890,14 +882,9 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             self._auto_fit_text(self.format_original_text(getattr(self, 'current_original', '')), formatted_ko)
 
         # 자막 유지 시간 설정 변경 반영
-        badge_txt = self.live_badge.text() if hasattr(self, 'live_badge') else ""
-        is_instant = "즉시" in badge_txt.lower() or "instant" in badge_txt.lower()
-        if "duration" in roi_specific_cfg:
-            duration_sec = int(roi_specific_cfg["duration"])
-        else:
-            duration_sec = self.config.get("screen_subtitle_duration", 5)
+        duration_sec = self._get_subtitle_duration()
         if hasattr(self, 'clear_timer'):
-            if duration_sec == 0 or getattr(self, 'is_pinned', False) or is_instant:
+            if duration_sec == 0 or getattr(self, 'is_pinned', False):
                 self.clear_timer.stop()
             elif duration_sec > 0 and getattr(self, 'current_translated', None) and not getattr(self, 'is_mouse_hovered', False):
                 self.clear_timer.start(duration_sec * 1000)
@@ -1077,6 +1064,7 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             self.idle_timer.start(3500)
         if hasattr(self, 'ext_visibility_change') and self.ext_visibility_change:
             self.ext_visibility_change(True)
+        self._bind_screen_changed()
 
     def hideEvent(self, event):
         super().hideEvent(event)
@@ -1453,17 +1441,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self._set_label_html(self.label_translated, formatted_ko, self.config.get("text_color", "#FFFFFF"))
 
         # ⏳ 자막 유지 시간 (초): 0이면 새 자막이 올 때까지 영구 유지 (무제한)
-        idx_key = str(getattr(self, 'assigned_roi_idx', 0))
-        roi_configs = self.config.get("roi_configs", {})
-        roi_specific_cfg = roi_configs.get(idx_key, {}) if isinstance(roi_configs, dict) else {}
-        if "duration" in roi_specific_cfg:
-            duration_sec = int(roi_specific_cfg["duration"])
-        else:
-            duration_sec = self.config.get("screen_subtitle_duration", 5)
-        is_instant = "즉시" in (engine_badge or "") or "instant" in (engine_badge or "").lower()
+        duration_sec = self._get_subtitle_duration()
 
-        if self.is_pinned or is_instant or duration_sec == 0:
-            # 1회 즉시 캡처 번역, 영구 유지(0초), 또는 📌 고정 모드: 소거 타이머 작동 중지 (무제한 영구 유지)
+        if self.is_pinned or duration_sec == 0:
+            # 영구 유지(0초) 또는 📌 고정 모드: 소거 타이머 작동 중지 (무제한 영구 유지)
             self.clear_timer.stop()
         elif duration_sec > 0:
             if not getattr(self, 'is_mouse_hovered', False):
@@ -1483,7 +1464,9 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         self.current_original = ""
         self.current_translated = ""
         self.label_original.setText("")
-        self._set_label_html(self.label_translated, "...", self.config.get("text_color", "#FFFFFF"))
+        self._set_label_html(self.label_translated, "", self.config.get("text_color", "#FFFFFF"))
+        if hasattr(self, 'live_badge'):
+            self.live_badge.setText(tr("overlay_waiting"))
         self.update()
 
     def _on_pause_clicked(self):
@@ -1775,9 +1758,8 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
         if self.is_pinned:
             self.clear_timer.stop()
         else:
-            duration_sec = self.config.get("screen_subtitle_duration", 5)
-            is_instant = "즉시" in (self.live_badge.text() or "").lower() or "instant" in (self.live_badge.text() or "").lower()
-            if duration_sec > 0 and not is_instant and self.current_translated and not self.is_mouse_hovered:
+            duration_sec = self._get_subtitle_duration()
+            if duration_sec > 0 and self.current_translated and not self.is_mouse_hovered:
                 self.clear_timer.start(duration_sec * 1000)
 
     def _update_pin_button_style(self):
@@ -1892,11 +1874,10 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
             self.idle_timer.stop()
         else:
             self.idle_timer.start(3500)
-        # 마우스가 나갔을 때 고정/영구유지/즉시번역이 아니면 설정된 유지 시간 카운트다운 재개
+        # 마우스가 나갔을 때 고정/영구유지가 아니면 설정된 유지 시간 카운트다운 재개
         if not getattr(self, 'is_pinned', False):
-            duration_sec = self.config.get("screen_subtitle_duration", 5)
-            is_instant = "즉시" in (self.live_badge.text() or "").lower() or "instant" in (self.live_badge.text() or "").lower()
-            if duration_sec > 0 and not is_instant and self.current_translated:
+            duration_sec = self._get_subtitle_duration()
+            if duration_sec > 0 and self.current_translated:
                 self.clear_timer.start(duration_sec * 1000)
         self._subtitle_box_cache = None
         self.update()
@@ -2111,18 +2092,27 @@ class ScreenSubtitleOverlay(OverlayGeometryMixin, QWidget):
                     adjust_window=False,
                 )
 
-    def reset_geometry(self):
-        """기본 자막 위치 및 크기로 초기화"""
-        default_geo = [200, 520, 850, 130]
-        self.setGeometry(default_geo[0], default_geo[1], default_geo[2], default_geo[3])
-        self.base_geometry = list(default_geo)
+    def reset_geometry(self, target_screen=None, target_rect=None):
+        """기본 화면 자막 위치 및 크기로 초기화 (모니터 중앙 영역 배치)"""
+        if target_rect and len(target_rect) == 4:
+            safe_geo = self.sanitize_geometry(target_rect, default_geo=target_rect)
+        else:
+            from PyQt6.QtGui import QGuiApplication
+            app = QGuiApplication.instance()
+            screen = target_screen
+            if not screen and app:
+                screen = app.screenAt(self.frameGeometry().center()) or app.screenAt(self.pos()) or app.primaryScreen()
+            safe_geo = self.get_centered_geometry(screen, width=860, height=130)
+
+        self.setGeometry(safe_geo[0], safe_geo[1], safe_geo[2], safe_geo[3])
+        self.base_geometry = list(safe_geo)
         self.is_user_positioned = False
         self.is_user_sized = False
         idx_key = str(getattr(self, 'assigned_roi_idx', 0))
         if "screen_overlay_geometries" in self.config and isinstance(self.config["screen_overlay_geometries"], dict):
-            self.config["screen_overlay_geometries"].pop(idx_key, None)
+            self.config["screen_overlay_geometries"][idx_key] = list(safe_geo)
         if getattr(self, 'assigned_roi_idx', 0) == 0:
-            self.config["screen_overlay_geometry"] = list(default_geo)
+            self.config["screen_overlay_geometry"] = list(safe_geo)
         self._apply_two_line_overlay_height()
         self._notify_config_change()
 

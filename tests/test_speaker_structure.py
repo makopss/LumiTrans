@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+from src.i18n import set_ui_language
+set_ui_language('ko')
 from src.speaker_identifier import SpeakerIdentifier
 from src.speaker_tracking import SpeakerAudioWindow, partition_segments, align_transcript
 
