@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
     "source_lang": "en",             # 번역 출발 언어. "auto"면 인식 결과가 번역기 source를 갱신한다.
     "target_lang": "ko",             # 번역 도착 언어. 한국어 제품은 ko로 고정한다.
     "ui_lang": "ko",                 # 화면 언어. 한국어 제품은 ko, 글로벌은 사용자가 고른다.
+    "ui_mode": "full",               # UI 모드 ("full": 기본 전체 모드, "simple": 미니 모드)
     "device": "cpu",                 # 초기 기본 연산 디바이스: CPU
     "compute_type": "int8",          # 초기 기본 연산 타입: int8 (CPU 초경량 저지연)
     "vad_threshold": 0.006,          # RMS 에너지 임계값

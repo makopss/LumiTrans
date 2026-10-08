@@ -10,37 +10,45 @@ LumiTrans is an all-in-one standalone desktop application that **listens to PC a
 
 ---
 
-## 🌟 Key Features (v1.1.0)
+## 🌟 Key Features (v1.1.1)
 
-### 1. 🌐 Full Global Multilingual & i18n Support [NEW!]
+### 1. 🗗 Mini Mode (Compact PiP Controller) [NEW!]
+- **Shortcut `Ctrl+M`**: Instant toggle between Full Settings Panel and Ultra-compact Mini Mode.
+- **Minimalist Control**: Compact card view designed for gaming, video streaming, and video calls without blocking screen contents. Directly control Real-Time Audio translation, Screen translation, AI Dubbing & volume, and subtitle overlay visibility with one click.
+- **📌 Always on Top (Pin) & Clamped Moving**: Pin the mini controller on top of active games or videos; includes screen top boundary clamping to prevent window overflow.
+- **100% Windows Native Frame**: Native OS titlebar restored in Full Mode for full compatibility with Windows Aero Snap and Windows 11 Snap Layouts with immersive dark mode.
+- **High-DPI Sharp Vector Icons**: Razor-sharp vector rendering optimized across 100%, 125%, 150%, and 4K displays.
+- **Persistent Session State**: Remembers your active mode upon app exit and launches straight into Mini Mode if closed in Mini Mode.
+
+### 2. 🌐 Full Global Multilingual & i18n Support [NEW!]
 - **15 Supported Languages**: Comprehensive UI and subtitle translation for English, Korean, Japanese, Chinese (Simplified & Traditional), Spanish, French, German, Russian, Portuguese, Italian, Vietnamese, Thai, Indonesian, and Hindi.
 - **Automatic Language Detection**: Automatically recognizes your system locale on first startup, with one-click language switching in Settings.
 - **Multilingual Speech & Screen Recognition**: Seamlessly transcribe and translate voices and text from across the globe into your preferred target language.
 
-### 2. 🔊 Real-Time AI Dubbing (Edge-TTS) [NEW!]
+### 3. 🔊 Real-Time AI Dubbing (Edge-TTS) [NEW!]
 - **Natural Neural Voices**: Reads translated subtitles aloud in real time using high-fidelity neural speech synthesis.
 - **Independent Dual Control**: Toggle and configure dubbing for audio translation and screen translation independently.
 - **Fine-Tuning**: Adjust speech speed, volume, and choose optimal voice profiles per language.
 
-### 3. 🎯 In-Place Screen Capture & Instant Translation (OCR) [NEW!]
+### 4. 🎯 In-Place Screen Capture & Instant Translation (OCR) [NEW!]
 - **Global Hotkeys**:
   - `F4`: Instant in-place translation for selected ROI or active game/app window.
   - `F9`: Instant full-screen capture and translation.
 - **Intuitive Control Panel**: Lightning (instant translate), Camera (full screen), Close (X), and helpful mouse-hover tooltips.
 - **Smart Speaker Preservation**: Automatically distinguishes speaker headers (e.g., `Nora Treadwell:`, `Detective:`) in game dialogues without scrambling names or punctuation.
 
-### 4. 🧠 Multi-Engine Translation Hub
+### 5. 🧠 Multi-Engine Translation Hub
 - **Google Translate**: Default built-in online route; no API key needed.
 - **DeepL / Gemini / Groq**: Register your personal API keys for top-tier quality (Groq offers ultra-low-latency LPU cloud translation).
 - **Local Offline Translation**: Full integration with EXAONE 3.5 (2.4B/7.8B), TranslateGemma, and Ollama local LLMs.
 - **Smart Fallback**: Automatic recovery through fallback providers (Google -> MyMemory) if primary engines fail.
 
-### 5. ⚡ Triple Hardware Acceleration
+### 6. ⚡ Triple Hardware Acceleration
 - **NVIDIA GPU (CUDA)**: Ultra-fast local inference powered by TensorRT and CTranslate2.
 - **CPU Multithreading**: Optimized for smooth performance even on systems without a dedicated GPU.
 - **Groq Cloud STT**: Offload speech recognition to high-speed cloud infrastructure for zero latency on lightweight PCs.
 
-### 6. 🎬 Netflix-Style Smart Subtitle Overlay
+### 7. 🎬 Netflix-Style Smart Subtitle Overlay
 - **Click-Through Mode**: Interact freely with underlying games, YouTube controls, or browser windows through the transparent overlay.
 - **Dynamic Auto-Fit**: Intelligently calculates font size and height based on sentence length.
 - Drag-and-drop repositioning, real-time opacity adjustment, and live typing previews.

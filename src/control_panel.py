@@ -68,6 +68,46 @@ SVG_EYE_CLOSED = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" 
   <line x1="2" y1="2" x2="22" y2="22"/>
 </svg>"""
 
+SVG_PIN_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <line x1="12" y1="17" x2="12" y2="22"></line>
+  <path d="M5 17h14v-2l-2-1V5h1V3H6v2h1v9l-2 1z" fill="currentColor" fill-opacity="0.15"></path>
+</svg>"""
+
+SVG_PIN_ACTIVE_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <line x1="12" y1="17" x2="12" y2="22"></line>
+  <path d="M5 17h14v-2l-2-1V5h1V3H6v2h1v9l-2 1z" fill="currentColor" fill-opacity="0.85"></path>
+</svg>"""
+
+SVG_MINI_MODE_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="3" y="3" width="18" height="18" rx="2.5"></rect>
+  <rect x="11" y="11" width="8" height="8" rx="1.5" fill="currentColor"></rect>
+</svg>"""
+
+SVG_FULL_MODE_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="3" y="3" width="18" height="18" rx="2.5"></rect>
+  <polyline points="15 3 21 3 21 9"></polyline>
+  <line x1="21" y1="3" x2="14" y2="10"></line>
+</svg>"""
+
+SVG_WIN_MIN_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+  <line x1="4" y1="12" x2="20" y2="12"></line>
+</svg>"""
+
+SVG_WIN_MAX_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="4" y="4" width="16" height="16" rx="1.5"></rect>
+</svg>"""
+
+SVG_WIN_RESTORE_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M7 4h12a1 1 0 0 1 1 1v12"></path>
+  <rect x="4" y="8" width="12" height="12" rx="1"></rect>
+</svg>"""
+
+SVG_WIN_CLOSE_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+  <line x1="6" y1="6" x2="18" y2="18"></line>
+  <line x1="6" y1="18" x2="18" y2="6"></line>
+</svg>"""
+
+
 def get_eye_icon(visible: bool = False, color: str = None) -> QIcon:
     if color is None:
         color = "#38BDF8" if visible else "#94A3B8"
@@ -232,7 +272,8 @@ def control_panel_min_width(base_font: QFont | None = None) -> int:
     header_margins = 28
     header_gap = 12
     ui_lang_combo = 120
-    return root_margins + header_margins + brand + header_gap + ui_lang_combo + tab_total + 16
+    quick_actions_width = 74
+    return root_margins + header_margins + brand + header_gap + ui_lang_combo + tab_total + quick_actions_width + 16
 
 
 def nav_tab_stylesheet(palette: dict) -> str:
@@ -262,17 +303,160 @@ def nav_tab_stylesheet(palette: dict) -> str:
 
 def create_svg_icon(svg_str: str, size: int = 18, color: str = "#94A3B8") -> QIcon:
     try:
+        import re
         from PyQt6.QtSvg import QSvgRenderer
-        svg_colored = svg_str.replace("currentColor", color)
+
+        def _strip_root_dim(m):
+            tag = m.group(0)
+            return re.sub(r'\s+(width|height)="[^"]*"', '', tag, flags=re.IGNORECASE)
+
+        clean_svg = re.sub(r'<svg[^>]*>', _strip_root_dim, svg_str, count=1, flags=re.IGNORECASE)
+        svg_colored = clean_svg.replace("currentColor", color)
         renderer = QSvgRenderer(QByteArray(svg_colored.strip().encode("utf-8")))
-        pix = QPixmap(size, size)
-        pix.fill(Qt.GlobalColor.transparent)
-        p = QPainter(pix)
-        renderer.render(p)
-        p.end()
-        return QIcon(pix)
+        if not renderer.isValid():
+            return QIcon()
+
+        icon = QIcon()
+        # High-DPI 다중 스케일(1x, 2x, 3x, 4x) 래스터화 등록
+        # 윈도우 디스플레이 배율(125%, 150%, 200%) 및 고해상도 환경에서도 흐릿함 없이 초고화질 선명도 유지
+        for scale in (1, 2, 3, 4):
+            px_size = size * scale
+            pix = QPixmap(px_size, px_size)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            renderer.render(p, QRectF(0, 0, float(px_size), float(px_size)))
+            p.end()
+            pix.setDevicePixelRatio(scale)
+            icon.addPixmap(pix)
+        return icon
     except Exception:
         return QIcon()
+
+
+class CustomTitleBar(QFrame):
+    """루미트랜스 다크 테마 일체형 윈도우 타이틀바 (타이틀, 핀, 심플모드, 최소화, 최대화, 닫기)"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(34)
+        self.setObjectName("CustomTitleBar")
+        self.setStyleSheet("""
+            QFrame#CustomTitleBar {
+                background-color: #0B0E17;
+                border-bottom: 1px solid #1E2A42;
+            }
+            QLabel {
+                background: transparent;
+                border: none;
+            }
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1E2A42;
+            }
+        """)
+        tb_layout = QHBoxLayout(self)
+        tb_layout.setContentsMargins(12, 0, 4, 0)
+        tb_layout.setSpacing(4)
+
+        # 앱 아이콘 & 윈도우 타이틀
+        lbl_icon = QLabel("💎")
+        lbl_icon.setStyleSheet("font-size: 13px;")
+        tb_layout.addWidget(lbl_icon)
+
+        self.lbl_title = QLabel(tr("window_title"))
+        self.lbl_title.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #94A3B8;")
+        tb_layout.addWidget(self.lbl_title)
+
+        tb_layout.addStretch(1)
+
+        # 윈도우 액션 버튼 (📌, 🗗, ─, □, ✕)
+        self.btn_full_pin = QPushButton()
+        self.btn_full_pin.setFixedSize(36, 34)
+        self.btn_full_pin.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_full_pin.setIcon(create_svg_icon(SVG_PIN_ICON, 16, "#94A3B8"))
+        self.btn_full_pin.setToolTip(tr("tip_pin_inactive"))
+
+        self.btn_switch_to_simple = QPushButton()
+        self.btn_switch_to_simple.setFixedSize(36, 34)
+        self.btn_switch_to_simple.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_switch_to_simple.setIcon(create_svg_icon(SVG_MINI_MODE_ICON, 16, "#94A3B8"))
+        self.btn_switch_to_simple.setToolTip(tr("tip_simple_mode"))
+
+        self.btn_win_min = QPushButton()
+        self.btn_win_min.setFixedSize(36, 34)
+        self.btn_win_min.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_win_min.setIcon(create_svg_icon(SVG_WIN_MIN_ICON, 12, "#94A3B8"))
+        self.btn_win_min.setToolTip("최소화")
+
+        self.btn_win_max = QPushButton()
+        self.btn_win_max.setFixedSize(36, 34)
+        self.btn_win_max.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_win_max.setIcon(create_svg_icon(SVG_WIN_MAX_ICON, 12, "#94A3B8"))
+        self.btn_win_max.setToolTip("최대화 / 이전 크기로 복원")
+
+        self.btn_win_close = QPushButton()
+        self.btn_win_close.setFixedSize(42, 34)
+        self.btn_win_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_win_close.setIcon(create_svg_icon(SVG_WIN_CLOSE_ICON, 12, "#94A3B8"))
+        self.btn_win_close.setToolTip("닫기")
+        self.btn_win_close.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+            }
+            QPushButton:hover {
+                background-color: #DC2626;
+            }
+        """)
+
+        tb_layout.addWidget(self.btn_full_pin)
+        tb_layout.addWidget(self.btn_switch_to_simple)
+        tb_layout.addWidget(self.btn_win_min)
+        tb_layout.addWidget(self.btn_win_max)
+        tb_layout.addWidget(self.btn_win_close)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            win = self.window()
+            wh = win.windowHandle() if win else None
+            if wh and hasattr(wh, 'startSystemMove'):
+                wh.startSystemMove()
+                event.accept()
+                return
+            if win:
+                self._drag_pos = event.globalPosition().toPoint() - win.frameGeometry().topLeft()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, '_drag_pos'):
+            win = self.window()
+            if win and not win.isMaximized():
+                win.move(event.globalPosition().toPoint() - self._drag_pos)
+                event.accept()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            win = self.window()
+            if hasattr(win, '_toggle_maximize'):
+                win._toggle_maximize()
+            elif win.isMaximized():
+                win.showNormal()
+            else:
+                win.showMaximized()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
 
 class ShrinkableScrollArea(QScrollArea):
@@ -1169,10 +1353,12 @@ class ControlPanel(QWidget):
         self.setObjectName("ControlPanel")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setAutoFillBackground(True)
+        self.setWindowFlags(Qt.WindowType.Window)
         pal = self.palette()
         pal.setColor(QPalette.ColorRole.Window, QColor(COLOR_BG_DARK))
         pal.setColor(QPalette.ColorRole.WindowText, QColor(COLOR_TEXT_PRIMARY))
         self.setPalette(pal)
+        set_windows_dark_mode(int(self.winId()))
 
         # 화면 밖 엉뚱한 위치 방지 및 노트북 최적화 컴팩트 안전 좌표 보정
         geom = self.config.get("control_panel_geometry", [80, 40, 1080, 680])
@@ -1201,6 +1387,9 @@ class ControlPanel(QWidget):
 
         # 하위 호환성 (테스트 및 레거시 버튼 연동)
         self._is_audio_active = False
+        self._is_simple_mode = False
+        self._simple_pinned = False
+        self._full_geometry = None
         self.btn_toggle = QPushButton()
         self._i18n(self.btn_toggle, "audio_start")
         self.btn_toggle.clicked.connect(self.toggle_translation)
@@ -1270,6 +1459,10 @@ class ControlPanel(QWidget):
         self.refresh_speaker_mgmt_ui(force=True)
         self._init_default_demo_data()
 
+        # UI 모드 복원 (이전 세션에서 미니 모드로 종료된 경우 미니 모드로 시작)
+        if self.config.get("ui_mode") == "simple":
+            self.set_simple_mode(True)
+
     def _init_default_demo_data(self):
         """초기 가이드 자막 및 화자 데모 세팅 (LUMITRANS_DEMO 환경 변수 또는 demo_mode 설정 시)"""
         if os.environ.get("LUMITRANS_DEMO") != "1" and not self.config.get("demo_mode", False):
@@ -1305,17 +1498,30 @@ class ControlPanel(QWidget):
             self._sync_dubbing_overlay_buttons()
             self._populate_dubbing_voice_combos()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not getattr(self, '_is_simple_mode', False):
+            set_windows_dark_mode(int(self.winId()))
+
     def _init_ui(self):
         # 전역 스타일시트 적용
         self.setStyleSheet(GLOBAL_QSS)
 
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(10, 6, 10, 6)
-        root_layout.setSpacing(6)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        self.root_layout = root_layout
 
-        # 1. 상단 글로벌 헤더 (앱 타이틀, 5대 탭 네비게이션 버튼, 윈도우 조작/설정)
+        # 전체 모드 컨텐츠 컨테이너
+        self.content_container = QWidget(self)
+        content_layout = QVBoxLayout(self.content_container)
+        content_layout.setContentsMargins(10, 6, 10, 6)
+        content_layout.setSpacing(6)
+        self.content_layout = content_layout
+
+        # 1. 상단 글로벌 헤더 (앱 타이틀, 5대 탭 네비게이션 버튼, 우측 퀵 모드 아이콘)
         self.header_widget = self._build_header()
-        root_layout.addWidget(self.header_widget)
+        content_layout.addWidget(self.header_widget)
 
         # 2. 중앙 컨텐츠 영역: QStackedWidget (5대 탭)
         self.tab_stack = StableStackedWidget(self)
@@ -1339,11 +1545,26 @@ class ControlPanel(QWidget):
         tab_names = ["음성 번역", "화면 번역", "자막 탐색기", "자막 설정", "설정"]
         self.tab_stack.tabText = lambda idx: tab_names[idx] if 0 <= idx < len(tab_names) else ""
 
-        root_layout.addWidget(self.tab_stack, stretch=1)
+        content_layout.addWidget(self.tab_stack, stretch=1)
 
         # 3. 하단 고정 제어 바 (어느 탭에서나 항상 접근 가능한 3대 엔진 컨트롤 & 상태)
         self.bottom_bar = self._build_bottom_persistent_bar()
-        root_layout.addWidget(self.bottom_bar)
+        content_layout.addWidget(self.bottom_bar)
+
+        root_layout.addWidget(self.content_container, stretch=1)
+
+        # 4. 심플 모드 컨테이너 (콤팩트 제어 패널)
+        self.simple_container = self._build_simple_container()
+        self.simple_container.hide()
+        root_layout.addWidget(self.simple_container, stretch=1)
+
+        # 단축키 Ctrl+M 등록 (상세 설정 ↔ 심플 모드 상호 전환)
+        try:
+            from PyQt6.QtGui import QShortcut, QKeySequence
+            self.shortcut_simple_mode = QShortcut(QKeySequence("Ctrl+M"), self)
+            self.shortcut_simple_mode.activated.connect(self.toggle_simple_mode)
+        except Exception:
+            pass
 
         # 마지막으로 활성화되었던 탭(기본 0: 음성 번역) 복원
         last_tab = self.config.get("last_active_tab", 0)
@@ -1352,6 +1573,8 @@ class ControlPanel(QWidget):
         self._switch_tab(last_tab)
 
     def minimumSizeHint(self):
+        if getattr(self, '_is_simple_mode', False):
+            return QSize(360, 240)
         return QSize(max(control_panel_min_width(self.font()),
                          getattr(self, '_required_content_width', 0)), CONTROL_PANEL_MIN_HEIGHT)
 
@@ -1450,6 +1673,56 @@ class ControlPanel(QWidget):
         nav_host.setFixedSize(nav_width, NAV_TAB_HEIGHT)
         self.nav_host = nav_host
         h_layout.addWidget(nav_host)
+
+        # 우측 상단 퀵 모드 액션 그룹 (아이콘 전용, 텍스트/라벨 없음)
+        action_bar = QWidget()
+        action_layout = QHBoxLayout(action_bar)
+        action_layout.setContentsMargins(4, 0, 0, 0)
+        action_layout.setSpacing(6)
+
+        # 1. 📌 항상 위에 고정 버튼 (아이콘 전용 - 미니 모드와 동일한 14px 정밀 사이즈)
+        self.btn_full_pin = QPushButton()
+        self.btn_full_pin.setIcon(create_svg_icon(SVG_PIN_ICON, 14, "#94A3B8"))
+        self.btn_full_pin.setIconSize(QSize(14, 14))
+        self.btn_full_pin.setToolTip(tr("tip_pin_inactive"))
+        self.btn_full_pin.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_full_pin.setFixedSize(30, NAV_TAB_HEIGHT)
+        self.btn_full_pin.setStyleSheet("""
+            QPushButton {
+                background-color: #141C30;
+                border: 1px solid #1E2A42;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #1E2A42;
+                border-color: #38BDF8;
+            }
+        """)
+        self.btn_full_pin.clicked.connect(self.toggle_simple_pin)
+        action_layout.addWidget(self.btn_full_pin)
+
+        # 2. 🗗 미니 모드 전환 버튼 (아이콘 전용 - 미니 모드와 동일한 14px 정밀 사이즈)
+        self.btn_switch_to_simple = QPushButton()
+        self.btn_switch_to_simple.setIcon(create_svg_icon(SVG_MINI_MODE_ICON, 14, "#C7D2FE"))
+        self.btn_switch_to_simple.setIconSize(QSize(14, 14))
+        self.btn_switch_to_simple.setToolTip(tr("tip_simple_mode"))
+        self.btn_switch_to_simple.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_switch_to_simple.setFixedSize(30, NAV_TAB_HEIGHT)
+        self.btn_switch_to_simple.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(99, 102, 241, 0.16);
+                border: 1px solid rgba(99, 102, 241, 0.45);
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: rgba(99, 102, 241, 0.35);
+                border-color: #818CF8;
+            }
+        """)
+        self.btn_switch_to_simple.clicked.connect(self.toggle_simple_mode)
+        action_layout.addWidget(self.btn_switch_to_simple)
+
+        h_layout.addWidget(action_bar)
         return header
 
     def _switch_tab(self, index: int):
@@ -1547,6 +1820,626 @@ class ControlPanel(QWidget):
                 border-color: #FB7185;
             }
         """
+
+    # ----------------------------------------------------------------------
+    # 1-1. 심플 UI (Mini Mode) 컨테이너 및 모드 트랜스폼 제어
+    # ----------------------------------------------------------------------
+    def _build_simple_container(self) -> QWidget:
+        container = QFrame()
+        container.setObjectName("SimpleContainer")
+        container.setStyleSheet(f"""
+            QFrame#SimpleContainer {{
+                background-color: {COLOR_BG_DARK};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 10px;
+            }}
+            QLabel {{
+                background-color: transparent;
+                border: none;
+            }}
+        """)
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(8, 8, 8, 8)
+        vbox.setSpacing(6)
+
+        # 1. 미니 상단 헤더 바
+        mini_header = QFrame()
+        mini_header.setFixedHeight(34)
+        mini_header.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLOR_PANEL_BG};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 6px;
+            }}
+        """)
+        mh_layout = QHBoxLayout(mini_header)
+        mh_layout.setContentsMargins(8, 2, 6, 2)
+        mh_layout.setSpacing(6)
+
+        logo_lbl = QLabel("💎")
+        logo_lbl.setStyleSheet(f"font-size: 15px; color: {COLOR_ACCENT_PURPLE};")
+        mh_layout.addWidget(logo_lbl)
+
+        title_lbl = QLabel(BRAND_TITLE)
+        title_lbl.setStyleSheet(f"font-size: 12.5px; font-weight: 800; color: {COLOR_TEXT_PRIMARY};")
+        mh_layout.addWidget(title_lbl)
+        mh_layout.addStretch(1)
+
+        # 항상 위 핀 버튼 (벡터 SVG)
+        self.btn_simple_pin = QPushButton()
+        self.btn_simple_pin.setIcon(create_svg_icon(SVG_PIN_ICON, 15, "#94A3B8"))
+        self.btn_simple_pin.setIconSize(QSize(15, 15))
+        self.btn_simple_pin.setFixedSize(26, 24)
+        self.btn_simple_pin.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_simple_pin.setToolTip(tr("tip_pin_inactive"))
+        self.btn_simple_pin.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1E2A42;
+            }
+        """)
+        self.btn_simple_pin.clicked.connect(self.toggle_simple_pin)
+        mh_layout.addWidget(self.btn_simple_pin)
+
+        # 기본 모드 복귀 버튼 (프레임 확장 벡터 SVG)
+        self.btn_simple_expand = QPushButton()
+        self.btn_simple_expand.setIcon(create_svg_icon(SVG_FULL_MODE_ICON, 15, "#C7D2FE"))
+        self.btn_simple_expand.setIconSize(QSize(15, 15))
+        self.btn_simple_expand.setFixedSize(26, 24)
+        self.btn_simple_expand.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_simple_expand.setToolTip(tr("tip_full_mode"))
+        self.btn_simple_expand.setStyleSheet("""
+            QPushButton {
+                background-color: #1E2A42;
+                border: 1px solid #283858;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: rgba(99, 102, 241, 0.35);
+                border-color: #818CF8;
+            }
+        """)
+        self.btn_simple_expand.clicked.connect(self.toggle_simple_mode)
+        mh_layout.addWidget(self.btn_simple_expand)
+
+        # 최소화 버튼 (벡터 SVG)
+        btn_min = QPushButton()
+        btn_min.setIcon(create_svg_icon(SVG_WIN_MIN_ICON, 12, "#94A3B8"))
+        btn_min.setIconSize(QSize(12, 12))
+        btn_min.setFixedSize(24, 24)
+        btn_min.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_min.setToolTip("최소화")
+        btn_min.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1E2A42;
+            }
+        """)
+        btn_min.clicked.connect(self.showMinimized)
+        mh_layout.addWidget(btn_min)
+
+        # 닫기 버튼 (벡터 SVG)
+        btn_close = QPushButton()
+        btn_close.setIcon(create_svg_icon(SVG_WIN_CLOSE_ICON, 12, "#94A3B8"))
+        btn_close.setIconSize(QSize(12, 12))
+        btn_close.setFixedSize(24, 24)
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setToolTip("닫기")
+        btn_close.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #DC2626;
+            }
+        """)
+        btn_close.clicked.connect(self.close)
+        mh_layout.addWidget(btn_close)
+
+        def _on_mini_header_press(event):
+            if event.button() == Qt.MouseButton.LeftButton:
+                win = self.window()
+                if win:
+                    self._simple_drag_pos = event.globalPosition().toPoint() - win.frameGeometry().topLeft()
+                    event.accept()
+                    return
+            QFrame.mousePressEvent(mini_header, event)
+
+        def _on_mini_header_move(event):
+            if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, '_simple_drag_pos'):
+                win = self.window()
+                if win and not win.isMaximized():
+                    screen = QApplication.screenAt(event.globalPosition().toPoint()) or QApplication.primaryScreen()
+                    avail = screen.availableGeometry() if screen else None
+                    new_pos = event.globalPosition().toPoint() - self._simple_drag_pos
+                    if avail:
+                        clamped_y = max(avail.top(), min(new_pos.y(), avail.bottom() - 40))
+                        clamped_x = max(avail.left() - win.width() + 60, min(new_pos.x(), avail.right() - 60))
+                        win.move(clamped_x, clamped_y)
+                    else:
+                        win.move(new_pos)
+                    event.accept()
+                    return
+            QFrame.mouseMoveEvent(mini_header, event)
+
+        mini_header.mousePressEvent = _on_mini_header_press
+        mini_header.mouseMoveEvent = _on_mini_header_move
+
+        vbox.addWidget(mini_header)
+
+        # 2. 🎙️ 음성 번역 카드
+        self.card_simple_audio = CardWidget(bg_color=COLOR_CARD_BG, border_color=COLOR_BORDER, border_radius=8)
+        self.card_simple_audio.setObjectName("SimpleCardAudio")
+        c1_layout = QVBoxLayout(self.card_simple_audio)
+        c1_layout.setContentsMargins(10, 6, 10, 6)
+        c1_layout.setSpacing(4)
+
+        c1_top = QHBoxLayout()
+        c1_top.setSpacing(6)
+        lbl_mic_icon = QLabel("🎙️")
+        lbl_mic_icon.setStyleSheet("font-size: 13px;")
+        c1_top.addWidget(lbl_mic_icon)
+
+        c1_info = QVBoxLayout()
+        c1_info.setSpacing(1)
+        c1_title_row = QHBoxLayout()
+        c1_title_row.setSpacing(4)
+        lbl_c1_title = QLabel(tr("simple_audio_title"))
+        lbl_c1_title.setStyleSheet("font-weight: 700; font-size: 12px; color: #F8FAFC;")
+        self.lbl_simple_audio_status = QLabel("● " + tr("status_audio_paused"))
+        self.lbl_simple_audio_status.setStyleSheet("font-size: 10px; color: #94A3B8;")
+        c1_title_row.addWidget(lbl_c1_title)
+        c1_title_row.addWidget(self.lbl_simple_audio_status)
+        c1_title_row.addStretch(1)
+
+        self.lbl_simple_audio_sub = QLabel()
+        self.lbl_simple_audio_sub.setStyleSheet("font-size: 10px; color: #64748B;")
+
+        c1_info.addLayout(c1_title_row)
+        c1_info.addWidget(self.lbl_simple_audio_sub)
+        c1_top.addLayout(c1_info, stretch=1)
+
+        self.btn_simple_audio = QPushButton()
+        self.btn_simple_audio.setText(tr("start_translation"))
+        self.btn_simple_audio.setCheckable(True)
+        self.btn_simple_audio.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_simple_audio.setFixedSize(76, 30)
+        self.btn_simple_audio.setStyleSheet("background-color: #1E2A42; color: #94A3B8; font-weight: bold; border: 1px solid #283858; border-radius: 6px; font-size: 11.5px;")
+        self.btn_simple_audio.clicked.connect(self.toggle_translation)
+        c1_top.addWidget(self.btn_simple_audio)
+        c1_layout.addLayout(c1_top)
+
+        # 미니 레벨 미터 행
+        meter_row = QHBoxLayout()
+        meter_row.setSpacing(6)
+        lbl_lvl = QLabel("LEVEL")
+        lbl_lvl.setStyleSheet("font-size: 9px; color: #64748B; font-weight: bold; font-family: monospace;")
+        meter_row.addWidget(lbl_lvl)
+        self.simple_level_meter = SegmentLevelMeter(segments=16)
+        self.simple_level_meter.setFixedHeight(8)
+        meter_row.addWidget(self.simple_level_meter, stretch=1)
+        c1_layout.addLayout(meter_row)
+
+        vbox.addWidget(self.card_simple_audio)
+
+        # 3. 🖥️ 화면 번역 카드
+        self.card_simple_screen = CardWidget(bg_color=COLOR_CARD_BG, border_color=COLOR_BORDER, border_radius=8)
+        self.card_simple_screen.setObjectName("SimpleCardScreen")
+        c2_layout = QVBoxLayout(self.card_simple_screen)
+        c2_layout.setContentsMargins(10, 6, 10, 6)
+        c2_layout.setSpacing(4)
+
+        c2_top = QHBoxLayout()
+        c2_top.setSpacing(6)
+        lbl_scr_icon = QLabel("🖥️")
+        lbl_scr_icon.setStyleSheet("font-size: 13px;")
+        c2_top.addWidget(lbl_scr_icon)
+
+        c2_info = QVBoxLayout()
+        c2_info.setSpacing(1)
+        c2_title_row = QHBoxLayout()
+        c2_title_row.setSpacing(4)
+        lbl_c2_title = QLabel(tr("simple_screen_title"))
+        lbl_c2_title.setStyleSheet("font-weight: 700; font-size: 12px; color: #F8FAFC;")
+        self.lbl_simple_screen_status = QLabel("● " + tr("status_screen_inactive"))
+        self.lbl_simple_screen_status.setStyleSheet("font-size: 10px; color: #94A3B8;")
+        c2_title_row.addWidget(lbl_c2_title)
+        c2_title_row.addWidget(self.lbl_simple_screen_status)
+        c2_title_row.addStretch(1)
+
+        lbl_c2_desc = QLabel(tr("simple_screen_desc"))
+        lbl_c2_desc.setStyleSheet("font-size: 10px; color: #64748B;")
+        c2_info.addLayout(c2_title_row)
+        c2_info.addWidget(lbl_c2_desc)
+        c2_top.addLayout(c2_info, stretch=1)
+
+        self.btn_simple_screen = QPushButton()
+        self.btn_simple_screen.setText(tr("simple_screen_start"))
+        self.btn_simple_screen.setCheckable(True)
+        self.btn_simple_screen.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_simple_screen.setFixedSize(76, 30)
+        self.btn_simple_screen.setStyleSheet("background-color: #1E2A42; color: #94A3B8; font-weight: bold; border: 1px solid #283858; border-radius: 6px; font-size: 11.5px;")
+        self.btn_simple_screen.clicked.connect(self.toggle_screen_translation)
+        c2_top.addWidget(self.btn_simple_screen)
+        c2_layout.addLayout(c2_top)
+
+        # 퀵 액션 (영역 지정 / F4 스냅샷) 행
+        c2_actions = QHBoxLayout()
+        c2_actions.setSpacing(6)
+        btn_roi = QPushButton("⛶ " + tr("edit_regions").replace("📐 ", ""))
+        btn_roi.setFixedHeight(24)
+        btn_roi.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_roi.setStyleSheet("""
+            QPushButton {
+                background-color: #0D1322;
+                color: #94A3B8;
+                border: 1px solid #1E2A42;
+                border-radius: 4px;
+                font-size: 10.5px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #1E2A42;
+                color: #38BDF8;
+                border-color: #38BDF8;
+            }
+        """)
+        btn_roi.clicked.connect(self.open_roi_selector)
+        c2_actions.addWidget(btn_roi)
+
+        btn_snap = QPushButton("⚡ " + tr("instant_region").replace("📷 ", ""))
+        btn_snap.setFixedHeight(24)
+        btn_snap.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_snap.setStyleSheet("""
+            QPushButton {
+                background-color: #0D1322;
+                color: #94A3B8;
+                border: 1px solid #1E2A42;
+                border-radius: 4px;
+                font-size: 10.5px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #1E2A42;
+                color: #10B981;
+                border-color: #10B981;
+            }
+        """)
+        btn_snap.clicked.connect(lambda: self.trigger_inplace_translate(from_button=True))
+        c2_actions.addWidget(btn_snap)
+        c2_layout.addLayout(c2_actions)
+
+        vbox.addWidget(self.card_simple_screen)
+
+        # 4. 🔊 AI 실시간 더빙 카드
+        self.card_simple_dub = CardWidget(bg_color=COLOR_CARD_BG, border_color=COLOR_BORDER, border_radius=8)
+        self.card_simple_dub.setObjectName("SimpleCardDub")
+        c3_layout = QVBoxLayout(self.card_simple_dub)
+        c3_layout.setContentsMargins(10, 6, 10, 6)
+        c3_layout.setSpacing(4)
+
+        c3_top = QHBoxLayout()
+        c3_top.setSpacing(6)
+        lbl_dub_icon = QLabel("🔊")
+        lbl_dub_icon.setStyleSheet("font-size: 13px;")
+        c3_top.addWidget(lbl_dub_icon)
+
+        c3_info = QVBoxLayout()
+        c3_info.setSpacing(1)
+        c3_title_row = QHBoxLayout()
+        c3_title_row.setSpacing(4)
+        lbl_c3_title = QLabel(tr("simple_dub_title"))
+        lbl_c3_title.setStyleSheet("font-weight: 700; font-size: 12px; color: #F8FAFC;")
+        self.lbl_simple_dub_status = QLabel("● " + tr("status_dubbing_inactive"))
+        self.lbl_simple_dub_status.setStyleSheet("font-size: 10px; color: #94A3B8;")
+        c3_title_row.addWidget(lbl_c3_title)
+        c3_title_row.addWidget(self.lbl_simple_dub_status)
+        c3_title_row.addStretch(1)
+
+        lbl_c3_desc = QLabel(tr("simple_dub_desc"))
+        lbl_c3_desc.setStyleSheet("font-size: 10px; color: #64748B;")
+        c3_info.addLayout(c3_title_row)
+        c3_info.addWidget(lbl_c3_desc)
+        c3_top.addLayout(c3_info, stretch=1)
+
+        self.btn_simple_dubbing = QPushButton()
+        self.btn_simple_dubbing.setText(tr("simple_dub_start"))
+        self.btn_simple_dubbing.setCheckable(True)
+        self.btn_simple_dubbing.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_simple_dubbing.setFixedSize(76, 30)
+        self.btn_simple_dubbing.setStyleSheet("background-color: #1E2A42; color: #94A3B8; font-weight: bold; border: 1px solid #283858; border-radius: 6px; font-size: 11.5px;")
+        self.btn_simple_dubbing.clicked.connect(self.toggle_dubbing)
+        c3_top.addWidget(self.btn_simple_dubbing)
+        c3_layout.addLayout(c3_top)
+
+        # 볼륨 슬라이더 행
+        vol_row = QHBoxLayout()
+        vol_row.setSpacing(6)
+        lbl_spk = QLabel("🔈")
+        lbl_spk.setStyleSheet("font-size: 11px;")
+        vol_row.addWidget(lbl_spk)
+
+        cur_d_vol = int(self.config.get("dubbing_volume", 80))
+        self.slider_simple_dubbing_vol = QSlider(Qt.Orientation.Horizontal)
+        self.slider_simple_dubbing_vol.setRange(0, 100)
+        self.slider_simple_dubbing_vol.setValue(cur_d_vol)
+        self.slider_simple_dubbing_vol.setFixedHeight(16)
+        self.slider_simple_dubbing_vol.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 4px;
+                background: #0D1322;
+                border-radius: 2px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {COLOR_ACCENT_PINK};
+                border-radius: 2px;
+            }}
+            QSlider::handle:horizontal {{
+                background: #F8FAFC;
+                border: 1px solid {COLOR_ACCENT_PINK};
+                width: 12px;
+                height: 12px;
+                margin: -4px 0;
+                border-radius: 6px;
+            }}
+        """)
+        self.slider_simple_dubbing_vol.valueChanged.connect(self.on_dubbing_volume_changed)
+        vol_row.addWidget(self.slider_simple_dubbing_vol, stretch=1)
+
+        self.lbl_simple_dubbing_vol_val = QLabel(f"{cur_d_vol}%")
+        self.lbl_simple_dubbing_vol_val.setFixedWidth(36)
+        self.lbl_simple_dubbing_vol_val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_simple_dubbing_vol_val.setStyleSheet("font-size: 10px; color: #94A3B8; font-family: monospace;")
+        vol_row.addWidget(self.lbl_simple_dubbing_vol_val)
+        c3_layout.addLayout(vol_row)
+
+        vbox.addWidget(self.card_simple_dub)
+
+        # 5. 하단 퀵 상태 & 오버레이 토글 바
+        bottom_bar = QFrame()
+        bottom_bar.setFixedHeight(28)
+        bottom_bar.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLOR_PANEL_BG};
+                border: 1px solid {COLOR_BORDER};
+                border-radius: 6px;
+            }}
+        """)
+        bb_layout = QHBoxLayout(bottom_bar)
+        bb_layout.setContentsMargins(8, 2, 8, 2)
+        bb_layout.setSpacing(6)
+
+        lbl_sub_prefix = QLabel(tr("simple_sub_overlay_label"))
+        lbl_sub_prefix.setStyleSheet("font-size: 10px; color: #64748B;")
+        bb_layout.addWidget(lbl_sub_prefix)
+
+        self.btn_simple_ov_audio = QPushButton()
+        self.btn_simple_ov_audio.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_simple_ov_audio.setFixedHeight(20)
+        self.btn_simple_ov_audio.clicked.connect(self.toggle_audio_overlay_window)
+        bb_layout.addWidget(self.btn_simple_ov_audio)
+
+        self.btn_simple_ov_screen = QPushButton()
+        self.btn_simple_ov_screen.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_simple_ov_screen.setFixedHeight(20)
+        self.btn_simple_ov_screen.clicked.connect(self._on_simple_toggle_screen_overlay)
+        bb_layout.addWidget(self.btn_simple_ov_screen)
+
+        bb_layout.addStretch(1)
+
+        self.lbl_simple_sys_status = QLabel(tr("badge_ready"))
+        self.lbl_simple_sys_status.setStyleSheet("font-size: 10px; color: #10B981; font-weight: 600;")
+        bb_layout.addWidget(self.lbl_simple_sys_status)
+
+        vbox.addWidget(bottom_bar)
+
+        self._update_simple_audio_subtitle_text()
+        self._update_simple_overlay_buttons()
+        return container
+
+    def _update_simple_audio_subtitle_text(self):
+        if not hasattr(self, 'lbl_simple_audio_sub'):
+            return
+        src = str(self.config.get("source_lang", "auto")).upper()
+        tgt = str(self.config.get("target_lang", "ko")).upper()
+        src_label = "AUTO" if src == "AUTO" else src
+        self.lbl_simple_audio_sub.setText(f"시스템 소리 · {src_label} ➔ {tgt}")
+
+    def _update_simple_overlay_buttons(self):
+        if not hasattr(self, 'btn_simple_ov_audio') or not hasattr(self, 'btn_simple_ov_screen'):
+            return
+        audio_vis = self.overlay.isVisible() if self.overlay else False
+        screen_vis = (self.screen_overlay.is_visible() if hasattr(self.screen_overlay, "is_visible")
+                      else (self.screen_overlay.isVisible() if self.screen_overlay else False))
+
+        if audio_vis:
+            self.btn_simple_ov_audio.setText("🎙️ 음성 켜짐")
+            self.btn_simple_ov_audio.setStyleSheet("color: #38BDF8; background-color: #141C30; border: 1px solid #1E2A42; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; font-weight: 600;")
+        else:
+            self.btn_simple_ov_audio.setText("🎙️ 음성 숨김")
+            self.btn_simple_ov_audio.setStyleSheet("color: #64748B; background-color: #101626; border: 1px solid #1E2A42; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; text-decoration: line-through;")
+
+        if screen_vis:
+            self.btn_simple_ov_screen.setText("🖥️ 화면 켜짐")
+            self.btn_simple_ov_screen.setStyleSheet("color: #10B981; background-color: #141C30; border: 1px solid #1E2A42; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; font-weight: 600;")
+        else:
+            self.btn_simple_ov_screen.setText("🖥️ 화면 숨김")
+            self.btn_simple_ov_screen.setStyleSheet("color: #64748B; background-color: #101626; border: 1px solid #1E2A42; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; text-decoration: line-through;")
+
+    def _on_simple_toggle_screen_overlay(self):
+        cur = self.config.get("screen_overlay_visible", True)
+        self.toggle_screen_overlay_window(not cur)
+        self._update_simple_overlay_buttons()
+
+    def toggle_simple_pin(self):
+        new_state = not getattr(self, '_simple_pinned', False)
+        self._apply_pin(new_state)
+        self.config["simple_stays_on_top"] = new_state
+        self.save_config_cb(self.config)
+
+    def _apply_pin(self, pinned: bool):
+        self._simple_pinned = pinned
+        pin_svg = SVG_PIN_ACTIVE_ICON if pinned else SVG_PIN_ICON
+        if hasattr(self, 'btn_simple_pin'):
+            if pinned:
+                self.btn_simple_pin.setStyleSheet("background-color: #1E2A42; border: 1px solid #38BDF8; border-radius: 4px;")
+                self.btn_simple_pin.setIcon(create_svg_icon(pin_svg, 15, "#38BDF8"))
+                self.btn_simple_pin.setIconSize(QSize(15, 15))
+                self.btn_simple_pin.setToolTip(tr("tip_pin_active"))
+            else:
+                self.btn_simple_pin.setStyleSheet("""
+                    QPushButton {
+                        background: transparent;
+                        border: 1px solid transparent;
+                        border-radius: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #1E2A42;
+                    }
+                """)
+                self.btn_simple_pin.setIcon(create_svg_icon(pin_svg, 15, "#94A3B8"))
+                self.btn_simple_pin.setIconSize(QSize(15, 15))
+                self.btn_simple_pin.setToolTip(tr("tip_pin_inactive"))
+        if hasattr(self, 'btn_full_pin'):
+            if pinned:
+                self.btn_full_pin.setStyleSheet("""
+                    QPushButton {
+                        background-color: #1E2A42;
+                        border: 1px solid #38BDF8;
+                        border-radius: 6px;
+                    }
+                    QPushButton:hover {
+                        background-color: #283858;
+                    }
+                """)
+                self.btn_full_pin.setIcon(create_svg_icon(pin_svg, 14, "#38BDF8"))
+                self.btn_full_pin.setIconSize(QSize(14, 14))
+                self.btn_full_pin.setToolTip(tr("tip_pin_active"))
+            else:
+                self.btn_full_pin.setStyleSheet("""
+                    QPushButton {
+                        background-color: #141C30;
+                        border: 1px solid #1E2A42;
+                        border-radius: 6px;
+                    }
+                    QPushButton:hover {
+                        background-color: #1E2A42;
+                        border-color: #38BDF8;
+                    }
+                """)
+                self.btn_full_pin.setIcon(create_svg_icon(pin_svg, 14, "#94A3B8"))
+                self.btn_full_pin.setIconSize(QSize(14, 14))
+                self.btn_full_pin.setToolTip(tr("tip_pin_inactive"))
+        geom = self.geometry()
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, pinned)
+        self.show()
+        self.setGeometry(geom)
+        if not getattr(self, '_is_simple_mode', False):
+            set_windows_dark_mode(int(self.winId()))
+
+    def toggle_simple_mode(self):
+        self.set_simple_mode(not getattr(self, '_is_simple_mode', False))
+
+    def set_simple_mode(self, enabled: bool):
+        if getattr(self, '_is_simple_mode', False) == enabled:
+            return
+
+        self._is_simple_mode = enabled
+        self.config["ui_mode"] = "simple" if enabled else "full"
+
+        if enabled:
+            # 1. Full -> Mini Mode
+            if not getattr(self, '_full_geometry', None):
+                full_cfg = self.config.get("control_panel_geometry")
+                if full_cfg and len(full_cfg) == 4 and full_cfg[2] >= 400 and full_cfg[3] >= 300:
+                    from PyQt6.QtCore import QRect
+                    self._full_geometry = QRect(full_cfg[0], full_cfg[1], full_cfg[2], full_cfg[3])
+                else:
+                    self._full_geometry = self.geometry()
+            elif not getattr(self, '_is_simple_mode', False):
+                self._full_geometry = self.geometry()
+            
+            flags = Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint
+            if getattr(self, '_simple_pinned', False):
+                flags |= Qt.WindowType.WindowStaysOnTopHint
+            self.setWindowFlags(flags)
+
+            if hasattr(self, 'content_container'):
+                self.content_container.hide()
+            self.header_widget.hide()
+            self.tab_stack.hide()
+            self.bottom_bar.hide()
+            self.simple_container.show()
+
+            # 제약조건 변경
+            self.setMinimumSize(360, 240)
+            self.setMaximumSize(520, 480)
+
+            # 미니 모드 좌표 복원 또는 크기 조절
+            simple_geo = self.config.get("simple_mode_geometry")
+            if simple_geo and len(simple_geo) == 4 and simple_geo[2] >= 340 and simple_geo[3] >= 220:
+                self.setGeometry(simple_geo[0], simple_geo[1], simple_geo[2], simple_geo[3])
+            else:
+                cur = self._full_geometry if getattr(self, '_full_geometry', None) else self.geometry()
+                w = 400
+                h = 320
+                x = cur.x() + max(0, (cur.width() - w) // 2)
+                y = cur.y() + max(0, (cur.height() - h) // 2)
+                self.setGeometry(x, y, w, h)
+
+            self.show()
+            if self.config.get("simple_stays_on_top", False):
+                self._apply_pin(True)
+        else:
+            # 2. Mini -> Full Mode
+            geo = self.geometry()
+            self.config["simple_mode_geometry"] = [geo.x(), geo.y(), geo.width(), geo.height()]
+
+            flags = Qt.WindowType.Window
+            if getattr(self, '_simple_pinned', False):
+                flags |= Qt.WindowType.WindowStaysOnTopHint
+            self.setWindowFlags(flags)
+
+            if getattr(self, '_simple_pinned', False):
+                self._apply_pin(False)
+
+            self.simple_container.hide()
+            if hasattr(self, 'content_container'):
+                self.content_container.show()
+            self.header_widget.show()
+            self.tab_stack.show()
+            self.bottom_bar.show()
+
+            # 제약조건 복원
+            self.setMaximumSize(16777215, 16777215)
+            self.setMinimumSize(max(control_panel_min_width(self.font()),
+                                    getattr(self, '_required_content_width', 0)), CONTROL_PANEL_MIN_HEIGHT)
+
+            if hasattr(self, '_full_geometry') and self._full_geometry:
+                self.setGeometry(self._full_geometry)
+            else:
+                self.resize(control_panel_min_width(self.font()), CONTROL_PANEL_MIN_HEIGHT)
+
+            self.show()
+            set_windows_dark_mode(int(self.winId()))
+
+        self.save_config_cb(self.config)
+
+    def _toggle_maximize(self):
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
 
     def _build_bottom_persistent_bar(self) -> QWidget:
         bar = QFrame()
@@ -2326,6 +3219,9 @@ class ControlPanel(QWidget):
                 margin: 0px;
             }}
         """)
+        if hasattr(self, 'lbl_simple_sys_status'):
+            self.lbl_simple_sys_status.setText(f"● {cfg['badge']}")
+            self.lbl_simple_sys_status.setStyleSheet(f"font-size: 10px; color: {cfg['color']}; font-weight: 600;")
 
         full_detail = " ".join(clean_html_tags(html.unescape(str(detail or cfg["default_detail"]))).split())
         available_width = max(180, min(260, self.lbl_status_detail.width() - 8))
@@ -5432,6 +6328,8 @@ class ControlPanel(QWidget):
         level = min(1.0, rms * 15.0)
         if hasattr(self, 'segment_level_meter'):
             self.segment_level_meter.setLevel(level)
+        if hasattr(self, 'simple_level_meter'):
+            self.simple_level_meter.setLevel(level)
 
     @property
     def is_active(self):
@@ -5505,6 +6403,26 @@ class ControlPanel(QWidget):
                 self._i18n(self.btn_bottom_audio, "start_translation")
                 self.btn_bottom_audio.setStyleSheet(self._get_bottom_audio_inactive_style())
                 self.update_engine_status("paused", tr("status_audio_paused"))
+        if hasattr(self, 'btn_simple_audio'):
+            self.btn_simple_audio.setChecked(is_active)
+            if is_active:
+                self.btn_simple_audio.setText(tr("pause"))
+                self.btn_simple_audio.setStyleSheet("background-color: #0284C7; color: #FFFFFF; font-weight: bold; border: 1px solid #38BDF8; border-radius: 6px; font-size: 11.5px;")
+                if hasattr(self, 'lbl_simple_audio_status'):
+                    self.lbl_simple_audio_status.setText("● " + tr("status_audio_started"))
+                    self.lbl_simple_audio_status.setStyleSheet("color: #38BDF8; font-size: 10px; font-weight: bold;")
+                if hasattr(self, 'card_simple_audio'):
+                    self.card_simple_audio.setStyleSheet("QFrame#SimpleCardAudio, CardWidget#SimpleCardAudio { background-color: #141C30; border: 1px solid rgba(56, 189, 248, 0.6); border-radius: 8px; }")
+            else:
+                self.btn_simple_audio.setText(tr("start_translation"))
+                self.btn_simple_audio.setStyleSheet("background-color: #1E2A42; color: #94A3B8; font-weight: bold; border: 1px solid #283858; border-radius: 6px; font-size: 11.5px;")
+                if hasattr(self, 'lbl_simple_audio_status'):
+                    self.lbl_simple_audio_status.setText("● " + tr("status_audio_paused"))
+                    self.lbl_simple_audio_status.setStyleSheet("color: #94A3B8; font-size: 10px;")
+                if hasattr(self, 'card_simple_audio'):
+                    self.card_simple_audio.setStyleSheet(f"QFrame#SimpleCardAudio, CardWidget#SimpleCardAudio {{ background-color: #141C30; border: 1px solid {COLOR_BORDER}; border-radius: 8px; }}")
+                if hasattr(self, 'simple_level_meter'):
+                    self.simple_level_meter.setLevel(0.0)
 
     def set_screen_active_state(self, is_active: bool):
         self._is_screen_active = is_active
@@ -5549,6 +6467,24 @@ class ControlPanel(QWidget):
                 self._i18n(self.btn_bottom_screen, "start_translation")
                 self.btn_bottom_screen.setStyleSheet(self._get_bottom_screen_inactive_style())
                 self.update_engine_status("paused", tr("status_screen_paused"))
+        if hasattr(self, 'btn_simple_screen'):
+            self.btn_simple_screen.setChecked(is_active)
+            if is_active:
+                self.btn_simple_screen.setText(tr("simple_screen_stop"))
+                self.btn_simple_screen.setStyleSheet("background-color: #059669; color: #FFFFFF; font-weight: bold; border: 1px solid #34D399; border-radius: 6px; font-size: 11.5px;")
+                if hasattr(self, 'lbl_simple_screen_status'):
+                    self.lbl_simple_screen_status.setText("● " + tr("status_screen_active"))
+                    self.lbl_simple_screen_status.setStyleSheet("color: #34D399; font-size: 10px; font-weight: bold;")
+                if hasattr(self, 'card_simple_screen'):
+                    self.card_simple_screen.setStyleSheet("QFrame#SimpleCardScreen, CardWidget#SimpleCardScreen { background-color: #141C30; border: 1px solid rgba(52, 211, 153, 0.6); border-radius: 8px; }")
+            else:
+                self.btn_simple_screen.setText(tr("simple_screen_start"))
+                self.btn_simple_screen.setStyleSheet("background-color: #1E2A42; color: #94A3B8; font-weight: bold; border: 1px solid #283858; border-radius: 6px; font-size: 11.5px;")
+                if hasattr(self, 'lbl_simple_screen_status'):
+                    self.lbl_simple_screen_status.setText("● " + tr("status_screen_inactive"))
+                    self.lbl_simple_screen_status.setStyleSheet("color: #94A3B8; font-size: 10px;")
+                if hasattr(self, 'card_simple_screen'):
+                    self.card_simple_screen.setStyleSheet(f"QFrame#SimpleCardScreen, CardWidget#SimpleCardScreen {{ background-color: #141C30; border: 1px solid {COLOR_BORDER}; border-radius: 8px; }}")
 
     def _update_dubbing_toggle_btn_ui(self):
         is_on = self.config.get("dubbing_enabled", False)
@@ -5560,6 +6496,24 @@ class ControlPanel(QWidget):
             else:
                 self._i18n(self.btn_bottom_dubbing, "start_dubbing")
                 self.btn_bottom_dubbing.setStyleSheet(self._get_bottom_dubbing_inactive_style())
+        if hasattr(self, 'btn_simple_dubbing'):
+            self.btn_simple_dubbing.setChecked(is_on)
+            if is_on:
+                self.btn_simple_dubbing.setText(tr("simple_dub_stop"))
+                self.btn_simple_dubbing.setStyleSheet("background-color: #D97706; color: #FFFFFF; font-weight: bold; border: 1px solid #FBBF24; border-radius: 6px; font-size: 11.5px;")
+                if hasattr(self, 'lbl_simple_dub_status'):
+                    self.lbl_simple_dub_status.setText("● " + tr("status_dubbing_active"))
+                    self.lbl_simple_dub_status.setStyleSheet("color: #FBBF24; font-size: 10px; font-weight: bold;")
+                if hasattr(self, 'card_simple_dub'):
+                    self.card_simple_dub.setStyleSheet("QFrame#SimpleCardDub, CardWidget#SimpleCardDub { background-color: #141C30; border: 1px solid rgba(251, 191, 36, 0.6); border-radius: 8px; }")
+            else:
+                self.btn_simple_dubbing.setText(tr("simple_dub_start"))
+                self.btn_simple_dubbing.setStyleSheet("background-color: #1E2A42; color: #94A3B8; font-weight: bold; border: 1px solid #283858; border-radius: 6px; font-size: 11.5px;")
+                if hasattr(self, 'lbl_simple_dub_status'):
+                    self.lbl_simple_dub_status.setText("● " + tr("status_dubbing_inactive"))
+                    self.lbl_simple_dub_status.setStyleSheet("color: #94A3B8; font-size: 10px;")
+                if hasattr(self, 'card_simple_dub'):
+                    self.card_simple_dub.setStyleSheet(f"QFrame#SimpleCardDub, CardWidget#SimpleCardDub {{ background-color: #141C30; border: 1px solid {COLOR_BORDER}; border-radius: 8px; }}")
 
     def toggle_translation(self):
         self.set_audio_active_state(not self.is_active)
@@ -5982,6 +6936,16 @@ class ControlPanel(QWidget):
         self.config["dubbing_volume"] = val
         if hasattr(self, 'lbl_dubbing_vol_val'):
             self.lbl_dubbing_vol_val.setText(f"{val}%")
+        if hasattr(self, 'lbl_simple_dubbing_vol_val'):
+            self.lbl_simple_dubbing_vol_val.setText(f"{val}%")
+        if hasattr(self, 'slider_simple_dubbing_vol') and self.slider_simple_dubbing_vol.value() != val:
+            self.slider_simple_dubbing_vol.blockSignals(True)
+            self.slider_simple_dubbing_vol.setValue(val)
+            self.slider_simple_dubbing_vol.blockSignals(False)
+        if hasattr(self, 'slider_dubbing_vol') and self.slider_dubbing_vol.value() != val:
+            self.slider_dubbing_vol.blockSignals(True)
+            self.slider_dubbing_vol.setValue(val)
+            self.slider_dubbing_vol.blockSignals(False)
         if self.dubbing_engine:
             self.dubbing_engine.volume = val
         self.save_config_cb(self.config)
@@ -6833,6 +7797,16 @@ class ControlPanel(QWidget):
     def _apply_ui_language(self):
         set_ui_language(self.config.get("ui_lang") or "ko")
         self.setWindowTitle(tr("window_title"))
+        if hasattr(self, 'custom_title_bar') and hasattr(self.custom_title_bar, 'lbl_title'):
+            self.custom_title_bar.lbl_title.setText(tr("window_title"))
+        if hasattr(self, 'btn_switch_to_simple'):
+            self.btn_switch_to_simple.setToolTip(tr("tip_simple_mode"))
+        if hasattr(self, 'btn_simple_expand'):
+            self.btn_simple_expand.setToolTip(tr("tip_full_mode"))
+        if hasattr(self, 'btn_full_pin'):
+            self.btn_full_pin.setToolTip(tr("tip_pin_active") if getattr(self, '_simple_pinned', False) else tr("tip_pin_inactive"))
+        if hasattr(self, 'btn_simple_pin'):
+            self.btn_simple_pin.setToolTip(tr("tip_pin_active") if getattr(self, '_simple_pinned', False) else tr("tip_pin_inactive"))
         refresh_texts(self)
         if getattr(self, "nav_buttons", None):
             tab_total = 0
@@ -7018,6 +7992,8 @@ class ControlPanel(QWidget):
 
         # 6. 모델 호환성 점검 (영어 전용 STT 모델 자동 전환 등)
         self._check_multilingual_model_compatibility()
+        if hasattr(self, "_update_simple_audio_subtitle_text"):
+            self._update_simple_audio_subtitle_text()
 
     def _apply_target_lang(self, code: str):
         if not code:
@@ -7067,6 +8043,8 @@ class ControlPanel(QWidget):
 
         # 6. 모델 호환성 점검 (EXAONE 한·영 전용 모델 자동 전환 등)
         self._check_multilingual_model_compatibility()
+        if hasattr(self, "_update_simple_audio_subtitle_text"):
+            self._update_simple_audio_subtitle_text()
 
     def _check_multilingual_model_compatibility(self):
         """출발어/도착어 변경 시 로컬 LLM 및 STT 모델 호환성 점검 및 지능형 자동 전환"""
@@ -8355,7 +9333,14 @@ class ControlPanel(QWidget):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.Type.ActivationChange:
+        if event.type() == QEvent.Type.WindowStateChange:
+            if hasattr(self, 'custom_title_bar') and hasattr(self.custom_title_bar, 'btn_win_max'):
+                is_max = self.isMaximized()
+                self.custom_title_bar.btn_win_max.setIcon(
+                    create_svg_icon(SVG_WIN_RESTORE_ICON if is_max else SVG_WIN_MAX_ICON, 12, "#94A3B8")
+                )
+                self.custom_title_bar.btn_win_max.setToolTip("이전 크기로 복원" if is_max else "최대화")
+        elif event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow() and getattr(self, '_opened_from_overlay_topmost', False):
                 # 다른 외부 앱(유튜브 전체화면, 브라우저 등)으로 포커스가 넘어갔을 때만 TOPMOST 해제하여 창 순서 정상화
                 active_w = QApplication.activeWindow()
@@ -10010,6 +10995,8 @@ class ControlPanel(QWidget):
             self.toggle_audio_overlay_vis.blockSignals(True)
             self.toggle_audio_overlay_vis.setChecked(vis)
             self.toggle_audio_overlay_vis.blockSignals(False)
+        if hasattr(self, "_update_simple_overlay_buttons"):
+            self._update_simple_overlay_buttons()
 
     def toggle_audio_overlay_window(self):
         if self.overlay:
@@ -10045,6 +11032,8 @@ class ControlPanel(QWidget):
             self.toggle_screen_overlay_vis.blockSignals(True)
             self.toggle_screen_overlay_vis.setChecked(visible)
             self.toggle_screen_overlay_vis.blockSignals(False)
+        if hasattr(self, "_update_simple_overlay_buttons"):
+            self._update_simple_overlay_buttons()
 
     def save_all_settings_before_exit(self):
         if getattr(self, '_already_saved_settings', False):
@@ -10054,15 +11043,23 @@ class ControlPanel(QWidget):
         # 1. 창 위치 및 크기 저장
         try:
             geo = self.geometry()
-            if geo.isValid() and geo.width() >= 400 and geo.height() >= 300:
-                screen = QApplication.primaryScreen()
-                if screen:
-                    avail = screen.availableGeometry()
-                    if (avail.left() - 100 <= geo.x() <= avail.right() and
-                        avail.top() - 50 <= geo.y() <= avail.bottom()):
+            if getattr(self, '_is_simple_mode', False):
+                self.config["simple_mode_geometry"] = [geo.x(), geo.y(), geo.width(), geo.height()]
+                self.config["ui_mode"] = "simple"
+                if hasattr(self, '_full_geometry') and self._full_geometry:
+                    fg = self._full_geometry
+                    self.config["control_panel_geometry"] = [fg.x(), fg.y(), fg.width(), fg.height()]
+            else:
+                self.config["ui_mode"] = "full"
+                if geo.isValid() and geo.width() >= 400 and geo.height() >= 300:
+                    screen = QApplication.primaryScreen()
+                    if screen:
+                        avail = screen.availableGeometry()
+                        if (avail.left() - 100 <= geo.x() <= avail.right() and
+                            avail.top() - 50 <= geo.y() <= avail.bottom()):
+                            self.config["control_panel_geometry"] = [geo.x(), geo.y(), geo.width(), geo.height()]
+                    else:
                         self.config["control_panel_geometry"] = [geo.x(), geo.y(), geo.width(), geo.height()]
-                else:
-                    self.config["control_panel_geometry"] = [geo.x(), geo.y(), geo.width(), geo.height()]
         except Exception:
             pass
 
@@ -10298,6 +11295,10 @@ class ControlPanel(QWidget):
         self.save_config_cb(self.config)
 
     def closeEvent(self, event):
+        try:
+            self.save_all_settings_before_exit()
+        except Exception:
+            pass
         self._cleanup_on_close()
         event.accept()
         app = QApplication.instance()
